@@ -1,0 +1,135 @@
+{
+  "block": {
+    "height": "11",
+    "hash": "BLOCK11",
+    "time": "2026-06-24T00:00:11.000Z",
+    "raw": {
+      "result": {
+        "block_id": {
+          "hash": "BLOCK11"
+        },
+        "block": {
+          "header": {
+            "time": "2026-06-24T00:00:11.000Z",
+            "proposer_address": "DDEEFF",
+            "app_hash": "APP11",
+            "validators_hash": "VAL11",
+            "next_validators_hash": "NEXTVAL11",
+            "last_block_id": {
+              "hash": "BLOCK10"
+            }
+          }
+        }
+      }
+    }
+  },
+  "blockResults": {
+    "height": "11",
+    "beginBlockEvents": [
+      {
+        "type": "begin_block",
+        "attributes": [
+          {
+            "key": "height",
+            "value": "11"
+          }
+        ]
+      }
+    ],
+    "endBlockEvents": [
+      {
+        "type": "coreslot_validator_update",
+        "attributes": [
+          {
+            "key": "operator_address",
+            "value": "twilight1operator000000000000000000000000000"
+          }
+        ]
+      }
+    ],
+    "txResults": [
+      {
+        "code": 0
+      }
+    ],
+    "raw": {
+      "result": {
+        "txs_results": [
+          {
+            "code": 0
+          }
+        ]
+      }
+    }
+  },
+  "txs": [
+    {
+      "hash": "TX11",
+      "height": "11",
+      "code": 0,
+      "raw": {
+        "txhash": "TX11",
+        "height": "11",
+        "code": 0,
+        "gas_wanted": "200000",
+        "gas_used": "71411",
+        "signers": [
+          "twilight1sender0000000000000000000000000000"
+        ],
+        "tx": {
+          "body": {
+            "memo": "fixture tx",
+            "messages": [
+              {
+                "@type": "/cosmos.bank.v1beta1.MsgSend",
+                "from_address": "twilight1sender0000000000000000000000000000",
+                "to_address": "twilight1recipient00000000000000000000000000",
+                "amount": [
+                  {
+                    "denom": "utwlt",
+                    "amount": "100"
+                  }
+                ]
+              },
+              {
+                "@type": "/unknown.module.v1.MsgMystery",
+                "signer": "twilight1mystery000000000000000000000000000"
+              }
+            ]
+          },
+          "auth_info": {
+            "fee": {
+              "amount": [
+                {
+                  "denom": "utwlt",
+                  "amount": "1"
+                }
+              ],
+              "gas_limit": "200000"
+            }
+          }
+        },
+        "events": [
+          {
+            "type": "message",
+            "attributes": [
+              {
+                "key": "sender",
+                "value": "twilight1sender0000000000000000000000000000"
+              }
+            ]
+          },
+          {
+            "type": "transfer",
+            "attributes": [
+              {
+                "key": "recipient",
+                "value": "twilight1recipient00000000000000000000000000"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

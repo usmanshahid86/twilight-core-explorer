@@ -1,0 +1,62 @@
+{
+  "block": {
+    "height": "10",
+    "hash": "BLOCK10",
+    "time": "2026-06-24T00:00:10.000Z",
+    "raw": {
+      "result": {
+        "block_id": {
+          "hash": "BLOCK10"
+        },
+        "block": {
+          "header": {
+            "time": "2026-06-24T00:00:10.000Z",
+            "proposer_address": "AABBCC",
+            "app_hash": "APP10",
+            "validators_hash": "VAL10",
+            "next_validators_hash": "NEXTVAL10",
+            "last_block_id": {
+              "hash": "BLOCK9"
+            }
+          },
+          "data": {
+            "txs": []
+          }
+        }
+      }
+    }
+  },
+  "blockResults": {
+    "height": "10",
+    "beginBlockEvents": [
+      {
+        "type": "begin_block",
+        "attributes": [
+          {
+            "key": "height",
+            "value": "10"
+          }
+        ]
+      }
+    ],
+    "endBlockEvents": [
+      {
+        "type": "rewards_epoch_tick",
+        "attributes": [
+          {
+            "key": "epoch",
+            "value": "1"
+          }
+        ]
+      }
+    ],
+    "txResults": [],
+    "raw": {
+      "result": {
+        "begin_block_events": [],
+        "end_block_events": []
+      }
+    }
+  },
+  "txs": []
+}
