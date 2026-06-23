@@ -12,3 +12,6 @@ node_modules/
 build/
 
 .DS_Store
+reference/twilight-explorer/
+reference/twilight-indexer-api/
+reference/twilight-indexer/

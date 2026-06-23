@@ -1,0 +1,21 @@
+{
+  "name": "@twilight-explorer/indexer",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "prebuild": "npm --prefix ../.. run db:generate && npm --prefix ../../packages/chain-client run build && npm --prefix ../../packages/config run build && npm --prefix ../../packages/db run build",
+    "build": "tsc -p tsconfig.json",
+    "pretypecheck": "npm run prebuild",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "pretest": "npm run build",
+    "test": "node --test",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@twilight-explorer/chain-client": "0.0.0",
+    "@twilight-explorer/config": "0.0.0",
+    "@twilight-explorer/db": "0.0.0"
+  }
+}

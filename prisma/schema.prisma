@@ -1,0 +1,141 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Block {
+  height             BigInt   @id
+  hash               String?  @unique
+  time               DateTime?
+  chainId            String?
+  proposerAddress    String?
+  appHash            String?
+  validatorsHash     String?
+  nextValidatorsHash String?
+  lastBlockHash      String?
+  txCount            Int
+  rawJson            Json
+  createdAt          DateTime @default(now())
+
+  @@index([time])
+  @@index([proposerAddress])
+  @@index([chainId, height])
+}
+
+model ExplorerTransaction {
+  hash                String   @id
+  height              BigInt
+  index               Int
+  code                Int?
+  codespace           String?
+  status              String
+  gasWanted           BigInt?
+  gasUsed             BigInt?
+  memo                String?
+  feeJson             Json?
+  signerAddressesJson Json
+  messageTypesJson    Json
+  rawTx               Json?
+  rawResultJson       Json
+  createdAt           DateTime @default(now())
+
+  @@index([height, index])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Message {
+  id          BigInt   @id @default(autoincrement())
+  txHash      String
+  height      BigInt
+  msgIndex    Int
+  typeUrl     String
+  module      String?
+  typeName    String?
+  decodedJson Json?
+  rawJson     Json?
+  decodeError String?
+  createdAt   DateTime @default(now())
+
+  @@unique([txHash, msgIndex])
+  @@index([height])
+  @@index([typeUrl])
+  @@index([module])
+  @@index([decodeError])
+}
+
+model Event {
+  id             BigInt   @id @default(autoincrement())
+  eventKey       String   @unique
+  height         BigInt
+  txHash         String?
+  txIndex        Int?
+  msgIndex       Int?
+  eventIndex     Int
+  phase          String
+  type           String
+  attributesJson Json
+  module         String?
+  keyFieldsJson  Json?
+  createdAt      DateTime @default(now())
+
+  @@index([height])
+  @@index([txHash])
+  @@index([type])
+  @@index([module])
+}
+
+model Account {
+  address        String   @id
+  firstSeenHeight BigInt?
+  lastSeenHeight  BigInt?
+  txCount        Int      @default(0)
+  accountKind    String?
+  rawAccountJson Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([lastSeenHeight])
+  @@index([accountKind])
+}
+
+model IndexerCursor {
+  chainId           String   @id
+  lastIndexedHeight BigInt
+  lastIndexedHash   String?
+  latestChainHeight BigInt?
+  status            String
+  updatedAt         DateTime @updatedAt
+  error             String?
+
+  @@index([updatedAt])
+  @@index([status])
+}
+
+model DecodeFailure {
+  id          BigInt   @id @default(autoincrement())
+  height      BigInt
+  txHash      String?
+  msgIndex    Int?
+  eventIndex  Int?
+  typeUrl     String?
+  eventType   String?
+  failureKind String
+  rawJson     Json?
+  rawBase64   String?
+  decodeError String
+  resolved    Boolean  @default(false)
+  resolvedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([height])
+  @@index([txHash])
+  @@index([typeUrl])
+  @@index([eventType])
+  @@index([failureKind])
+  @@index([resolved])
+}
