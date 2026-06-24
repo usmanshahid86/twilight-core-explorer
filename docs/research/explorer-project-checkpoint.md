@@ -82,7 +82,7 @@ Completed:
 - `RestRpcChainClient`.
 - Route constants centralized.
 - Route-contract tests.
-- stale `/twilight/coreslot/v1/slots/active` blocked.
+- stale active-slots regression blocked.
 - unsupported staking/gov/mint/distribution route usage blocked.
 
 Important correction after review:

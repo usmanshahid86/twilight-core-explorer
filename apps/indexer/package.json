@@ -12,7 +12,10 @@
     "pretest": "npm run build",
     "test": "node --test",
     "dev": "npm run build && node dist/index.js",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "project:coreslot-metadata": "node dist/projections/coreslot-metadata-cli.js",
+    "project:coreslot-metadata:dev": "npm run build && node dist/projections/coreslot-metadata-cli.js",
+    "project:coreslot-metadata:reset": "node dist/projections/reset-coreslot-metadata.js"
   },
   "dependencies": {
     "@twilight-explorer/chain-client": "0.0.0",

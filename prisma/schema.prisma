@@ -139,3 +139,91 @@ model DecodeFailure {
   @@index([failureKind])
   @@index([resolved])
 }
+
+model ProjectionCursor {
+  projectionName      String
+  chainId             String
+  lastProjectedHeight BigInt
+  status              String
+  updatedAt           DateTime @updatedAt
+  error               String?
+
+  @@id([projectionName, chainId])
+  @@index([status])
+  @@index([updatedAt])
+}
+
+model ProjectionFailure {
+  id              BigInt   @id @default(autoincrement())
+  projectionName  String
+  module          String?
+  sourceHeight    BigInt
+  sourceTxHash    String?
+  sourceMsgIndex  Int?
+  sourceMessageId BigInt?
+  sourceEventId   BigInt?
+  typeUrl         String?
+  eventType       String?
+  failureKind     String
+  rawMessageJson  Json?
+  rawEventJson    Json?
+  error           String
+  resolved        Boolean  @default(false)
+  resolvedAt      DateTime?
+  createdAt       DateTime @default(now())
+
+  @@index([projectionName])
+  @@index([module])
+  @@index([sourceHeight])
+  @@index([sourceTxHash])
+  @@index([failureKind])
+  @@index([resolved])
+}
+
+model CoreSlotProjection {
+  slotId              BigInt   @id
+  status              String?
+  operatorAddress     String?
+  payoutAddress       String?
+  consensusAddress    String?
+  consensusPubkeyJson Json?
+  metadataJson        Json?
+  rewardWeight        String?
+  consensusPower      BigInt?
+  createdHeight       BigInt?
+  updatedHeight       BigInt
+  removedHeight       BigInt?
+  rawSnapshotJson     Json?
+  lastSourceHeight    BigInt
+  lastSourceTxHash    String?
+  lastSourceMsgIndex  Int?
+  lastSourceMessageId BigInt?
+  lastSourceEventId   BigInt?
+  createdAt           DateTime @default(now())
+  updatedAtDb         DateTime @updatedAt
+
+  @@index([status])
+  @@index([operatorAddress])
+  @@index([consensusAddress])
+  @@index([updatedHeight])
+}
+
+model CoreSlotMetadataChange {
+  id              BigInt   @id @default(autoincrement())
+  slotId          BigInt
+  operatorAddress String
+  height          BigInt
+  txHash          String
+  msgIndex        Int
+  metadataJson    Json
+  sourceMessageId BigInt   @unique
+  sourceEventId   BigInt?
+  rawMessageJson  Json
+  rawEventJson    Json?
+  createdAt       DateTime @default(now())
+
+  @@index([slotId, height])
+  @@index([operatorAddress])
+  @@index([txHash])
+  @@index([sourceEventId])
+}
