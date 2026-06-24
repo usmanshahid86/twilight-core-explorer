@@ -296,3 +296,45 @@ model CoreSlotParameterChange {
   @@index([txHash])
   @@index([sourceEventId])
 }
+
+model CoreSlotConsensusKeyRotation {
+  id                     BigInt   @id @default(autoincrement())
+  slotId                 BigInt
+  operatorAddress        String?
+  oldConsensusAddress    String?
+  newConsensusAddress    String?
+  status                 String // requested | applied | cancelled | immediate_applied
+  requestedHeight        BigInt?
+  effectiveHeight        BigInt?
+  appliedHeight          BigInt?
+  cancelledHeight        BigInt?
+  power                  BigInt?
+  reason                 String?
+  sourceMessageId        BigInt?
+  sourceRequestEventId   BigInt?  @unique
+  sourceAppliedEventId   BigInt?  @unique
+  sourceCancelledEventId BigInt?  @unique
+  requestTxHash          String?
+  requestMsgIndex        Int?
+  appliedTxHash          String?
+  appliedMsgIndex        Int?
+  cancelledTxHash        String?
+  cancelledMsgIndex      Int?
+  rawMessageJson         Json?
+  rawRequestEventJson    Json?
+  rawAppliedEventJson    Json?
+  rawCancelledEventJson  Json?
+  createdAt              DateTime @default(now())
+  updatedAtDb            DateTime @updatedAt
+
+  @@index([slotId])
+  @@index([operatorAddress])
+  @@index([oldConsensusAddress])
+  @@index([newConsensusAddress])
+  @@index([status])
+  @@index([effectiveHeight])
+  @@index([requestedHeight])
+  @@index([appliedHeight])
+  @@index([cancelledHeight])
+  @@index([sourceMessageId])
+}

@@ -25,6 +25,9 @@
     "project:coreslot-params": "node dist/projections/coreslot-params-cli.js",
     "project:coreslot-params:dev": "npm run build && node dist/projections/coreslot-params-cli.js",
     "project:coreslot-params:reset": "node dist/projections/reset-coreslot-params.js",
+    "project:coreslot-key-rotation": "node dist/projections/coreslot-key-rotation-cli.js",
+    "project:coreslot-key-rotation:dev": "npm run build && node dist/projections/coreslot-key-rotation-cli.js",
+    "project:coreslot-key-rotation:reset": "node dist/projections/reset-coreslot-key-rotation.js",
     "project:coreslot-semantic": "node dist/projections/coreslot-semantic-rebuild-cli.js",
     "project:coreslot-semantic:dev": "npm run build && node dist/projections/coreslot-semantic-rebuild-cli.js",
     "project:coreslot-semantic:reset": "node dist/projections/reset-coreslot-semantic.js"

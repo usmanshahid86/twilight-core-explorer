@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  CORESLOT_KEY_ROTATION_PROJECTION,
   CORESLOT_LIFECYCLE_PROJECTION,
   CORESLOT_METADATA_PROJECTION,
   CORESLOT_PARAMS_PROJECTION,
@@ -47,6 +48,7 @@ describe('CoreSlot semantic rebuild orchestration', () => {
         projectLifecycle: recorder(CORESLOT_LIFECYCLE_PROJECTION),
         projectPayout: recorder(CORESLOT_PAYOUT_PROJECTION),
         projectParams: recorder(CORESLOT_PARAMS_PROJECTION),
+        projectKeyRotation: recorder(CORESLOT_KEY_ROTATION_PROJECTION),
       },
     });
 
@@ -75,10 +77,11 @@ describe('CoreSlot semantic rebuild orchestration', () => {
         projectLifecycle: recorder(),
         projectPayout: recorder(),
         projectParams: recorder(),
+        projectKeyRotation: recorder(),
       },
     });
 
-    assert.equal(ranges.length, 4);
+    assert.equal(ranges.length, 5);
     for (const [start, end] of ranges) {
       assert.equal(start, 119n);
       assert.equal(end, 121n);
@@ -106,6 +109,7 @@ describe('CoreSlot semantic rebuild orchestration', () => {
         projectLifecycle: recorder(CORESLOT_LIFECYCLE_PROJECTION),
         projectPayout: recorder(CORESLOT_PAYOUT_PROJECTION),
         projectParams: recorder(CORESLOT_PARAMS_PROJECTION),
+        projectKeyRotation: recorder(CORESLOT_KEY_ROTATION_PROJECTION),
       },
     });
 
@@ -115,6 +119,7 @@ describe('CoreSlot semantic rebuild orchestration', () => {
       CORESLOT_LIFECYCLE_PROJECTION,
       CORESLOT_PAYOUT_PROJECTION,
       CORESLOT_PARAMS_PROJECTION,
+      CORESLOT_KEY_ROTATION_PROJECTION,
     ]);
   });
 
@@ -136,6 +141,7 @@ describe('CoreSlot semantic rebuild orchestration', () => {
         projectLifecycle: noop(),
         projectPayout: noop(),
         projectParams: noop(),
+        projectKeyRotation: noop(),
       },
     });
 
@@ -166,6 +172,7 @@ describe('CoreSlot semantic rebuild orchestration', () => {
             projectLifecycle: thrower(CORESLOT_LIFECYCLE_PROJECTION),
             projectPayout: recorder(CORESLOT_PAYOUT_PROJECTION),
             projectParams: recorder(CORESLOT_PARAMS_PROJECTION),
+            projectKeyRotation: recorder(CORESLOT_KEY_ROTATION_PROJECTION),
           },
         }),
       (error) => {
@@ -199,6 +206,7 @@ describe('CoreSlot semantic reset safety', () => {
     assert.equal(prisma.lifecycleEvents.size, 0);
     assert.equal(prisma.payoutChanges.size, 0);
     assert.equal(prisma.parameterChanges.size, 0);
+    assert.equal(prisma.keyRotations.length, 0);
     assert.equal(prisma.coreSlotProjections.size, 0);
   });
 
@@ -382,6 +390,7 @@ describe('CoreSlot semantic rebuild against real projectors', () => {
       CORESLOT_LIFECYCLE_PROJECTION,
       CORESLOT_PAYOUT_PROJECTION,
       CORESLOT_PARAMS_PROJECTION,
+      CORESLOT_KEY_ROTATION_PROJECTION,
     ]) {
       const cursor = prisma.projectionCursors.get(`${name}:${CHAIN_ID}`);
       assert.ok(cursor, `missing cursor for ${name}`);
@@ -450,6 +459,8 @@ class CombinedMockPrisma {
     this.lifecycleEvents = new Map();
     this.payoutChanges = new Map();
     this.parameterChanges = new Map();
+    this.keyRotations = [];
+    this.nextKeyRotationId = 1n;
     this.coreSlotProjections = new Map();
     this.projectionFailures = [];
     this.projectionCursors = new Map();
@@ -503,6 +514,39 @@ class CombinedMockPrisma {
       deleteMany: async () => {
         this.lifecycleEvents.clear();
         return { count: 0 };
+      },
+    };
+    this.coreSlotConsensusKeyRotation = {
+      findFirst: async (args) =>
+        this.keyRotations.find((row) => matchRotation(row, args?.where ?? {})) ?? null,
+      findMany: async (args) =>
+        this.keyRotations.filter((row) => matchRotation(row, args?.where ?? {})),
+      upsert: async (args) => {
+        const existing = this.keyRotations.find((row) => matchRotation(row, args.where));
+        if (existing) {
+          Object.assign(existing, args.update);
+          return existing;
+        }
+        const row = { id: this.nextKeyRotationId, ...args.create };
+        this.nextKeyRotationId += 1n;
+        this.keyRotations.push(row);
+        return row;
+      },
+      create: async (args) => {
+        const row = { id: this.nextKeyRotationId, ...args.data };
+        this.nextKeyRotationId += 1n;
+        this.keyRotations.push(row);
+        return row;
+      },
+      update: async (args) => {
+        const row = this.keyRotations.find((r) => r.id === args.where.id);
+        if (row) Object.assign(row, args.data);
+        return row;
+      },
+      deleteMany: async () => {
+        const count = this.keyRotations.length;
+        this.keyRotations = [];
+        return { count };
       },
     };
     this.coreSlotProjection = {
@@ -595,6 +639,8 @@ class CombinedMockPrisma {
     clone.lifecycleEvents = cloneMap(this.lifecycleEvents);
     clone.payoutChanges = cloneMap(this.payoutChanges);
     clone.parameterChanges = cloneMap(this.parameterChanges);
+    clone.keyRotations = this.keyRotations.map((row) => ({ ...row }));
+    clone.nextKeyRotationId = this.nextKeyRotationId;
     clone.coreSlotProjections = cloneMap(this.coreSlotProjections);
     clone.projectionFailures = this.projectionFailures.map((row) => ({ ...row }));
     clone.projectionCursors = cloneMap(this.projectionCursors);
@@ -613,6 +659,8 @@ class CombinedMockPrisma {
     this.lifecycleEvents = other.lifecycleEvents;
     this.payoutChanges = other.payoutChanges;
     this.parameterChanges = other.parameterChanges;
+    this.keyRotations = other.keyRotations;
+    this.nextKeyRotationId = other.nextKeyRotationId;
     this.coreSlotProjections = other.coreSlotProjections;
     this.projectionFailures = other.projectionFailures;
     this.projectionCursors = other.projectionCursors;
@@ -744,8 +792,19 @@ class CombinedMockPrisma {
     this.lifecycleEvents.set('1', { sourceEventId: 1n });
     this.payoutChanges.set('1', { sourceMessageId: 1n });
     this.parameterChanges.set('1', { sourceMessageId: 1n });
+    this.keyRotations.push({ id: 1n, slotId: 1n, status: 'requested' });
     this.coreSlotProjections.set('1', { slotId: 1n });
   }
+}
+
+function matchRotation(row, where) {
+  for (const [key, condition] of Object.entries(where)) {
+    if (condition !== null && typeof condition === 'object' && !Array.isArray(condition)) {
+      return false;
+    }
+    if (row[key] !== condition) return false;
+  }
+  return true;
 }
 
 function mapModel(prisma, field, keyOf) {

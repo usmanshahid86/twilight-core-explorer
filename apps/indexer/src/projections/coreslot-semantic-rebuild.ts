@@ -15,10 +15,15 @@ import {
   type CoreSlotParamsProjectionPrisma,
 } from './coreslot-params.js';
 import {
+  projectCoreSlotKeyRotationRange,
+  type CoreSlotKeyRotationProjectionPrisma,
+} from './coreslot-key-rotation.js';
+import {
   resetCoreSlotSemanticProjections,
   type ResetCoreSlotSemanticPrisma,
 } from './reset-semantic.js';
 import {
+  CORESLOT_KEY_ROTATION_PROJECTION,
   CORESLOT_LIFECYCLE_PROJECTION,
   CORESLOT_METADATA_PROJECTION,
   CORESLOT_PARAMS_PROJECTION,
@@ -28,18 +33,20 @@ import {
 /**
  * Deterministic CoreSlot semantic rebuild order.
  *
- * metadata  -> establishes CoreSlotProjection.metadataJson
- * lifecycle -> establishes status/operator/consensus/power without clearing metadata
- * payout    -> establishes payoutAddress without clearing metadata/lifecycle fields
- * params    -> global module-change history only, never mutates CoreSlotProjection
+ * metadata     -> establishes CoreSlotProjection.metadataJson
+ * lifecycle    -> establishes status/operator/consensus/power without clearing metadata
+ * payout       -> establishes payoutAddress without clearing metadata/lifecycle fields
+ * params       -> global module-change history only, never mutates CoreSlotProjection
+ * key_rotation -> applies confirmed consensus-address rotations after the base state
  *
- * Future (Phase 6b, not implemented here): key rotation, temporal consensus map.
+ * Future (Phase 6b-2, not implemented here): temporal consensus map.
  */
 export const CORESLOT_SEMANTIC_REBUILD_ORDER = [
   CORESLOT_METADATA_PROJECTION,
   CORESLOT_LIFECYCLE_PROJECTION,
   CORESLOT_PAYOUT_PROJECTION,
   CORESLOT_PARAMS_PROJECTION,
+  CORESLOT_KEY_ROTATION_PROJECTION,
 ] as const;
 
 export interface CoreSlotSemanticRebuildStep {
@@ -120,6 +127,7 @@ export interface CoreSlotSemanticRebuildProjectors {
   projectLifecycle: typeof projectCoreSlotLifecycleRange;
   projectPayout: typeof projectCoreSlotPayoutRange;
   projectParams: typeof projectCoreSlotParamsRange;
+  projectKeyRotation: typeof projectCoreSlotKeyRotationRange;
 }
 
 export interface BuildCoreSlotSemanticRebuildStepsArgs {
@@ -141,6 +149,7 @@ export function buildCoreSlotSemanticRebuildSteps(
   const projectLifecycle = args.projectors?.projectLifecycle ?? projectCoreSlotLifecycleRange;
   const projectPayout = args.projectors?.projectPayout ?? projectCoreSlotPayoutRange;
   const projectParams = args.projectors?.projectParams ?? projectCoreSlotParamsRange;
+  const projectKeyRotation = args.projectors?.projectKeyRotation ?? projectCoreSlotKeyRotationRange;
 
   return [
     {
@@ -181,6 +190,17 @@ export function buildCoreSlotSemanticRebuildSteps(
       run: async ({ startHeight, endHeight }) => {
         await projectParams({
           prisma: prisma as CoreSlotParamsProjectionPrisma,
+          chainId,
+          startHeight,
+          endHeight,
+        });
+      },
+    },
+    {
+      projectionName: CORESLOT_KEY_ROTATION_PROJECTION,
+      run: async ({ startHeight, endHeight }) => {
+        await projectKeyRotation({
+          prisma: prisma as CoreSlotKeyRotationProjectionPrisma,
           chainId,
           startHeight,
           endHeight,
