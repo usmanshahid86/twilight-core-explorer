@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { ChainClientError, RestRpcChainClient } from '../dist/index.js';
+import {
+  ChainClientError,
+  ChainClientInputError,
+  RestRpcChainClient,
+  normalizeConsensusAddressHex,
+} from '../dist/index.js';
 
 function createJsonResponse(body, init = {}) {
   return {
@@ -176,10 +181,10 @@ describe('RestRpcChainClient', () => {
     await client.getActiveCoreSlots();
     await client.getCoreSlot(7n);
     await client.getCoreSlotByOperator('twilight1operator');
-    await client.getCoreSlotByConsensusAddress('ABCDEF');
+    await client.getCoreSlotByConsensusAddress('ABCDEFABCDEFABCDEFABCDEFABCDEFABCDEFABCD');
     await client.getPendingKeyRotations();
     await client.getLastAppliedValidators();
-    await client.getReservedConsensusAddress('ABCDEF');
+    await client.getReservedConsensusAddress('ABCDEFABCDEFABCDEFABCDEFABCDEFABCDEFABCD');
     await client.getRewardWeight(7n);
 
     assert.deepEqual(
@@ -190,10 +195,10 @@ describe('RestRpcChainClient', () => {
         '/twilight/coreslot/v1/active-slots',
         '/twilight/coreslot/v1/slots/7',
         '/twilight/coreslot/v1/operators/twilight1operator',
-        '/twilight/coreslot/v1/consensus/ABCDEF',
+        '/twilight/coreslot/v1/consensus/abcdefabcdefabcdefabcdefabcdefabcdefabcd',
         '/twilight/coreslot/v1/pending-key-rotations',
         '/twilight/coreslot/v1/last-applied-validators',
-        '/twilight/coreslot/v1/reserved-consensus-address/ABCDEF',
+        '/twilight/coreslot/v1/reserved-consensus-address/abcdefabcdefabcdefabcdefabcdefabcdefabcd',
         '/twilight/coreslot/v1/slots/7/reward-weight',
       ],
     );
@@ -211,15 +216,17 @@ describe('RestRpcChainClient', () => {
     await client.getEpochInfo();
     await client.getNextHalving();
     await client.getEpochReward(9n);
-    await client.getSlotRewards(7n);
-    await client.getClaimableRewards(7n);
+    await client.getSlotRewards(7n, { limit: 25n, reverse: true });
+    await client.getClaimableRewards(7n, 10n, 20n);
     await client.getCumulativeEmitted();
     await client.getSupplySchedule();
     await client.getCurrentEpochActiveBlocks();
     await client.getModuleBalances();
 
+    const urls = calls.map((call) => new URL(call));
+
     assert.deepEqual(
-      calls.map((call) => new URL(call).pathname),
+      urls.map((url) => url.pathname),
       [
         '/twilight/rewards/v1/params',
         '/twilight/rewards/v1/epoch-info',
@@ -232,6 +239,26 @@ describe('RestRpcChainClient', () => {
         '/twilight/rewards/v1/current-epoch/active-blocks',
         '/twilight/rewards/v1/module-balances',
       ],
+    );
+    assert.equal(urls[4].searchParams.get('pagination.limit'), '25');
+    assert.equal(urls[4].searchParams.get('pagination.reverse'), 'true');
+    assert.equal(urls[5].searchParams.get('start_epoch'), '10');
+    assert.equal(urls[5].searchParams.get('end_epoch'), '20');
+  });
+
+  it('normalizes CoreSlot consensus-address route parameters at the client boundary', async () => {
+    assert.equal(
+      normalizeConsensusAddressHex('ABCDEFABCDEFABCDEFABCDEFABCDEFABCDEFABCD'),
+      'abcdefabcdefabcdefabcdefabcdefabcdefabcd',
+    );
+
+    assert.throws(
+      () => normalizeConsensusAddressHex('twilightvalcons1nothex'),
+      ChainClientInputError,
+    );
+    assert.throws(
+      () => normalizeConsensusAddressHex('ABCDEF'),
+      ChainClientInputError,
     );
   });
 

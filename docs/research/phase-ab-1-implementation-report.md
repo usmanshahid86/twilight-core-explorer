@@ -61,8 +61,8 @@ Rewards snapshots:
 - `getEpochInfo()`
 - `getNextHalving()`
 - `getEpochReward(epoch)`
-- `getSlotRewards(slotId)`
-- `getClaimableRewards(slotId)`
+- `getSlotRewards(slotId, pagination?)`
+- `getClaimableRewards(slotId, startEpoch, endEpoch)`
 - `getCumulativeEmitted()`
 - `getSupplySchedule()`
 - `getCurrentEpochActiveBlocks()`

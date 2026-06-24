@@ -133,23 +133,32 @@ Use rewards REST `module-balances` for `rewards_balance`, `fee_pool_balance`, de
 | Browser/debug friendliness can tempt direct web-to-chain calls. | Keep chain calls in indexer/API services; web reads explorer API/Postgres-backed data. |
 | Snapshot REST reads can race with indexed event height. | Store snapshot height where available and correlate to indexer cursor; favor event height for lifecycle history. |
 
-## 7. When to Add Generated gRPC/TS Proto Clients
+## 7. Descriptor Decoder and Future gRPC/TS Clients
 
 Add `GrpcChainClient` behind the same `ChainClient` interface when any of these are true:
 
 - The MVP data model and page contracts have stabilized.
 - REST response validation becomes brittle or misses typed edge cases.
 - Backfill volume needs stricter typed decoding and fewer JSON shape assumptions.
-- The explorer needs complete protobuf `Any` decoding for tx messages beyond REST JSON.
+- The explorer needs typed CoreSlot/rewards query clients beyond REST JSON snapshots.
 - CI can enforce proto generation from the current chain repo or a pinned proto package.
 - The team wants stronger compile-time safety for CoreSlot/rewards query clients.
 
-Recommended production path:
+Current production decoder path:
 
-- Use `buf` plus `ts-proto` or Telescope under `packages/proto`.
-- Generate clients for `twilight.coreslot.v1` and `twilight.rewards.v1`.
+- Use the copied Twilight `FileDescriptorSet` under `packages/proto`.
+- Decode raw CometBFT transaction bytes through descriptor-backed `TxRaw -> TxBody -> Any` decoding in `packages/decoder`.
+- Refresh descriptor artifacts from the chain repo export when chain protos change.
+- Treat generated TS bindings as an optional explorer-side enhancement, not as an artifact currently provided by the chain repo.
 - Keep `RestRpcChainClient` for debug/fallback.
 - Keep Swagger as route inventory and integration-test source, not runtime dependency.
+
+Chain-client boundary updates after chain alignment review:
+
+- `getClaimableRewards(slotId, startEpoch, endEpoch)` must always send required `start_epoch` and `end_epoch` query parameters.
+- `getSlotRewards(slotId, pagination)` must support route-contract-backed pagination, including `pagination.reverse` for newest-first reads.
+- CoreSlot consensus lookups must normalize 40-character CometBFT hex consensus addresses to lowercase and must not forward uppercase, bech32, or invalid values blindly.
+- Claim truth comes from claim records: `SlotRewards.claimed` is the reconciled per-record state, `ClaimableRewards` returns only currently unclaimed records for an explicit range, `reward_claimed` events provide transaction history/correlation, and `EpochReward` remains an epoch aggregate snapshot.
 
 ## 8. Updated Implementation Recommendation
 

@@ -1,4 +1,9 @@
-import { ChainClientError, getJson, type FetchLike } from './http.js';
+import {
+  ChainClientError,
+  ChainClientInputError,
+  getJson,
+  type FetchLike,
+} from './http.js';
 import {
   COMET_RPC_ROUTES,
   CORE_SLOT_REST_ROUTES,
@@ -12,6 +17,7 @@ import type {
   ChainClient,
   ChainStatus,
   ModuleSnapshot,
+  PaginationRequest,
   SupplySource,
   TxSource,
 } from './types.js';
@@ -197,9 +203,11 @@ export class RestRpcChainClient implements ChainClient {
   }
 
   async getCoreSlotByConsensusAddress(consensusAddress: string): Promise<ModuleSnapshot> {
+    const normalizedConsensusAddress = normalizeConsensusAddressHex(consensusAddress);
+
     return this.snapshot(
       buildPath(CORE_SLOT_REST_ROUTES.byConsensusAddress, {
-        consensus_address: consensusAddress,
+        consensus_address: normalizedConsensusAddress,
       }),
     );
   }
@@ -213,9 +221,11 @@ export class RestRpcChainClient implements ChainClient {
   }
 
   async getReservedConsensusAddress(consensusAddress: string): Promise<ModuleSnapshot> {
+    const normalizedConsensusAddress = normalizeConsensusAddressHex(consensusAddress);
+
     return this.snapshot(
       buildPath(CORE_SLOT_REST_ROUTES.reservedConsensusAddress, {
-        consensus_address: consensusAddress,
+        consensus_address: normalizedConsensusAddress,
       }),
     );
   }
@@ -244,13 +254,27 @@ export class RestRpcChainClient implements ChainClient {
     );
   }
 
-  async getSlotRewards(slotId: bigint): Promise<ModuleSnapshot> {
-    return this.snapshot(buildPath(REWARDS_REST_ROUTES.slotRewards, { slot_id: slotId }));
+  async getSlotRewards(
+    slotId: bigint,
+    pagination: PaginationRequest = {},
+  ): Promise<ModuleSnapshot> {
+    return this.snapshot(
+      buildPath(REWARDS_REST_ROUTES.slotRewards, { slot_id: slotId }),
+      buildPaginationQuery(pagination),
+    );
   }
 
-  async getClaimableRewards(slotId: bigint): Promise<ModuleSnapshot> {
+  async getClaimableRewards(
+    slotId: bigint,
+    startEpoch: bigint,
+    endEpoch: bigint,
+  ): Promise<ModuleSnapshot> {
     return this.snapshot(
       buildPath(REWARDS_REST_ROUTES.claimableRewards, { slot_id: slotId }),
+      {
+        start_epoch: startEpoch,
+        end_epoch: endEpoch,
+      },
     );
   }
 
@@ -292,9 +316,39 @@ export class RestRpcChainClient implements ChainClient {
     });
   }
 
-  private async snapshot(path: string): Promise<ModuleSnapshot> {
-    return { raw: await this.rest(path) };
+  private async snapshot(
+    path: string,
+    query?: Record<string, string | number | bigint | boolean | undefined>,
+  ): Promise<ModuleSnapshot> {
+    return { raw: await this.rest(path, query) };
   }
+}
+
+export function normalizeConsensusAddressHex(consensusAddress: string): string {
+  const value = consensusAddress.trim();
+  if (/^twilightvalcons1/i.test(value)) {
+    throw new ChainClientInputError(
+      'CoreSlot consensus routes require a 40-character CometBFT hex consensus address; twilightvalcons bech32 conversion is not implemented in this transport yet.',
+    );
+  }
+  if (!/^[0-9a-fA-F]{40}$/.test(value)) {
+    throw new ChainClientInputError(
+      'CoreSlot consensus routes require a 40-character CometBFT hex consensus address.',
+    );
+  }
+  return value.toLowerCase();
+}
+
+function buildPaginationQuery(
+  pagination: PaginationRequest,
+): Record<string, string | number | bigint | boolean | undefined> {
+  return {
+    'pagination.limit': pagination.limit,
+    'pagination.offset': pagination.offset,
+    'pagination.key': pagination.key,
+    'pagination.reverse': pagination.reverse,
+    'pagination.count_total': pagination.countTotal,
+  };
 }
 
 function getRecord(value: unknown): Record<string, unknown> {

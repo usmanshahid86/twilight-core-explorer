@@ -401,15 +401,21 @@ Indexes:
 
 Source:
 
-- Twilight rewards REST `EpochReward` and `SlotRewards`.
-- Rewards event `reward_claimed`.
+- Twilight rewards REST `SlotRewards` claim records for authoritative per-epoch/per-slot
+  `claimed` and `claimedHeight` state.
+- Twilight rewards REST `ClaimableRewards` for explicit unclaimed-only epoch ranges.
+- Rewards event `reward_claimed` for tx history and claim hash correlation.
 - Tx message `MsgClaimRewards` for `claimTxHash` correlation.
+- Twilight rewards REST `EpochReward` only for epoch aggregate/finalization context; it is
+  not the source of current per-claim truth.
 - gRPC later for generated typed clients.
 
 Retention/reindex:
 
 - Retain all.
-- Claims can be refreshed from `SlotRewards`; tx hash correlation comes from indexer events/messages.
+- Claims can be refreshed from paginated `SlotRewards`; tx hash correlation comes from indexer events/messages.
+- `ClaimableRewards` absence means "not currently claimable in the requested range", not a
+  standalone historical claim record.
 
 ### `RewardEvent`
 
@@ -618,9 +624,12 @@ For unknown events:
 - Store event type and attributes in `Event`.
 - Add `DecodeFailure` only if the event looked like a known Twilight module event but parser failed.
 
-MVP strategy: hybrid raw JSON + type URL registry.
+MVP strategy: hybrid raw JSON + type URL registry plus descriptor-backed raw tx decoding.
 
-Production strategy: generated TypeScript protobuf types for `twilight.coreslot.v1` and `twilight.rewards.v1`, while preserving raw storage.
+Production strategy: keep descriptor-backed decoding from the copied Twilight
+`FileDescriptorSet` as the durable raw transaction decoder. Generated TypeScript query clients
+may be added later behind `ChainClient` for CoreSlot/rewards snapshots, while preserving raw
+storage.
 
 ## API Source Mapping
 
@@ -634,15 +643,15 @@ Transport-specific parsing lives in `packages/chain-client` and `packages/decode
 | Model | CometBFT RPC | Cosmos REST | Twilight REST | Event projection | gRPC later |
 |---|---|---|---|---|---|
 | `Block` | Primary: `/block`; pair with `/block_results` by height | Optional block endpoint for SDK-shaped JSON | No | No | No |
-| `Transaction` | `/tx` for raw lookup/fallback | Primary decoded tx responses by hash or height query where available | No | Tx events attached after ingest | Generated decoders later if raw protobuf decode is needed |
-| `Message` | Raw tx bytes can be decoded from RPC fallback | Decoded REST tx body messages for MVP | No | No | Generated protobuf message decoding later |
+| `Transaction` | `/tx` for raw lookup/fallback | Primary decoded tx responses by hash or height query where available | No | Tx events attached after ingest | Descriptor-backed raw protobuf decode is available; generated query clients remain optional |
+| `Message` | Raw tx bytes can be decoded from RPC fallback through descriptor-backed decoding | Decoded REST tx body messages where available | No | No | Generated query clients later; raw tx decode does not require them |
 | `Event` | Primary for `/block_results` begin/end/block events | Tx response events | No | Base source for semantic event projections | No |
 | `Account` | No direct primary source | Cosmos auth REST if enabled; otherwise discovery from tx data | No | Signers/message/event address extraction | No |
 | `AccountBalance` | No | Cosmos bank REST balances | No | Optional balance refresh after account activity | No |
 | `CoreSlot` | No | No | First source via `RestRpcChainClient` snapshots from `/twilight/coreslot/v1/*` | Lifecycle events update/history | `GrpcChainClient` normalizing into the same persistence model |
 | `CoreSlotEvent` | Base events from `/block_results` | Tx response events where lifecycle tx emits events | Snapshot context only | Primary source | No |
 | `RewardEpoch` | No direct primary source | No | First source via `RestRpcChainClient` snapshots from rewards epoch/current routes | `epoch_finalized` drives refresh and history | `GrpcChainClient` normalizing into the same persistence model |
-| `RewardClaim` | No direct primary source | No | First source via `RestRpcChainClient` claim records from slot rewards / claimable routes | `reward_claimed` plus tx/message correlation for `claimTxHash` | `GrpcChainClient` normalizing into the same persistence model |
+| `RewardClaim` | No direct primary source | No | First source via `RestRpcChainClient`: paginated `SlotRewards` for claim records and range-explicit `ClaimableRewards` for unclaimed-only checks | `reward_claimed` plus tx/message correlation for `claimTxHash` | `GrpcChainClient` normalizing into the same persistence model |
 | `RewardEvent` | Base events from `/block_results` | Tx response events for claim/params/pause/resume txs | Snapshot context only | Primary source | No |
 | `ModuleBalanceSnapshot` | No | Bank balances for known module accounts if needed | First source via `RestRpcChainClient` from rewards module-balances | Snapshot on epoch finalization events | `GrpcChainClient` later |
 | `SupplySnapshot` | No | Primary total supply from bank REST | Rewards cumulative emitted/supply schedule context | Snapshot on epoch finalization events | Generated rewards query client later |

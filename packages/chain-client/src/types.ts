@@ -20,8 +20,12 @@ export interface ChainClient {
   getEpochInfo(): Promise<ModuleSnapshot>;
   getNextHalving(): Promise<ModuleSnapshot>;
   getEpochReward(epoch: bigint): Promise<ModuleSnapshot>;
-  getSlotRewards(slotId: bigint): Promise<ModuleSnapshot>;
-  getClaimableRewards(slotId: bigint): Promise<ModuleSnapshot>;
+  getSlotRewards(slotId: bigint, pagination?: PaginationRequest): Promise<ModuleSnapshot>;
+  getClaimableRewards(
+    slotId: bigint,
+    startEpoch: bigint,
+    endEpoch: bigint,
+  ): Promise<ModuleSnapshot>;
   getCumulativeEmitted(): Promise<ModuleSnapshot>;
   getSupplySchedule(): Promise<ModuleSnapshot>;
   getCurrentEpochActiveBlocks(): Promise<ModuleSnapshot>;
@@ -62,6 +66,14 @@ export interface SupplySource {
   denom: string;
   amount: string;
   raw: unknown;
+}
+
+export interface PaginationRequest {
+  limit?: bigint | number | string | undefined;
+  offset?: bigint | number | string | undefined;
+  key?: string | undefined;
+  reverse?: boolean | undefined;
+  countTotal?: boolean | undefined;
 }
 
 export interface ModuleSnapshot<T = unknown> {

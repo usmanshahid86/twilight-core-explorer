@@ -27,6 +27,13 @@ export class ChainClientError extends Error {
   }
 }
 
+export class ChainClientInputError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ChainClientInputError';
+  }
+}
+
 export async function getJson<T = unknown>(
   baseUrl: string,
   path: string,

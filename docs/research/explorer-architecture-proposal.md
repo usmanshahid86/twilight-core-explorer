@@ -144,8 +144,8 @@ export interface ChainClient {
   getEpochInfo(): Promise<EpochInfoSource>;
   getNextHalving(): Promise<NextHalvingSource>;
   getEpochReward(epoch: bigint): Promise<EpochRewardSource>;
-  getSlotRewards(slotId: bigint): Promise<SlotRewardsSource>;
-  getClaimableRewards(slotId: bigint): Promise<ClaimableRewardsSource>;
+  getSlotRewards(slotId: bigint, pagination?: PaginationRequest): Promise<SlotRewardsSource>;
+  getClaimableRewards(slotId: bigint, startEpoch: bigint, endEpoch: bigint): Promise<ClaimableRewardsSource>;
   getCumulativeEmitted(): Promise<CumulativeEmittedSource>;
   getSupplySchedule(): Promise<SupplyScheduleSource>;
   getCurrentEpochActiveBlocks(): Promise<CurrentEpochActiveBlocksSource>;
@@ -167,6 +167,15 @@ Rules:
 - Raw payloads are preserved for audit/debug.
 - BigInt values and token amounts are normalized as strings at the boundary.
 - `ChainClient` must never call staking, governance, mint module, or distribution routes.
+- CoreSlot consensus-address lookup methods must not forward user input blindly. The first
+  transport accepts 40-character CometBFT hex consensus addresses, lowercases them before
+  building routes, and rejects bech32 `twilightvalcons...` values until explicit conversion is
+  added.
+- Rewards claimability must be range-explicit: `ClaimableRewards` requires `start_epoch` and
+  `end_epoch`; callers derive the range in the rewards service/projection layer, not inside the
+  low-level transport.
+- `SlotRewards` must be pagination-aware. Use route-contract-backed pagination parameters,
+  including `pagination.reverse` for newest-first reads where the gateway supports it.
 
 ## Endpoint Discovery Findings
 
@@ -269,17 +278,19 @@ Use a hybrid raw JSON + type URL registry:
 - Keep a registry that maps type URL to module, display name, signer fields, and semantic parser.
 - On missing/unknown decode, populate `DecodeFailure`.
 
-This now works with module REST query routes wired for CoreSlot/rewards snapshots through `RestRpcChainClient`. The same registry should remain compatible with generated gRPC/protobuf decoding later through `GrpcChainClient`.
+This now works with module REST query routes wired for CoreSlot/rewards snapshots through `RestRpcChainClient` and descriptor-backed raw tx decoding from the copied Twilight descriptor set. The same registry should remain compatible with generated gRPC/protobuf query clients later through `GrpcChainClient`.
 
 ### Production Decoder Recommendation
 
-Generate TypeScript protobuf types for `twilight.coreslot.v1` and `twilight.rewards.v1` using `buf` + `ts-proto` or Telescope:
+Use the descriptor-backed decoder foundation as the production decoder path for raw
+`TxRaw -> TxBody -> Any` message decoding:
 
-- Add proto package under `packages/proto`.
-- Generate types in CI.
-- Decode raw tx bytes and Any messages reliably.
+- Keep the copied `twilight-descriptors.pb` and message type URL manifest under `packages/proto`.
+- Refresh descriptor artifacts from the chain repo export command when the chain proto surface changes.
+- Decode raw tx bytes and `Any` messages reliably through `packages/decoder`.
 - Keep raw JSON storage even after typed decode.
-- Use generated gRPC clients for CoreSlot/rewards query snapshots when stronger typing or REST limitations justify the migration.
+- Optionally add generated TypeScript bindings later inside the explorer repo if they are driven from the pinned descriptor/proto artifacts.
+- Use generated gRPC clients for CoreSlot/rewards query snapshots when stronger typing or REST limitations justify the migration; they remain a transport implementation behind `ChainClient`, not a replacement architecture.
 
 ## CoreSlot Integration
 

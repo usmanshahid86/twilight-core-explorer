@@ -401,12 +401,14 @@ What not to do:
 2. Scaffold monorepo and shared TypeScript config.
 3. Define `ChainClient` and implement `RestRpcChainClient` as the first transport.
 4. Add route-contract tests, including active-slots regression and unsupported-route guards.
-5. Add Prisma schema with generic and CoreSlot/rewards MVP models.
-6. Add Postgres Docker Compose and migration workflow.
-7. Implement generic block/tx/event indexer through `ChainClient`, including `/block_results`.
-8. Implement raw message/event storage and decode failure capture.
-9. Implement API health/status/blocks/txs/accounts/search routes.
-10. Add CoreSlot/rewards processors consuming `ChainClient` snapshots plus event parsers.
+5. Add chain-client boundary tests for required rewards claim ranges, paginated
+   `SlotRewards` reads with reverse support, and lowercase hex CoreSlot consensus lookups.
+6. Add Prisma schema with generic and CoreSlot/rewards MVP models.
+7. Add Postgres Docker Compose and migration workflow.
+8. Implement generic block/tx/event indexer through `ChainClient`, including `/block_results`.
+9. Implement raw message/event storage and descriptor-backed decode failure capture.
+10. Implement API health/status/blocks/txs/accounts/search routes.
+11. Add CoreSlot/rewards processors consuming `ChainClient` snapshots plus event parsers.
 
 ## Acceptance Gate for Starting Build
 
@@ -414,7 +416,8 @@ Proceed to implementation only after:
 
 - These research docs are reviewed.
 - CoreSlot/rewards REST route contract is imported.
-- Generated gRPC client work is accepted as production hardening, not an MVP blocker.
+- Descriptor-backed transaction decoding is accepted as the production decoder foundation.
+- Generated gRPC client work is accepted as optional production hardening for typed query clients, not an MVP blocker.
 - `ChainClient`/`RestRpcChainClient` boundary is accepted as the first implementation architecture.
 - The team agrees not to fork old product pages.
 - The data model is accepted as the starting schema.
