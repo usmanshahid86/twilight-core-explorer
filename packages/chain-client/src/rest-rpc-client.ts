@@ -1,4 +1,4 @@
-import { getJson, type FetchLike } from './http.js';
+import { ChainClientError, getJson, type FetchLike } from './http.js';
 import {
   COMET_RPC_ROUTES,
   CORE_SLOT_REST_ROUTES,
@@ -94,9 +94,17 @@ export class RestRpcChainClient implements ChainClient {
   }
 
   async getTxsByHeight(height: bigint): Promise<TxSource[]> {
-    const raw = await this.rest(COSMOS_REST_ROUTES.txs, {
-      events: `tx.height=${height.toString()}`,
-    });
+    let raw: unknown;
+    try {
+      raw = await this.rest(COSMOS_REST_ROUTES.txs, {
+        query: `tx.height=${height.toString()}`,
+      });
+    } catch (error) {
+      if (error instanceof ChainClientError) {
+        return this.getTxsByHeightFromRpcBlock(height);
+      }
+      throw error;
+    }
     const txResponses = readArray(getRecord(raw).tx_responses);
 
     return txResponses.map((response) => {
@@ -108,6 +116,42 @@ export class RestRpcChainClient implements ChainClient {
         raw: response,
       };
     });
+  }
+
+  private async getTxsByHeightFromRpcBlock(height: bigint): Promise<TxSource[]> {
+    const blockRaw = await this.rpc(COMET_RPC_ROUTES.block, { height });
+    const result = getRecord(getRecord(blockRaw).result);
+    const block = getRecord(result.block);
+    const data = getRecord(block.data);
+    const rawTxs = readArray(data.txs).filter((tx): tx is string => typeof tx === 'string');
+    const txs: TxSource[] = [];
+
+    for (const rawTxBase64 of rawTxs) {
+      const hash = await sha256Base64ToHex(rawTxBase64);
+      const rawTxResult = await this.rpc(COMET_RPC_ROUTES.tx, { hash: `0x${hash}` });
+      const txResult = getRecord(getRecord(rawTxResult).result);
+      const deliverTx = getRecord(txResult.tx_result);
+
+      txs.push({
+        hash,
+        height: readString(txResult.height) ?? height.toString(),
+        code: readNumber(deliverTx.code),
+        raw: {
+          txhash: hash,
+          height: readString(txResult.height) ?? height.toString(),
+          code: readNumber(deliverTx.code) ?? 0,
+          codespace: readString(deliverTx.codespace) ?? '',
+          gas_wanted: readString(deliverTx.gas_wanted),
+          gas_used: readString(deliverTx.gas_used),
+          events: readArray(deliverTx.events),
+          tx: { body: { messages: [] } },
+          raw_tx_base64: rawTxBase64,
+          rpc: rawTxResult,
+        },
+      });
+    }
+
+    return txs;
   }
 
   async getSupply(): Promise<SupplySource[]> {
@@ -278,4 +322,14 @@ function readNumber(value: unknown): number | undefined {
 
 function readBoolean(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
+}
+
+async function sha256Base64ToHex(value: string): Promise<string> {
+  const binary = atob(value);
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('')
+    .toUpperCase();
 }

@@ -107,11 +107,59 @@ describe('RestRpcChainClient', () => {
 
     assert.equal(calls[0], 'http://rest.test/cosmos/bank/v1beta1/supply');
     assert.equal(new URL(calls[1]).pathname, '/cosmos/tx/v1beta1/txs');
-    assert.equal(new URL(calls[1]).searchParams.get('events'), 'tx.height=17');
+    assert.equal(new URL(calls[1]).searchParams.get('query'), 'tx.height=17');
     assert.equal(
       calls[2],
       'http://rest.test/cosmos/bank/v1beta1/balances/twilight1address',
     );
+  });
+
+  it('falls back to CometBFT block txs when REST tx search cannot decode a tx', async () => {
+    const failingTxSearchUrl = 'http://rest.test/cosmos/tx/v1beta1/txs?query=tx.height%3D17';
+    const { calls, fetchImpl } = createRecordingFetch({
+      [failingTxSearchUrl]: createJsonResponse(
+        { code: 13, message: 'unable to resolve type URL' },
+        { ok: false, status: 500 },
+      ),
+    });
+    const client = new RestRpcChainClient({
+      cometRpcUrl: 'http://rpc.test',
+      restUrl: 'http://rest.test',
+      fetchImpl: async (input, init) => {
+        const url = input.toString();
+        const parsed = new URL(url);
+        if (url === failingTxSearchUrl) return fetchImpl(input, init);
+        if (parsed.pathname === '/block') {
+          return createJsonResponse({
+            result: {
+              block: { data: { txs: ['AQID'] } },
+            },
+          });
+        }
+        if (parsed.pathname === '/tx') {
+          return createJsonResponse({
+            result: {
+              height: '17',
+              tx_result: {
+                code: 0,
+                gas_wanted: '200000',
+                gas_used: '53015',
+                events: [{ type: 'message', attributes: [] }],
+              },
+            },
+          });
+        }
+        return fetchImpl(input, init);
+      },
+    });
+
+    const txs = await client.getTxsByHeight(17n);
+
+    assert.equal(txs.length, 1);
+    assert.match(txs[0].hash, /^[A-F0-9]{64}$/);
+    assert.equal(txs[0].height, '17');
+    assert.equal(txs[0].code, 0);
+    assert.equal(calls[0], failingTxSearchUrl);
   });
 
   it('routes Twilight CoreSlot snapshots through REST contract paths', async () => {
