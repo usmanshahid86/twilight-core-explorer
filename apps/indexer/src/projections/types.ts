@@ -1,5 +1,7 @@
 export const CORESLOT_METADATA_PROJECTION = 'coreslot_metadata_v1';
 export const CORESLOT_LIFECYCLE_PROJECTION = 'coreslot_lifecycle_v1';
+export const CORESLOT_PAYOUT_PROJECTION = 'coreslot_payout_v1';
+export const CORESLOT_PARAMS_PROJECTION = 'coreslot_params_v1';
 
 export const PROJECTION_STATUS = {
   idle: 'idle',
@@ -11,6 +13,11 @@ export const CORESLOT_METADATA_TYPE_URL =
   '/twilight.coreslot.v1.MsgUpdateOperatorMetadata';
 
 export const CORESLOT_METADATA_EVENT_TYPE = 'coreslot_metadata_updated';
+export const CORESLOT_PAYOUT_TYPE_URL =
+  '/twilight.coreslot.v1.MsgUpdatePayoutAddress';
+export const CORESLOT_PAYOUT_EVENT_TYPE = 'coreslot_payout_updated';
+export const CORESLOT_PARAMS_TYPE_URL = '/twilight.coreslot.v1.MsgUpdateParams';
+export const CORESLOT_PARAMS_EVENT_TYPE = 'coreslot_params_updated';
 
 export const CORESLOT_LIFECYCLE_MESSAGE_TO_EVENT = {
   '/twilight.coreslot.v1.MsgRegisterCoreSlot': 'coreslot_registered',
@@ -38,12 +45,15 @@ export type ProjectionFailureKind =
   | 'failed_tx_skipped'
   | 'invalid_slot_id'
   | 'invalid_consensus_address'
+  | 'invalid_payout_address'
+  | 'invalid_params_payload'
   | 'missing_required_payload'
   | 'unknown_coreslot_message'
   | 'unknown_coreslot_event'
   | 'unknown_coreslot_lifecycle_event';
 
 export interface ProjectionFailureInput {
+  failureKey?: string | null | undefined;
   projectionName: string;
   module?: string | null | undefined;
   sourceHeight: bigint;
@@ -57,4 +67,31 @@ export interface ProjectionFailureInput {
   rawMessageJson?: unknown | null | undefined;
   rawEventJson?: unknown | null | undefined;
   error: string;
+}
+
+export interface ProjectionFailureWithKey extends ProjectionFailureInput {
+  failureKey: string;
+}
+
+export function withProjectionFailureKey(
+  input: ProjectionFailureInput,
+): ProjectionFailureWithKey {
+  return {
+    ...input,
+    failureKey: input.failureKey ?? buildProjectionFailureKey(input),
+  };
+}
+
+export function buildProjectionFailureKey(input: ProjectionFailureInput): string {
+  return [
+    input.projectionName,
+    input.failureKind,
+    input.sourceHeight.toString(),
+    input.sourceTxHash ?? 'none',
+    input.sourceMsgIndex?.toString() ?? 'none',
+    input.sourceMessageId?.toString() ?? 'none',
+    input.sourceEventId?.toString() ?? 'none',
+    input.typeUrl ?? 'none',
+    input.eventType ?? 'none',
+  ].join(':');
 }

@@ -4,34 +4,34 @@ import {
   type ProjectionCursorPrisma,
 } from './cursor.js';
 import {
-  CORESLOT_METADATA_EVENT_TYPE,
-  CORESLOT_METADATA_PROJECTION,
-  CORESLOT_METADATA_TYPE_URL,
+  CORESLOT_PARAMS_EVENT_TYPE,
+  CORESLOT_PARAMS_PROJECTION,
+  CORESLOT_PARAMS_TYPE_URL,
   type ProjectionFailureInput,
   type ProjectionFailureKind,
   withProjectionFailureKey,
 } from './types.js';
 
-export interface ProjectCoreSlotMetadataRangeArgs {
-  prisma: CoreSlotMetadataProjectionPrisma;
+export interface ProjectCoreSlotParamsRangeArgs {
+  prisma: CoreSlotParamsProjectionPrisma;
   chainId: string;
   startHeight: bigint;
   endHeight: bigint;
 }
 
-export interface ProjectCoreSlotMetadataHeightArgs {
-  prisma: CoreSlotMetadataProjectionPrisma;
+export interface ProjectCoreSlotParamsHeightArgs {
+  prisma: CoreSlotParamsProjectionPrisma;
   chainId: string;
   height: bigint;
 }
 
-export interface ProjectCoreSlotMetadataResult {
+export interface ProjectCoreSlotParamsResult {
   height: bigint;
   changesCreated: number;
   failuresCreated: number;
 }
 
-export interface CoreSlotMetadataProjectionPrisma extends ProjectionCursorPrisma {
+export interface CoreSlotParamsProjectionPrisma extends ProjectionCursorPrisma {
   explorerTransaction: {
     findMany(args: unknown): Promise<TransactionSource[]>;
   };
@@ -41,18 +41,14 @@ export interface CoreSlotMetadataProjectionPrisma extends ProjectionCursorPrisma
   event: {
     findMany(args: unknown): Promise<EventSource[]>;
   };
-  coreSlotMetadataChange: {
-    upsert(args: unknown): Promise<unknown>;
-  };
-  coreSlotProjection: {
+  coreSlotParameterChange: {
     upsert(args: unknown): Promise<unknown>;
   };
   projectionFailure: {
-    create(args: unknown): Promise<unknown>;
     upsert(args: unknown): Promise<unknown>;
     deleteMany(args: unknown): Promise<unknown>;
   };
-  $transaction<T>(fn: (tx: CoreSlotMetadataProjectionPrisma) => Promise<T>): Promise<T>;
+  $transaction<T>(fn: (tx: CoreSlotParamsProjectionPrisma) => Promise<T>): Promise<T>;
 }
 
 interface TransactionSource {
@@ -82,18 +78,17 @@ interface EventSource {
   attributesJson: unknown;
 }
 
-interface MetadataPayload {
-  slotId: bigint;
-  operatorAddress: string;
-  metadataJson: unknown;
+interface ParamsPayload {
+  authority: string;
+  paramsJson: unknown;
 }
 
-export async function projectCoreSlotMetadataRange(
-  args: ProjectCoreSlotMetadataRangeArgs,
-): Promise<ProjectCoreSlotMetadataResult[]> {
-  const results: ProjectCoreSlotMetadataResult[] = [];
+export async function projectCoreSlotParamsRange(
+  args: ProjectCoreSlotParamsRangeArgs,
+): Promise<ProjectCoreSlotParamsResult[]> {
+  const results: ProjectCoreSlotParamsResult[] = [];
   for (let height = args.startHeight; height <= args.endHeight; height += 1n) {
-    results.push(await projectCoreSlotMetadataHeight({
+    results.push(await projectCoreSlotParamsHeight({
       prisma: args.prisma,
       chainId: args.chainId,
       height,
@@ -102,16 +97,16 @@ export async function projectCoreSlotMetadataRange(
   return results;
 }
 
-export async function projectCoreSlotMetadataHeight(
-  args: ProjectCoreSlotMetadataHeightArgs,
-): Promise<ProjectCoreSlotMetadataResult> {
+export async function projectCoreSlotParamsHeight(
+  args: ProjectCoreSlotParamsHeightArgs,
+): Promise<ProjectCoreSlotParamsResult> {
   const { prisma, chainId, height } = args;
 
   try {
     return await prisma.$transaction(async (tx) => {
       await tx.projectionFailure.deleteMany({
         where: {
-          projectionName: CORESLOT_METADATA_PROJECTION,
+          projectionName: CORESLOT_PARAMS_PROJECTION,
           sourceHeight: height,
           resolved: false,
         },
@@ -129,7 +124,7 @@ export async function projectCoreSlotMetadataHeight(
       if (txHashes.length === 0) {
         await updateProjectionCursorSuccess(
           tx,
-          CORESLOT_METADATA_PROJECTION,
+          CORESLOT_PARAMS_PROJECTION,
           chainId,
           height,
         );
@@ -141,7 +136,7 @@ export async function projectCoreSlotMetadataHeight(
           height,
           txHash: { in: txHashes },
           module: 'coreslot',
-          typeUrl: CORESLOT_METADATA_TYPE_URL,
+          typeUrl: CORESLOT_PARAMS_TYPE_URL,
         },
         orderBy: [{ txHash: 'asc' }, { msgIndex: 'asc' }],
       });
@@ -149,18 +144,18 @@ export async function projectCoreSlotMetadataHeight(
         where: {
           height,
           txHash: { in: txHashes },
-          type: CORESLOT_METADATA_EVENT_TYPE,
+          type: CORESLOT_PARAMS_EVENT_TYPE,
         },
         orderBy: [{ txHash: 'asc' }, { id: 'asc' }],
       });
 
-      const usedMessageIds = new Set<string>();
       const usedEventIds = new Set<string>();
+      const ambiguousEventIds = new Set<string>();
       let changesCreated = 0;
       let failuresCreated = 0;
 
       for (const message of messages) {
-        const payload = extractMetadataPayload(message.decodedJson);
+        const payload = extractParamsPayload(message.decodedJson);
         if (!payload.ok) {
           await createFailure(tx, {
             message,
@@ -171,7 +166,7 @@ export async function projectCoreSlotMetadataHeight(
           continue;
         }
 
-        const matchingEvents = events.filter((event) => metadataEventMatchesMessage(
+        const matchingEvents = events.filter((event) => paramsEventMatchesMessage(
           event,
           message,
           payload.value,
@@ -181,7 +176,7 @@ export async function projectCoreSlotMetadataHeight(
           await createFailure(tx, {
             message,
             failureKind: 'missing_event',
-            error: 'No coreslot_metadata_updated event matched the metadata message.',
+            error: 'No coreslot_params_updated event matched the params message.',
           });
           failuresCreated += 1;
           continue;
@@ -192,32 +187,54 @@ export async function projectCoreSlotMetadataHeight(
             message,
             event: matchingEvents[0],
             failureKind: 'ambiguous_event',
-            error: `${matchingEvents.length} coreslot_metadata_updated events matched the metadata message.`,
+            error: `${matchingEvents.length} coreslot_params_updated events matched the params message.`,
           });
           failuresCreated += 1;
+          for (const event of matchingEvents) ambiguousEventIds.add(event.id.toString());
           continue;
         }
 
         const event = matchingEvents[0];
         if (!event) continue;
-        await upsertMetadataChange(tx, message, event, payload.value);
-        usedMessageIds.add(message.id.toString());
+        const matchingMessages = messages.filter((candidate) => {
+          if (candidate.id === message.id) return true;
+          const candidatePayload = extractParamsPayload(candidate.decodedJson);
+          return candidatePayload.ok
+            && paramsEventMatchesMessage(event, candidate, candidatePayload.value);
+        });
+
+        if (matchingMessages.length > 1) {
+          if (!ambiguousEventIds.has(event.id.toString())) {
+            ambiguousEventIds.add(event.id.toString());
+            await createFailure(tx, {
+              message,
+              event,
+              failureKind: 'ambiguous_message',
+              error: `${matchingMessages.length} params messages matched one coreslot_params_updated event.`,
+            });
+            failuresCreated += 1;
+          }
+          continue;
+        }
+
+        await upsertParamsChange(tx, message, event, payload.value);
         usedEventIds.add(event.id.toString());
         changesCreated += 1;
       }
 
       for (const event of events) {
         if (usedEventIds.has(event.id.toString())) continue;
+        if (ambiguousEventIds.has(event.id.toString())) continue;
         const matchingMessages = messages.filter((message) => {
-          const payload = extractMetadataPayload(message.decodedJson);
-          return payload.ok && metadataEventMatchesMessage(event, message, payload.value);
+          const payload = extractParamsPayload(message.decodedJson);
+          return payload.ok && paramsEventMatchesMessage(event, message, payload.value);
         });
 
         if (matchingMessages.length === 0) {
           await createFailure(tx, {
             event,
             failureKind: 'missing_message',
-            error: 'coreslot_metadata_updated event had no matching metadata message payload.',
+            error: 'coreslot_params_updated event had no matching params message payload.',
           });
           failuresCreated += 1;
           continue;
@@ -228,7 +245,7 @@ export async function projectCoreSlotMetadataHeight(
             message: matchingMessages[0],
             event,
             failureKind: 'ambiguous_message',
-            error: `${matchingMessages.length} metadata messages matched one coreslot_metadata_updated event.`,
+            error: `${matchingMessages.length} params messages matched one coreslot_params_updated event.`,
           });
           failuresCreated += 1;
         }
@@ -236,7 +253,7 @@ export async function projectCoreSlotMetadataHeight(
 
       await updateProjectionCursorSuccess(
         tx,
-        CORESLOT_METADATA_PROJECTION,
+        CORESLOT_PARAMS_PROJECTION,
         chainId,
         height,
       );
@@ -246,7 +263,7 @@ export async function projectCoreSlotMetadataHeight(
   } catch (error) {
     await haltProjectionCursorError(
       prisma,
-      CORESLOT_METADATA_PROJECTION,
+      CORESLOT_PARAMS_PROJECTION,
       chainId,
       height,
       error,
@@ -255,119 +272,91 @@ export async function projectCoreSlotMetadataHeight(
   }
 }
 
-function extractMetadataPayload(decodedJson: unknown): {
+function extractParamsPayload(decodedJson: unknown): {
   ok: true;
-  value: MetadataPayload;
+  value: ParamsPayload;
 } | {
   ok: false;
   failureKind: ProjectionFailureKind;
   error: string;
 } {
   const decoded = asRecord(decodedJson);
-  const slotIdValue = readString(decoded.slot_id) ?? readString(decoded.slotId);
-  const operatorAddress = readString(decoded.operator) ?? readString(decoded.operator_address);
-  const metadataJson = decoded.metadata;
+  const authority = readString(decoded.authority);
+  const paramsJson = decoded.params;
 
-  if (!slotIdValue || !operatorAddress || metadataJson === undefined || metadataJson === null) {
+  if (!authority) {
     return {
       ok: false,
       failureKind: 'missing_required_payload',
-      error: 'MsgUpdateOperatorMetadata requires slot_id, operator, and metadata.',
+      error: 'MsgUpdateParams requires authority.',
     };
   }
 
-  try {
-    return {
-      ok: true,
-      value: {
-        slotId: BigInt(slotIdValue),
-        operatorAddress,
-        metadataJson,
-      },
-    };
-  } catch {
+  if (paramsJson === undefined || paramsJson === null || typeof paramsJson !== 'object') {
     return {
       ok: false,
-      failureKind: 'invalid_slot_id',
-      error: `Invalid CoreSlot slot_id: ${slotIdValue}`,
+      failureKind: 'invalid_params_payload',
+      error: 'MsgUpdateParams requires an object params payload.',
     };
   }
+
+  return {
+    ok: true,
+    value: {
+      authority,
+      paramsJson,
+    },
+  };
 }
 
-function metadataEventMatchesMessage(
+function paramsEventMatchesMessage(
   event: EventSource,
   message: MessageSource,
-  payload: MetadataPayload,
+  payload: ParamsPayload,
 ): boolean {
   if (event.txHash !== message.txHash) return false;
   const attributes = attributesToRecord(event.attributesJson);
   const eventMsgIndex = readString(attributes.msg_index);
   if (eventMsgIndex !== undefined && eventMsgIndex !== message.msgIndex.toString()) return false;
-  if (readString(attributes.slot_id) !== payload.slotId.toString()) return false;
-  if (readString(attributes.operator_address) !== payload.operatorAddress) return false;
+  const eventAuthority = readString(attributes.authority);
+  if (eventAuthority && eventAuthority !== payload.authority) return false;
   return true;
 }
 
-async function upsertMetadataChange(
-  prisma: CoreSlotMetadataProjectionPrisma,
+async function upsertParamsChange(
+  prisma: CoreSlotParamsProjectionPrisma,
   message: MessageSource,
   event: EventSource,
-  payload: MetadataPayload,
+  payload: ParamsPayload,
 ): Promise<void> {
   const rawMessageJson = buildRawMessageJson(message);
   const rawEventJson = buildRawEventJson(event);
 
-  await prisma.coreSlotMetadataChange.upsert({
+  await prisma.coreSlotParameterChange.upsert({
     where: { sourceMessageId: message.id },
     create: {
-      slotId: payload.slotId,
-      operatorAddress: payload.operatorAddress,
       height: message.height,
       txHash: message.txHash,
       msgIndex: message.msgIndex,
-      metadataJson: payload.metadataJson,
+      authority: payload.authority,
+      paramsJson: payload.paramsJson,
       sourceMessageId: message.id,
       sourceEventId: event.id,
       rawMessageJson,
       rawEventJson,
     },
     update: {
-      operatorAddress: payload.operatorAddress,
-      metadataJson: payload.metadataJson,
+      authority: payload.authority,
+      paramsJson: payload.paramsJson,
       sourceEventId: event.id,
       rawMessageJson,
       rawEventJson,
     },
   });
-
-  await prisma.coreSlotProjection.upsert({
-    where: { slotId: payload.slotId },
-    create: {
-      slotId: payload.slotId,
-      operatorAddress: payload.operatorAddress,
-      metadataJson: payload.metadataJson,
-      updatedHeight: message.height,
-      lastSourceHeight: message.height,
-      lastSourceTxHash: message.txHash,
-      lastSourceMsgIndex: message.msgIndex,
-      lastSourceMessageId: message.id,
-      lastSourceEventId: event.id,
-    },
-    update: {
-      operatorAddress: payload.operatorAddress,
-      metadataJson: payload.metadataJson,
-      updatedHeight: message.height,
-      lastSourceHeight: message.height,
-      lastSourceTxHash: message.txHash,
-      lastSourceMsgIndex: message.msgIndex,
-      lastSourceMessageId: message.id,
-      lastSourceEventId: event.id,
-    },
-  });
 }
 
 async function createFailure(
-  prisma: CoreSlotMetadataProjectionPrisma,
+  prisma: CoreSlotParamsProjectionPrisma,
   args: {
     message?: MessageSource | undefined;
     event?: EventSource | undefined;
@@ -377,7 +366,7 @@ async function createFailure(
 ): Promise<void> {
   const sourceHeight = args.message?.height ?? args.event?.height ?? 0n;
   const failure: ProjectionFailureInput = {
-    projectionName: CORESLOT_METADATA_PROJECTION,
+    projectionName: CORESLOT_PARAMS_PROJECTION,
     module: 'coreslot',
     sourceHeight,
     sourceTxHash: args.message?.txHash ?? args.event?.txHash ?? null,

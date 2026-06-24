@@ -18,7 +18,13 @@
     "project:coreslot-metadata:reset": "node dist/projections/reset-coreslot-metadata.js",
     "project:coreslot-lifecycle": "node dist/projections/coreslot-lifecycle-cli.js",
     "project:coreslot-lifecycle:dev": "npm run build && node dist/projections/coreslot-lifecycle-cli.js",
-    "project:coreslot-lifecycle:reset": "node dist/projections/reset-coreslot-lifecycle.js"
+    "project:coreslot-lifecycle:reset": "node dist/projections/reset-coreslot-lifecycle.js",
+    "project:coreslot-payout": "node dist/projections/coreslot-payout-cli.js",
+    "project:coreslot-payout:dev": "npm run build && node dist/projections/coreslot-payout-cli.js",
+    "project:coreslot-payout:reset": "node dist/projections/reset-coreslot-payout.js",
+    "project:coreslot-params": "node dist/projections/coreslot-params-cli.js",
+    "project:coreslot-params:dev": "npm run build && node dist/projections/coreslot-params-cli.js",
+    "project:coreslot-params:reset": "node dist/projections/reset-coreslot-params.js"
   },
   "dependencies": {
     "@twilight-explorer/chain-client": "0.0.0",

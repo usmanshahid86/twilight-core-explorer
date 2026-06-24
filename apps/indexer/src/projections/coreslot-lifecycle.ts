@@ -11,6 +11,7 @@ import {
   type CoreSlotLifecycleMessageTypeUrl,
   type ProjectionFailureInput,
   type ProjectionFailureKind,
+  withProjectionFailureKey,
 } from './types.js';
 
 export interface ProjectCoreSlotLifecycleRangeArgs {
@@ -50,6 +51,7 @@ export interface CoreSlotLifecycleProjectionPrisma extends ProjectionCursorPrism
   };
   projectionFailure: {
     create(args: unknown): Promise<unknown>;
+    upsert(args: unknown): Promise<unknown>;
     deleteMany(args: unknown): Promise<unknown>;
   };
   $transaction<T>(fn: (tx: CoreSlotLifecycleProjectionPrisma) => Promise<T>): Promise<T>;
@@ -605,8 +607,17 @@ async function createFailure(
     rawEventJson: args.event ? buildRawEventJson(args.event) : null,
     error: args.error,
   };
+  const data = withProjectionFailureKey(failure);
 
-  await prisma.projectionFailure.create({ data: failure });
+  await prisma.projectionFailure.upsert({
+    where: { failureKey: data.failureKey },
+    create: data,
+    update: {
+      ...data,
+      resolved: false,
+      resolvedAt: null,
+    },
+  });
 }
 
 function statusFromEventType(eventType: string): string | null {

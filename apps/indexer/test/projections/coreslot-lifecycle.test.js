@@ -91,6 +91,16 @@ class MockLifecyclePrisma {
         this.projectionFailures.push({ ...args.data });
         return args.data;
       },
+      upsert: async (args) => {
+        const key = args.where.failureKey;
+        const existingIndex = this.projectionFailures.findIndex((row) => row.failureKey === key);
+        const next = existingIndex >= 0
+          ? { ...this.projectionFailures[existingIndex], ...args.update }
+          : { ...args.create };
+        if (existingIndex >= 0) this.projectionFailures[existingIndex] = next;
+        else this.projectionFailures.push(next);
+        return next;
+      },
       deleteMany: async (args) => {
         const where = args.where ?? {};
         const before = this.projectionFailures.length;

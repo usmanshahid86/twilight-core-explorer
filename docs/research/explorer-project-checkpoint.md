@@ -194,6 +194,41 @@ Validation passed:
 - stale active-slots route guard
 - unsupported standard route guard
 
+### Phase 6a-1: CoreSlot Metadata Projection Proof Slice
+
+Completed:
+
+- first rebuildable CoreSlot semantic projection slice.
+- `coreslot_metadata_v1` projection cursor and failures.
+- `CoreSlotMetadataChange` append-only history.
+- metadata-owned updates to `CoreSlotProjection`.
+- message + event correlation for `/twilight.coreslot.v1.MsgUpdateOperatorMetadata` and
+  `coreslot_metadata_updated`.
+
+Evidence:
+
+- Local smoke over heights 119..121 confirmed the first semantic projection path over the
+  metadata-only range. One metadata tx produced one `CoreSlotMetadataChange`, one
+  `CoreSlotProjection`, zero `ProjectionFailure` rows, and an idle `ProjectionCursor` at
+  height 121. This confirms the message-payload plus event-effect projection pattern on the
+  real smoke fixture.
+
+### Phase 6a-2: CoreSlot Lifecycle Projection
+
+Completed:
+
+- `coreslot_lifecycle_v1` projection cursor and failures.
+- `CoreSlotLifecycleEvent`.
+- lifecycle projection for register, activate, inactivate, suspend, and remove events.
+- lifecycle-owned updates to `CoreSlotProjection`.
+- successful-transaction filtering and idempotent fixture coverage.
+
+Still deferred:
+
+- key rotation and temporal consensus map.
+- payout / params generalization.
+- rewards, liveness, API routes, and web pages.
+
 ## 4. Designed But Not Yet Implemented
 
 ### Phase A/B-6: CoreSlot Semantic Projection Design
@@ -273,6 +308,48 @@ Important conclusion:
 6. No tokenomics/halving visualization.
 
 These are not reasons to redesign the foundation. They should be explicit later milestones.
+
+### Open Engineering TODOs
+
+#### Combined CoreSlot semantic rebuild command
+
+Current CoreSlot semantic projections have separate cursors and reset commands. Metadata
+and lifecycle projections both write to `CoreSlotProjection`, but their reset behavior is
+intentionally narrow so one projection does not destroy fields owned by another projection.
+
+Before production-style rebuild tooling, add a combined CoreSlot semantic rebuild mode that
+resets and replays CoreSlot projections in deterministic order:
+
+1. reset CoreSlot semantic state
+2. run metadata projection
+3. run lifecycle projection
+4. run payout / params projection
+5. run key-rotation projection
+6. run temporal consensus map projection
+
+The combined command must preserve generic canonical rows and should be the recommended
+operator/admin path for full CoreSlot semantic rebuilds. This command is not implemented
+yet.
+
+#### Deterministic ProjectionFailure keys
+
+Phase 6a-1 allowed unresolved `ProjectionFailure` rows to be recomputed per height during
+reruns. That was acceptable for the metadata proof slice. Phase 6a-2 narrowed duplicate
+risk by clearing unresolved lifecycle failures for a height before recomputing it, but
+broader CoreSlot projections should converge on a deterministic failure-key/upsert strategy.
+
+Before or during the next CoreSlot projection generalization phase, add a deterministic
+`failureKey` or equivalent upsert key for semantic failures. The key should include
+projection name, failure kind, source height, tx hash, msg index, source message/event IDs,
+type URL, and event type where available.
+
+Future acceptance criteria should require:
+
+- semantic failure writes avoid duplicate unresolved failures on idempotent reruns.
+- existing metadata and lifecycle failure writes are migrated to the shared failure-key
+  strategy if the schema changes.
+
+This is a future requirement, not implemented behavior.
 
 ## 6. Recommended Remaining Phases
 
