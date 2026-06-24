@@ -26,7 +26,16 @@ function collectAccounts(value: unknown, accounts: Set<string>, keyHint?: string
 
   if (!value || typeof value !== 'object') return;
 
-  for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+  const record = value as Record<string, unknown>;
+  if (
+    typeof record.key === 'string' &&
+    ADDRESS_FIELD_PATTERN.test(record.key) &&
+    isExplorerAccountAddress(record.value)
+  ) {
+    accounts.add(record.value);
+  }
+
+  for (const [key, nested] of Object.entries(record)) {
     if (isExplorerAccountAddress(nested) && ADDRESS_FIELD_PATTERN.test(key)) {
       accounts.add(nested);
     } else {

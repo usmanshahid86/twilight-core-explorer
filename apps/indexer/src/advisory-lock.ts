@@ -19,7 +19,7 @@ export async function withIndexerAdvisoryLock<T>(
   fn: () => Promise<T>,
 ): Promise<T> {
   const acquiredRows = await prisma.$queryRaw<Array<{ acquired: boolean }>>`
-    SELECT pg_try_advisory_lock(${INDEXER_ADVISORY_LOCK_KEY.namespace}, ${INDEXER_ADVISORY_LOCK_KEY.key}) AS acquired
+    SELECT pg_try_advisory_lock(${INDEXER_ADVISORY_LOCK_KEY.namespace}::integer, ${INDEXER_ADVISORY_LOCK_KEY.key}::integer) AS acquired
   `;
   const acquired = acquiredRows[0]?.acquired === true;
   if (!acquired) throw new IndexerLockUnavailableError();
@@ -28,7 +28,7 @@ export async function withIndexerAdvisoryLock<T>(
     return await fn();
   } finally {
     await prisma.$queryRaw`
-      SELECT pg_advisory_unlock(${INDEXER_ADVISORY_LOCK_KEY.namespace}, ${INDEXER_ADVISORY_LOCK_KEY.key}) AS released
+      SELECT pg_advisory_unlock(${INDEXER_ADVISORY_LOCK_KEY.namespace}::integer, ${INDEXER_ADVISORY_LOCK_KEY.key}::integer) AS released
     `;
   }
 }

@@ -236,11 +236,12 @@ function mapEvent(args: {
 function normalizeAttributes(attributes: unknown): unknown[] {
   return readArray(attributes).map((attribute) => {
     const record = asRecord(attribute);
-    return {
+    const normalized: Record<string, string | boolean> = {
       key: readString(record.key) ?? '',
       value: readString(record.value) ?? '',
-      index: typeof record.index === 'boolean' ? record.index : undefined,
     };
+    if (typeof record.index === 'boolean') normalized.index = record.index;
+    return normalized;
   });
 }
 
