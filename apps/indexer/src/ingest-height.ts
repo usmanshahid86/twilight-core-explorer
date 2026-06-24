@@ -2,10 +2,12 @@ import type { ChainClient } from '@twilight-explorer/chain-client';
 import { extractAccountsFromValues } from './account-extraction.js';
 import {
   extractBlockResultEvents,
+  extractDecodeFailuresFromTx,
   extractEventsFromTx,
   extractMessagesFromTx,
   mapBlockSourceToBlockRow,
   mapTxSourceToTransactionRow,
+  type DecodeFailureRow,
   type EventRow,
   type MessageRow,
   type TransactionRow,
@@ -50,6 +52,9 @@ export interface IngestPrisma extends CursorPrisma {
   account: {
     upsert(args: unknown): Promise<unknown>;
   };
+  decodeFailure: {
+    create(args: unknown): Promise<unknown>;
+  };
   $transaction<T>(fn: (tx: IngestPrisma) => Promise<T>): Promise<T>;
 }
 
@@ -81,6 +86,7 @@ export async function ingestHeight(args: IngestHeightArgs): Promise<IngestHeight
     const blockRow = mapBlockSourceToBlockRow(chainId, block, txs.length);
     const txRows = txs.map((tx, index) => mapTxSourceToTransactionRow(tx, height, index));
     const messageRows = txs.flatMap((tx) => extractMessagesFromTx(tx));
+    const decodeFailureRows = txs.flatMap((tx) => extractDecodeFailuresFromTx(tx));
     const txEventRows = txs.flatMap((tx, index) => extractEventsFromTx(tx, index));
     const blockEventRows = extractBlockResultEvents(blockResults);
     const eventRows = [...blockEventRows, ...txEventRows];
@@ -98,6 +104,9 @@ export async function ingestHeight(args: IngestHeightArgs): Promise<IngestHeight
 
       for (const txRow of txRows) await upsertTransaction(tx, txRow);
       for (const messageRow of messageRows) await upsertMessage(tx, messageRow);
+      for (const decodeFailureRow of decodeFailureRows) {
+        await insertDecodeFailure(tx, decodeFailureRow);
+      }
       for (const eventRow of eventRows) await upsertEvent(tx, eventRow);
       for (const address of accountAddresses) {
         await tx.account.upsert({
@@ -154,5 +163,11 @@ async function upsertEvent(prisma: IngestPrisma, row: EventRow): Promise<void> {
     where: { eventKey: row.eventKey },
     create: row,
     update: row,
+  });
+}
+
+async function insertDecodeFailure(prisma: IngestPrisma, row: DecodeFailureRow): Promise<void> {
+  await prisma.decodeFailure.create({
+    data: row,
   });
 }

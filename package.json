@@ -14,6 +14,7 @@
     "db:deploy": "prisma migrate deploy",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
+    "proto:refresh": "node packages/proto/scripts/refresh-from-chain.js",
     "db:reset:test": "node scripts/reset-test-db.js",
     "indexer:dev": "npm --prefix apps/indexer run dev",
     "indexer:start": "npm --prefix apps/indexer start",

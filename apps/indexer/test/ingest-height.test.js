@@ -48,6 +48,7 @@ class MockPrisma {
     this.messages = new Map();
     this.events = new Map();
     this.accounts = new Map();
+    this.decodeFailures = [];
     this.cursors = new Map();
     this.queryRawCalls = [];
 
@@ -73,6 +74,12 @@ class MockPrisma {
     this.account = {
       upsert: async (args) => upsertMap(this.accounts, args.where.address, args),
     };
+    this.decodeFailure = {
+      create: async (args) => {
+        this.decodeFailures.push({ ...args.data });
+        return args.data;
+      },
+    };
     this.indexerCursor = {
       findUnique: async (args) => this.cursors.get(args.where.chainId) ?? null,
       upsert: async (args) => upsertMap(this.cursors, args.where.chainId, args),
@@ -93,6 +100,7 @@ class MockPrisma {
     this.messages = clone.messages;
     this.events = clone.events;
     this.accounts = clone.accounts;
+    this.decodeFailures = clone.decodeFailures;
     this.cursors = clone.cursors;
     return result;
   }
@@ -113,6 +121,7 @@ class MockPrisma {
     clone.messages = cloneMap(this.messages);
     clone.events = cloneMap(this.events);
     clone.accounts = cloneMap(this.accounts);
+    clone.decodeFailures = [...this.decodeFailures];
     clone.cursors = cloneMap(this.cursors);
     return clone;
   }
@@ -250,6 +259,90 @@ describe('ingestHeight', () => {
       client.calls.some((call) => call[0] === 'getBlockResults' && call[1] === 10n),
       true,
     );
+  });
+
+  it('decodes fallback raw tx bytes into Message rows', async () => {
+    const fixture = loadFixture('empty-block.json');
+    const rawTxFixture = JSON.parse(
+      readFileSync(
+        join(repoRoot, 'packages/decoder/test/fixtures/coreslot-update-metadata-tx.json'),
+        'utf8',
+      ),
+    );
+    const txFixture = structuredClone(fixture);
+    txFixture.block.height = rawTxFixture.height;
+    txFixture.block.hash = 'BLOCK120';
+    txFixture.block.raw.result.block.header.height = rawTxFixture.height;
+    txFixture.block.raw.result.block_id.hash = 'BLOCK120';
+    txFixture.txs = [{
+      hash: rawTxFixture.hash,
+      height: rawTxFixture.height,
+      code: 0,
+      rawTxBase64: rawTxFixture.rawTxBase64,
+      raw: {
+        txhash: rawTxFixture.hash,
+        height: rawTxFixture.height,
+        code: 0,
+        events: [],
+        tx: { body: { messages: [] } },
+        raw_tx_base64: rawTxFixture.rawTxBase64,
+      },
+    }];
+
+    const prisma = new MockPrisma();
+    const result = await ingestHeight({
+      chainId: 'twilight-test',
+      height: 120n,
+      client: createClient(txFixture),
+      prisma,
+    });
+
+    assert.equal(result.txCount, 1);
+    assert.equal(result.messageCount, 1);
+    assert.equal(prisma.decodeFailures.length, 0);
+
+    const message = prisma.messages.get(`${rawTxFixture.hash}:0`);
+    assert.equal(message.typeUrl, rawTxFixture.expectedTypeUrl);
+    assert.equal(message.module, 'coreslot');
+    assert.equal(message.typeName, 'MsgUpdateOperatorMetadata');
+    assert.ok(message.decodedJson);
+  });
+
+  it('records fallback decode failures without halting ingestion', async () => {
+    const fixture = loadFixture('empty-block.json');
+    const badTxFixture = structuredClone(fixture);
+    badTxFixture.block.height = '121';
+    badTxFixture.block.hash = 'BLOCK121';
+    badTxFixture.block.raw.result.block.header.height = '121';
+    badTxFixture.block.raw.result.block_id.hash = 'BLOCK121';
+    badTxFixture.txs = [{
+      hash: 'BADTX',
+      height: '121',
+      code: 0,
+      rawTxBase64: Buffer.from([1, 2, 3, 4]).toString('base64'),
+      raw: {
+        txhash: 'BADTX',
+        height: '121',
+        code: 0,
+        events: [],
+        tx: { body: { messages: [] } },
+        raw_tx_base64: Buffer.from([1, 2, 3, 4]).toString('base64'),
+      },
+    }];
+
+    const prisma = new MockPrisma();
+    const result = await ingestHeight({
+      chainId: 'twilight-test',
+      height: 121n,
+      client: createClient(badTxFixture),
+      prisma,
+    });
+
+    assert.equal(result.txCount, 1);
+    assert.equal(result.messageCount, 0);
+    assert.equal(prisma.decodeFailures.length, 1);
+    assert.equal(prisma.decodeFailures[0].failureKind, 'tx_raw_decode');
+    assert.equal(prisma.cursors.get('twilight-test').status, CURSOR_STATUS.idle);
   });
 });
 

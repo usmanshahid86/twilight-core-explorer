@@ -3,6 +3,11 @@ import type {
   BlockSource,
   TxSource,
 } from '@twilight-explorer/chain-client';
+import {
+  decodeRawTxBase64,
+  typeUrlToModule,
+  typeUrlToTypeName,
+} from '@twilight-explorer/decoder';
 
 export interface BlockRow {
   height: bigint;
@@ -59,6 +64,20 @@ export interface EventRow {
   attributesJson: unknown;
   module: string | null;
   keyFieldsJson: unknown | null;
+}
+
+export interface DecodeFailureRow {
+  height: bigint;
+  txHash: string | null;
+  msgIndex: number | null;
+  eventIndex: number | null;
+  typeUrl: string | null;
+  eventType: string | null;
+  failureKind: string;
+  rawJson: unknown | null;
+  rawBase64: string | null;
+  decodeError: string;
+  resolved: boolean;
 }
 
 export function mapBlockSourceToBlockRow(
@@ -127,21 +146,64 @@ export function extractMessagesFromTx(source: TxSource): MessageRow[] {
   const body = asRecord(tx.body);
   const messages = readArray(body.messages);
 
-  return messages.map((message, msgIndex) => {
-    const record = asRecord(message);
-    const typeUrl = readString(record['@type']) ?? readString(record.typeUrl) ?? 'unknown';
-    return {
-      txHash: source.hash,
-      height: BigInt(source.height ?? '0'),
-      msgIndex,
-      typeUrl,
-      module: inferModuleFromTypeUrl(typeUrl) ?? null,
-      typeName: inferTypeName(typeUrl),
-      decodedJson: inferModuleFromTypeUrl(typeUrl) ? message : null,
-      rawJson: message,
-      decodeError: null,
-    };
-  });
+  if (messages.length > 0) {
+    return messages.map((message, msgIndex) => {
+      const record = asRecord(message);
+      const typeUrl = readString(record['@type']) ?? readString(record.typeUrl) ?? 'unknown';
+      return {
+        txHash: source.hash,
+        height: BigInt(source.height ?? '0'),
+        msgIndex,
+        typeUrl,
+        module: inferModuleFromTypeUrl(typeUrl) ?? null,
+        typeName: inferTypeName(typeUrl),
+        decodedJson: inferModuleFromTypeUrl(typeUrl) ? message : null,
+        rawJson: message,
+        decodeError: null,
+      };
+    });
+  }
+
+  const rawTxBase64 = getRawTxBase64(source);
+  if (!rawTxBase64) return [];
+
+  return decodeRawTxBase64(rawTxBase64).messages.map((message) => ({
+    txHash: source.hash,
+    height: BigInt(source.height ?? '0'),
+    msgIndex: message.index,
+    typeUrl: message.typeUrl || 'unknown',
+    module: message.module ?? null,
+    typeName: message.typeName ?? null,
+    decodedJson: message.decodedJson ?? null,
+    rawJson: {
+      typeUrl: message.typeUrl,
+      lookupName: message.lookupName,
+      rawValueBase64: message.rawValueBase64,
+    },
+    decodeError: message.decodeError ?? null,
+  }));
+}
+
+export function extractDecodeFailuresFromTx(source: TxSource): DecodeFailureRow[] {
+  const rawTxBase64 = getRawTxBase64(source);
+  if (!rawTxBase64) return [];
+
+  return decodeRawTxBase64(rawTxBase64).failures.map((failure) => ({
+    height: BigInt(source.height ?? '0'),
+    txHash: source.hash || null,
+    msgIndex: failure.msgIndex ?? null,
+    eventIndex: null,
+    typeUrl: failure.typeUrl ?? null,
+    eventType: null,
+    failureKind: failure.failureKind,
+    rawJson: {
+      source: 'raw_tx_base64',
+      typeUrl: failure.typeUrl ?? null,
+    },
+    rawBase64: failure.rawBase64 ?? rawTxBase64,
+    decodeError: failure.decodeError,
+    resolved: false,
+  }));
 }
 
 export function extractEventsFromTx(source: TxSource, txIndex: number): EventRow[] {
@@ -182,6 +244,8 @@ export function extractBlockResultEvents(source: BlockResultsSource): EventRow[]
 }
 
 export function inferModuleFromTypeUrl(typeUrl: string): string | undefined {
+  const module = typeUrlToModule(typeUrl);
+  if (module) return module;
   if (typeUrl.includes('twilight.coreslot.v1')) return 'coreslot';
   if (typeUrl.includes('twilight.rewards.v1')) return 'rewards';
   if (typeUrl.includes('cosmos.bank.v1beta1')) return 'bank';
@@ -260,8 +324,16 @@ function extractKeyFields(attributes: unknown[]): Record<string, string> | null 
 }
 
 function inferTypeName(typeUrl: string): string | null {
+  const typeName = typeUrlToTypeName(typeUrl);
+  if (typeName) return typeName;
   if (typeUrl === 'unknown') return null;
   return typeUrl.split('.').at(-1) ?? null;
+}
+
+function getRawTxBase64(source: TxSource): string | undefined {
+  if (source.rawTxBase64) return source.rawTxBase64;
+  const raw = asRecord(source.raw);
+  return readString(raw.raw_tx_base64) ?? readString(raw.rawTxBase64);
 }
 
 function parseDate(value: string | undefined): Date | null {
