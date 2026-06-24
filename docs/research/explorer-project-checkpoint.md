@@ -1,13 +1,16 @@
 # Twilight Core Explorer Project Checkpoint
 
-Date: 2026-06-24
+Date: 2026-06-25
 
 Status: checkpoint after Phase A/B foundation, descriptor decoder work, chain-alignment
-cleanup, CoreSlot semantic projection design review, and operator-experience review.
+cleanup, the full CoreSlot semantic projection set (Phases 6a-1 through 6a-4: metadata,
+lifecycle, payout, params, and the combined rebuild command), and operator-experience
+review.
 
 This document summarizes what has already been decided and built, what is still only
 designed, and the recommended sequence from here. It is intended to keep implementation
-aligned before the next semantic projection phase.
+aligned before the next semantic projection phase (6b: key rotation and temporal consensus
+map).
 
 ## 1. Product North Star
 
@@ -229,6 +232,51 @@ Still deferred:
 - payout / params generalization.
 - rewards, liveness, API routes, and web pages.
 
+### Phase 6a-3: CoreSlot Payout / Params Projection
+
+Completed:
+
+- `coreslot_payout_v1` projection.
+- `coreslot_params_v1` projection.
+- `CoreSlotPayoutChange`.
+- `CoreSlotParameterChange`.
+- payout projection for `/twilight.coreslot.v1.MsgUpdatePayoutAddress` +
+  `coreslot_payout_updated`.
+- params projection for `/twilight.coreslot.v1.MsgUpdateParams` +
+  `coreslot_params_updated`.
+- payout-owned update to `CoreSlotProjection.payoutAddress`.
+- params stored as global module-change history without mutating `CoreSlotProjection`.
+- deterministic `ProjectionFailure.failureKey` upserts across metadata, lifecycle, payout,
+  and params projections.
+
+Explicitly not implemented:
+
+- key rotation projection.
+- temporal consensus map.
+- rewards, liveness, API routes, and web pages.
+
+### Phase 6a-4: Combined CoreSlot Semantic Rebuild
+
+Completed:
+
+- combined CoreSlot semantic reset/rebuild command.
+- deterministic replay order for currently implemented CoreSlot projections:
+  1. metadata
+  2. lifecycle
+  3. payout
+  4. params
+- combined reset for CoreSlot semantic rows only.
+- generic canonical rows are preserved.
+- each projection keeps its own `ProjectionCursor`.
+- combined rebuild reuses existing per-projection range helpers; projector logic was not
+  rewritten.
+
+Explicitly not implemented:
+
+- key rotation projection.
+- temporal consensus map.
+- rewards, liveness, API routes, and web pages.
+
 ## 4. Designed But Not Yet Implemented
 
 ### Phase A/B-6: CoreSlot Semantic Projection Design
@@ -298,6 +346,18 @@ Important conclusion:
    - Low-level transport can reject bech32.
    - Search/self-service should eventually decode `twilightvalcons...` to lowercase hex.
 
+### Proposer and signature height semantics
+
+Block proposer and commit signatures have different height semantics:
+
+- `header.proposer_address` belongs to block height `N`.
+- `last_commit.signatures` included in block `N` are signatures for the committed block
+  `N-1`.
+
+Liveness projection must attribute signatures from block `N` to height `N-1`, but proposer
+enrichment must not shift the proposer address. The proposer in block `N` remains the
+proposer for block `N`.
+
 ### UX Gaps
 
 1. No operator liveness/uptime UI.
@@ -309,84 +369,71 @@ Important conclusion:
 
 These are not reasons to redesign the foundation. They should be explicit later milestones.
 
-### Open Engineering TODOs
+### Resolved Engineering TODOs
 
 #### Combined CoreSlot semantic rebuild command
 
-Current CoreSlot semantic projections have separate cursors and reset commands. Metadata
-and lifecycle projections both write to `CoreSlotProjection`, but their reset behavior is
-intentionally narrow so one projection does not destroy fields owned by another projection.
+Completed in Phase 6a-4 for the currently implemented CoreSlot projection set:
 
-Before production-style rebuild tooling, add a combined CoreSlot semantic rebuild mode that
-resets and replays CoreSlot projections in deterministic order:
+1. metadata
+2. lifecycle
+3. payout
+4. params
 
-1. reset CoreSlot semantic state
-2. run metadata projection
-3. run lifecycle projection
-4. run payout / params projection
-5. run key-rotation projection
-6. run temporal consensus map projection
+The command resets and replays CoreSlot semantic state in deterministic order while
+preserving generic canonical rows.
 
-The combined command must preserve generic canonical rows and should be the recommended
-operator/admin path for full CoreSlot semantic rebuilds. This command is not implemented
-yet.
+Future Phase 6b projections must extend this command rather than creating a second rebuild
+path. The expected future order is:
+
+1. metadata
+2. lifecycle
+3. payout
+4. params
+5. key rotation
+6. temporal consensus map
 
 #### Deterministic ProjectionFailure keys
 
-Phase 6a-1 allowed unresolved `ProjectionFailure` rows to be recomputed per height during
-reruns. That was acceptable for the metadata proof slice. Phase 6a-2 narrowed duplicate
-risk by clearing unresolved lifecycle failures for a height before recomputing it, but
-broader CoreSlot projections should converge on a deterministic failure-key/upsert strategy.
+Completed in Phase 6a-3.
 
-Before or during the next CoreSlot projection generalization phase, add a deterministic
-`failureKey` or equivalent upsert key for semantic failures. The key should include
-projection name, failure kind, source height, tx hash, msg index, source message/event IDs,
-type URL, and event type where available.
+Semantic failure writes now use deterministic `failureKey` upserts across metadata,
+lifecycle, payout, and params projections. This prevents unresolved failure rows from
+accumulating on idempotent reruns over malformed or ambiguous data.
 
-Future acceptance criteria should require:
-
-- semantic failure writes avoid duplicate unresolved failures on idempotent reruns.
-- existing metadata and lifecycle failure writes are migrated to the shared failure-key
-  strategy if the schema changes.
-
-This is a future requirement, not implemented behavior.
+Future projections must continue using the same pattern.
 
 ## 6. Recommended Remaining Phases
 
-### Phase 6a: CoreSlot Semantic Projection
+### Phase 6a: CoreSlot Semantic Projection (completed)
+
+Done across Phases 6a-1 through 6a-4: metadata, lifecycle, payout, and params projections,
+deterministic `failureKey` upserts, and the combined CoreSlot semantic rebuild command. See
+the completed implementation section above. Not in scope here: key rotation, temporal
+consensus map, rewards, liveness, API/web.
+
+### Phase 6b: Key Rotation and Temporal Consensus Map
 
 Goal:
 
-- Implement the first CoreSlot semantic projection slice.
+- Implement CoreSlot key rotation projection and the historical temporal consensus-address
+  map.
+
+Recommended split:
+
+1. Phase 6b-1: key rotation projection.
+2. Phase 6b-2: temporal consensus map / validator-set timeline.
 
 Scope:
 
-- projection cursor and failure table.
-- CoreSlot metadata proof slice.
-- successful-tx filtering.
-- source message/event correlation.
-- account kind enrichment where obvious.
-- tests using current CoreSlot metadata fixture.
-
-Do not implement:
-
-- rewards projection.
-- liveness windows.
-- API/web pages.
-
-### Phase 6b: CoreSlot Lifecycle and Temporal Map
-
-Goal:
-
-- Implement the full lifecycle/key-rotation projection and temporal consensus map.
-
-Scope:
-
-- lifecycle rows.
-- key rotation rows.
-- validator update event handling.
+- `MsgRotateConsensusKey`.
+- `coreslot_key_rotation_requested`.
+- `coreslot_key_rotated`.
+- `coreslot_rotation_cancelled`.
+- delayed active-slot rotation behavior.
+- event-only EndBlock rotation application.
+- validator update event handling where needed for effective set windows.
 - `consensusAddress -> slotId/operator` windows.
-- localnet fixtures for delayed key rotation and params activation.
 
 This phase unlocks:
 
@@ -394,7 +441,7 @@ This phase unlocks:
 - block proposer enrichment.
 - liveness projection.
 - operator timeline.
-- authority audit log foundations.
+- authority-action views.
 
 ### Phase 7: Rewards Semantic Projection
 
@@ -431,6 +478,14 @@ Scope:
 - fixture activation/rotation boundary behavior on localnet.
 
 No staking validator APIs.
+
+### Sequencing note: rewards and liveness
+
+Rewards and liveness can proceed in parallel after the CoreSlot temporal map exists. Rewards
+depends mostly on rewards rows and generic tx/event data; liveness depends on block
+signatures plus the temporal consensus map. They do not need to block each other. Because
+liveness is a primary operator-facing gap, it may be pulled level with or ahead of rewards
+once the temporal map is ready.
 
 ### Phase 9: API Foundation
 
@@ -528,26 +583,32 @@ Scope:
 - deeper integration tests.
 - optional `GrpcChainClient`.
 
+Sequencing: some reliability hardening should move earlier than final deployment hardening.
+Gap detection, indexer lag monitoring, and basic live-node smoke checks should exist before
+public API/web exposure. Retry/backoff and multi-RPC fallback can be staged later but should
+not be forgotten.
+
 ## 7. Updated Phase Count
 
 From this checkpoint:
 
+CoreSlot metadata/lifecycle/payout/params projection (Phase 6a) is complete.
+
 - MVP usable explorer: roughly 5 phases remain.
-  1. CoreSlot projection.
+  1. CoreSlot key rotation + temporal map.
   2. Rewards projection.
   3. API foundation.
   4. web foundation.
   5. Twilight-specific pages.
 
-- Production-grade operator explorer: roughly 8 phases remain.
-  1. CoreSlot projection.
-  2. CoreSlot lifecycle/temporal map.
-  3. Rewards projection.
-  4. Liveness ingestion/projection.
-  5. API foundation.
-  6. web and Twilight pages.
-  7. operator education/onboarding.
-  8. deployment/hardening.
+- Production-grade operator explorer: roughly 7 phases remain.
+  1. CoreSlot key rotation + temporal map.
+  2. Rewards projection.
+  3. Liveness ingestion/projection.
+  4. API foundation.
+  5. web and Twilight pages.
+  6. operator education/onboarding.
+  7. deployment/hardening.
 
 The phases can be batched differently, but the dependencies should not be blurred:
 
@@ -564,6 +625,10 @@ The phases can be batched differently, but the dependencies should not be blurre
 
 2. Should `BlockSignature` be added as generic indexed data or projection data?
    - Recommended: canonical-adjacent generic data because it comes directly from `/block`.
+   - `BlockSignature` should be treated as canonical-adjacent generic data, but still
+     rebuildable. It is parsed from stored raw CometBFT block JSON, assuming `Block.rawJson`
+     preserves the `/block` response including `last_commit.signatures`. No new RPC call is
+     required to rebuild `BlockSignature` if the raw block payload is already stored.
 
 3. How much bech32 consensus-address decoding should live in `packages/chain-client`?
    - Recommended: low-level transport remains hex-only; API/search layer normalizes user
@@ -587,25 +652,34 @@ The phases can be batched differently, but the dependencies should not be blurre
 - Do not treat `EpochReward` as current claim truth.
 - Do not build liveness from current snapshots only; it must be historical and temporal.
 - Do not revive old zkOS/dark-pool/BTC bridge product pages.
+- Tolerate unknown future Msg and event types. Store raw payloads, record
+  `unknown_semantic_type` or an equivalent `ProjectionFailure` where semantic interpretation
+  is expected, and continue. Unknown semantic types must not crash indexing/projection or be
+  silently treated as successful known state changes. (Guardrail, not a fully implemented
+  behavior yet.)
+- Maintain at least one live-node integration smoke path for chain-alignment-sensitive
+  behavior. Assumption-only tests are not enough for custom Twilight routes, message
+  decoding, event attributes, delayed rotations, and liveness boundary behavior. Phase 6b
+  and Phase 8 should use live/localnet fixtures for delayed rotation and signature
+  attribution.
 
 ## 10. Immediate Next Step
 
 Recommended next implementation step:
 
-Phase 6a: implement the CoreSlot metadata/lifecycle semantic projection foundation.
+Phase 6b-1: CoreSlot key rotation projection.
 
 Minimum acceptance:
 
-- projection cursor.
-- projection failure table.
-- successful-tx filtering.
-- CoreSlot metadata event/message correlation.
-- idempotent rebuild from existing `Message` and `Event` rows.
-- tests over existing A/B-5 CoreSlot metadata fixture.
-- no rewards projection.
-- no liveness projection yet.
-- no API/web pages yet.
+- `CoreSlotConsensusKeyRotation` or equivalent key-rotation history model.
+- projection name `coreslot_key_rotation_v1`.
+- projection from existing generic `ExplorerTransaction`, `Message`, and `Event` rows.
+- support for requested, applied, immediate-applied, and cancelled rotations.
+- requested/cancelled rotations must not update `CoreSlotProjection.consensusAddress`.
+- applied rotations update `CoreSlotProjection.consensusAddress`.
+- deterministic `ProjectionFailure.failureKey` behavior.
+- combined CoreSlot semantic rebuild order extended after params with key rotation.
+- no temporal consensus map yet.
+- no rewards/liveness/API/web pages yet.
 
-After that, proceed to CoreSlot lifecycle/key-rotation projection and the temporal consensus
-map, because that is the dependency shared by block proposer enrichment, operator liveness,
-and authority-action views.
+After that, proceed to Phase 6b-2: temporal consensus map / validator-set timeline.
