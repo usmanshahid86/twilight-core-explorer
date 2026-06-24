@@ -227,3 +227,31 @@ model CoreSlotMetadataChange {
   @@index([txHash])
   @@index([sourceEventId])
 }
+
+model CoreSlotLifecycleEvent {
+  id                BigInt   @id @default(autoincrement())
+  sourceEventId     BigInt   @unique
+  sourceMessageId   BigInt?
+  height            BigInt
+  txHash            String?
+  msgIndex          Int?
+  slotId            BigInt?
+  eventType         String
+  oldStatus         String?
+  newStatus         String?
+  operatorAddress   String?
+  consensusAddress  String?
+  power             BigInt?
+  reason            String?
+  evidenceReference String?
+  authority         String?
+  rawEventJson      Json
+  rawMessageJson    Json?
+  createdAt         DateTime @default(now())
+
+  @@index([slotId, height])
+  @@index([eventType])
+  @@index([operatorAddress])
+  @@index([consensusAddress])
+  @@index([txHash])
+}
