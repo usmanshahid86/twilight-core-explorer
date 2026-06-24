@@ -23,6 +23,7 @@ try {
     cursors,
     decodeFailures,
     cursorRows,
+    messageRows,
   ] = await Promise.all([
     prisma.block.count(),
     prisma.explorerTransaction.count(),
@@ -34,6 +35,19 @@ try {
     prisma.indexerCursor.findMany({
       orderBy: { updatedAt: 'desc' },
       take: 10,
+    }),
+    prisma.message.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+      select: {
+        txHash: true,
+        height: true,
+        msgIndex: true,
+        typeUrl: true,
+        module: true,
+        typeName: true,
+        decodeError: true,
+      },
     }),
   ]);
 
@@ -55,6 +69,15 @@ try {
       status: cursor.status,
       error: cursor.error,
       updatedAt: cursor.updatedAt.toISOString(),
+    })),
+    messages: messageRows.map((message) => ({
+      txHash: message.txHash,
+      height: message.height.toString(),
+      msgIndex: message.msgIndex,
+      typeUrl: message.typeUrl,
+      module: message.module,
+      typeName: message.typeName,
+      decodeError: message.decodeError,
     })),
   }, null, 2));
 } finally {

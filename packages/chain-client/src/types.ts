@@ -54,6 +54,7 @@ export interface TxSource {
   hash: string;
   height: string | undefined;
   code: number | undefined;
+  rawTxBase64?: string | undefined;
   raw: unknown;
 }
 

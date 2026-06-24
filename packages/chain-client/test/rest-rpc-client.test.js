@@ -159,6 +159,7 @@ describe('RestRpcChainClient', () => {
     assert.match(txs[0].hash, /^[A-F0-9]{64}$/);
     assert.equal(txs[0].height, '17');
     assert.equal(txs[0].code, 0);
+    assert.equal(txs[0].rawTxBase64, 'AQID');
     assert.equal(calls[0], failingTxSearchUrl);
   });
 

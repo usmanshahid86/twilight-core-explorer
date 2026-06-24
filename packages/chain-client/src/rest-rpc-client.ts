@@ -136,6 +136,7 @@ export class RestRpcChainClient implements ChainClient {
         hash,
         height: readString(txResult.height) ?? height.toString(),
         code: readNumber(deliverTx.code),
+        rawTxBase64,
         raw: {
           txhash: hash,
           height: readString(txResult.height) ?? height.toString(),
@@ -146,6 +147,7 @@ export class RestRpcChainClient implements ChainClient {
           events: readArray(deliverTx.events),
           tx: { body: { messages: [] } },
           raw_tx_base64: rawTxBase64,
+          rawTxBase64,
           rpc: rawTxResult,
         },
       });

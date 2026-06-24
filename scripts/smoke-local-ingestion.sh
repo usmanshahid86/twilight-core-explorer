@@ -147,6 +147,10 @@ CHAIN_ID="$CHAIN_ID" EXPECTED_END_HEIGHT="$end_height" node -e '
   if (counts.ExplorerTransaction < 1) {
     throw new Error("expected at least one tx row; produce a localnet tx and rerun with a range containing that height");
   }
+  if (counts.Message < 1) throw new Error("expected at least one Message row from raw tx decoding");
+  if (!data.messages.some((message) => message.typeUrl === "/twilight.coreslot.v1.MsgUpdateOperatorMetadata")) {
+    throw new Error("expected /twilight.coreslot.v1.MsgUpdateOperatorMetadata message row");
+  }
 ' "$counts_json"
 
 echo
