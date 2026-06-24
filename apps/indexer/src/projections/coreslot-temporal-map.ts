@@ -1,0 +1,796 @@
+import {
+  haltProjectionCursorError,
+  updateProjectionCursorSuccess,
+  type ProjectionCursorPrisma,
+} from './cursor.js';
+import {
+  CORESLOT_KEY_ROTATION_STATUS,
+  CORESLOT_TEMPORAL_MAP_PROJECTION,
+  type ProjectionFailureInput,
+  type ProjectionFailureKind,
+  withProjectionFailureKey,
+} from './types.js';
+
+const ACTIVE_STATUS = 'ACTIVE';
+
+export interface ProjectCoreSlotTemporalMapRangeArgs {
+  prisma: CoreSlotTemporalMapProjectionPrisma;
+  chainId: string;
+  startHeight: bigint;
+  endHeight: bigint;
+}
+
+export interface ProjectCoreSlotTemporalMapHeightArgs {
+  prisma: CoreSlotTemporalMapProjectionPrisma;
+  chainId: string;
+  height: bigint;
+}
+
+export interface ProjectCoreSlotTemporalMapResult {
+  height: bigint;
+  windowsWritten: number;
+  failuresCreated: number;
+}
+
+export interface CoreSlotTemporalMapProjectionPrisma extends ProjectionCursorPrisma {
+  coreSlotLifecycleEvent: {
+    findMany(args: unknown): Promise<LifecycleSource[]>;
+  };
+  coreSlotConsensusKeyRotation: {
+    findMany(args: unknown): Promise<RotationSource[]>;
+  };
+  coreSlotConsensusWindow: {
+    findFirst(args: unknown): Promise<ConsensusWindowSource | null>;
+    findMany(args: unknown): Promise<ConsensusWindowSource[]>;
+    create(args: unknown): Promise<ConsensusWindowSource>;
+    update(args: unknown): Promise<ConsensusWindowSource>;
+    deleteMany(args?: unknown): Promise<unknown>;
+  };
+  projectionFailure: {
+    upsert(args: unknown): Promise<unknown>;
+    deleteMany(args: unknown): Promise<unknown>;
+  };
+  $transaction<T>(fn: (tx: CoreSlotTemporalMapProjectionPrisma) => Promise<T>): Promise<T>;
+}
+
+interface LifecycleSource {
+  id: bigint;
+  sourceEventId: bigint;
+  height: bigint;
+  txHash: string | null;
+  msgIndex: number | null;
+  slotId: bigint | null;
+  eventType: string;
+  newStatus: string | null;
+  operatorAddress: string | null;
+  consensusAddress: string | null;
+  power: bigint | null;
+  rawEventJson: unknown;
+  rawMessageJson: unknown | null;
+}
+
+interface RotationSource {
+  id: bigint;
+  slotId: bigint;
+  operatorAddress: string | null;
+  oldConsensusAddress: string | null;
+  newConsensusAddress: string | null;
+  status: string;
+  effectiveHeight: bigint | null;
+  appliedHeight: bigint | null;
+  cancelledHeight: bigint | null;
+  power: bigint | null;
+  sourceAppliedEventId: bigint | null;
+  rawAppliedEventJson: unknown | null;
+}
+
+interface ConsensusWindowSource {
+  id: bigint;
+  slotId: bigint;
+  operatorAddress: string | null;
+  consensusAddress: string;
+  status: string;
+  consensusPower: bigint | null;
+  effectiveFromHeight: bigint;
+  effectiveToHeight: bigint | null;
+  openedByKind: string;
+  openedByEventId: bigint | null;
+  openedByRotationId: bigint | null;
+  openedByLifecycleId: bigint | null;
+  closedByKind: string | null;
+  closedByEventId: bigint | null;
+  closedByRotationId: bigint | null;
+  closedByLifecycleId: bigint | null;
+  rawOpenJson: unknown | null;
+  rawCloseJson: unknown | null;
+}
+
+interface Counters {
+  windowsWritten: number;
+  failuresCreated: number;
+}
+
+interface OpenWindowInput {
+  slotId: bigint;
+  operatorAddress: string | null;
+  consensusAddress: string;
+  consensusPower: bigint | null;
+  effectiveFromHeight: bigint;
+  openedByKind: string;
+  openedByEventId: bigint | null;
+  openedByRotationId: bigint | null;
+  openedByLifecycleId: bigint | null;
+  rawOpenJson: unknown | null;
+  sourceHeight: bigint;
+}
+
+interface CloseWindowInput {
+  slotId: bigint;
+  consensusAddress?: string | null | undefined;
+  effectiveToHeight: bigint;
+  closedByKind: string;
+  closedByEventId: bigint | null;
+  closedByRotationId: bigint | null;
+  closedByLifecycleId: bigint | null;
+  rawCloseJson: unknown | null;
+  sourceHeight: bigint;
+  requireWindow: boolean;
+}
+
+export async function projectCoreSlotTemporalMapRange(
+  args: ProjectCoreSlotTemporalMapRangeArgs,
+): Promise<ProjectCoreSlotTemporalMapResult[]> {
+  const results: ProjectCoreSlotTemporalMapResult[] = [];
+  for (let height = args.startHeight; height <= args.endHeight; height += 1n) {
+    results.push(await projectCoreSlotTemporalMapHeight({
+      prisma: args.prisma,
+      chainId: args.chainId,
+      height,
+    }));
+  }
+  return results;
+}
+
+export async function projectCoreSlotTemporalMapHeight(
+  args: ProjectCoreSlotTemporalMapHeightArgs,
+): Promise<ProjectCoreSlotTemporalMapResult> {
+  const { prisma, chainId, height } = args;
+
+  try {
+    return await prisma.$transaction(async (tx) => {
+      await tx.projectionFailure.deleteMany({
+        where: {
+          projectionName: CORESLOT_TEMPORAL_MAP_PROJECTION,
+          sourceHeight: height,
+          resolved: false,
+        },
+      });
+
+      const counters = { windowsWritten: 0, failuresCreated: 0 };
+      const lifecycleEvents = await tx.coreSlotLifecycleEvent.findMany({
+        where: {
+          height,
+          eventType: {
+            in: [
+              'coreslot_registered',
+              'coreslot_activated',
+              'coreslot_inactivated',
+              'coreslot_suspended',
+              'coreslot_removed',
+            ],
+          },
+        },
+        orderBy: [{ height: 'asc' }, { id: 'asc' }],
+      });
+      const rotations = await tx.coreSlotConsensusKeyRotation.findMany({
+        where: {
+          OR: [
+            { requestedHeight: height },
+            { appliedHeight: height },
+            { cancelledHeight: height },
+          ],
+        },
+        orderBy: [{ id: 'asc' }],
+      });
+
+      for (const lifecycleEvent of lifecycleEvents) {
+        await projectLifecycleEvent(tx, lifecycleEvent, counters);
+      }
+
+      for (const rotation of rotations) {
+        await projectRotation(tx, rotation, counters);
+      }
+
+      await updateProjectionCursorSuccess(
+        tx,
+        CORESLOT_TEMPORAL_MAP_PROJECTION,
+        chainId,
+        height,
+      );
+
+      return { height, ...counters };
+    });
+  } catch (error) {
+    await haltProjectionCursorError(
+      prisma,
+      CORESLOT_TEMPORAL_MAP_PROJECTION,
+      chainId,
+      height,
+      error,
+    );
+    throw error;
+  }
+}
+
+async function projectLifecycleEvent(
+  tx: CoreSlotTemporalMapProjectionPrisma,
+  event: LifecycleSource,
+  counters: Counters,
+): Promise<void> {
+  if (event.slotId === null) {
+    await createFailure(tx, {
+      sourceHeight: event.height,
+      sourceEventId: event.sourceEventId,
+      eventType: event.eventType,
+      failureKind: 'invalid_slot_id',
+      rawEventJson: event.rawEventJson,
+      error: `${event.eventType} lifecycle row is missing slotId.`,
+    });
+    counters.failuresCreated += 1;
+    return;
+  }
+
+  if (event.eventType === 'coreslot_registered') {
+    return;
+  }
+
+  if (event.eventType === 'coreslot_activated') {
+    const consensusAddress = normalizeConsensusAddress(event.consensusAddress);
+    if (!consensusAddress.ok) {
+      await createFailure(tx, {
+        sourceHeight: event.height,
+        sourceEventId: event.sourceEventId,
+        eventType: event.eventType,
+        failureKind: 'invalid_consensus_address',
+        rawEventJson: event.rawEventJson,
+        error: consensusAddress.error,
+      });
+      counters.failuresCreated += 1;
+      return;
+    }
+
+    const effectiveFromHeight = deriveLifecycleEffectiveHeight(event);
+    const opened = await openActiveWindow(tx, {
+      slotId: event.slotId,
+      operatorAddress: event.operatorAddress,
+      consensusAddress: consensusAddress.value,
+      consensusPower: event.power,
+      effectiveFromHeight,
+      openedByKind: 'lifecycle',
+      openedByEventId: event.sourceEventId,
+      openedByRotationId: null,
+      openedByLifecycleId: event.id,
+      rawOpenJson: buildRawLifecycleJson(event),
+      sourceHeight: event.height,
+    });
+    if (opened.ok) counters.windowsWritten += opened.written ? 1 : 0;
+    else counters.failuresCreated += 1;
+    return;
+  }
+
+  if (
+    event.eventType === 'coreslot_inactivated'
+    || event.eventType === 'coreslot_suspended'
+    || event.eventType === 'coreslot_removed'
+  ) {
+    const closed = await closeActiveWindows(tx, {
+      slotId: event.slotId,
+      effectiveToHeight: deriveLifecycleEffectiveHeight(event),
+      closedByKind: 'lifecycle',
+      closedByEventId: event.sourceEventId,
+      closedByRotationId: null,
+      closedByLifecycleId: event.id,
+      rawCloseJson: buildRawLifecycleJson(event),
+      sourceHeight: event.height,
+      requireWindow: false,
+    });
+    if (closed.ok) counters.windowsWritten += closed.written;
+    else counters.failuresCreated += 1;
+    return;
+  }
+
+  await createFailure(tx, {
+    sourceHeight: event.height,
+    sourceEventId: event.sourceEventId,
+    eventType: event.eventType,
+    failureKind: 'unknown_semantic_type',
+    rawEventJson: event.rawEventJson,
+    error: `Unsupported CoreSlot lifecycle event for temporal map: ${event.eventType}`,
+  });
+  counters.failuresCreated += 1;
+}
+
+async function projectRotation(
+  tx: CoreSlotTemporalMapProjectionPrisma,
+  rotation: RotationSource,
+  counters: Counters,
+): Promise<void> {
+  if (
+    rotation.status === CORESLOT_KEY_ROTATION_STATUS.requested
+    || rotation.status === CORESLOT_KEY_ROTATION_STATUS.cancelled
+  ) {
+    return;
+  }
+
+  if (
+    rotation.status !== CORESLOT_KEY_ROTATION_STATUS.applied
+    && rotation.status !== CORESLOT_KEY_ROTATION_STATUS.immediateApplied
+  ) {
+    await createFailure(tx, {
+      sourceHeight: rotation.appliedHeight ?? rotation.cancelledHeight ?? 0n,
+      sourceEventId: rotation.sourceAppliedEventId,
+      failureKind: 'unknown_semantic_type',
+      rawEventJson: rotation.rawAppliedEventJson,
+      error: `Unsupported CoreSlot key rotation status for temporal map: ${rotation.status}`,
+    });
+    counters.failuresCreated += 1;
+    return;
+  }
+
+  const sourceHeight = rotation.appliedHeight ?? rotation.effectiveHeight ?? 0n;
+  const newConsensusAddress = normalizeConsensusAddress(rotation.newConsensusAddress);
+  if (!newConsensusAddress.ok) {
+    await createFailure(tx, {
+      sourceHeight,
+      sourceEventId: rotation.sourceAppliedEventId,
+      failureKind: 'invalid_consensus_address',
+      rawEventJson: rotation.rawAppliedEventJson,
+      error: newConsensusAddress.error,
+    });
+    counters.failuresCreated += 1;
+    return;
+  }
+
+  const oldConsensusAddress = normalizeOptionalConsensusAddress(rotation.oldConsensusAddress);
+  if (!oldConsensusAddress.ok) {
+    await createFailure(tx, {
+      sourceHeight,
+      sourceEventId: rotation.sourceAppliedEventId,
+      failureKind: 'invalid_consensus_address',
+      rawEventJson: rotation.rawAppliedEventJson,
+      error: oldConsensusAddress.error,
+    });
+    counters.failuresCreated += 1;
+    return;
+  }
+
+  const effectiveFromHeight = deriveRotationEffectiveHeight(rotation);
+  if (effectiveFromHeight === null) {
+    await createFailure(tx, {
+      sourceHeight,
+      sourceEventId: rotation.sourceAppliedEventId,
+      failureKind: 'effective_height_invalid',
+      rawEventJson: rotation.rawAppliedEventJson,
+      error: 'Applied CoreSlot key rotation is missing both effectiveHeight and appliedHeight.',
+    });
+    counters.failuresCreated += 1;
+    return;
+  }
+
+  const existingNewWindow = await findSlotConsensusWindowAtHeight(
+    tx,
+    rotation.slotId,
+    newConsensusAddress.value,
+    effectiveFromHeight,
+  );
+
+  if (!existingNewWindow) {
+    const closed = await closeActiveWindows(tx, {
+      slotId: rotation.slotId,
+      consensusAddress: oldConsensusAddress.value,
+      effectiveToHeight: effectiveFromHeight,
+      closedByKind: 'key_rotation',
+      closedByEventId: rotation.sourceAppliedEventId,
+      closedByRotationId: rotation.id,
+      closedByLifecycleId: null,
+      rawCloseJson: buildRawRotationJson(rotation),
+      sourceHeight,
+      requireWindow: oldConsensusAddress.value === null,
+    });
+    if (!closed.ok) {
+      counters.failuresCreated += 1;
+      return;
+    }
+    counters.windowsWritten += closed.written;
+  }
+
+  const opened = await openActiveWindow(tx, {
+    slotId: rotation.slotId,
+    operatorAddress: rotation.operatorAddress,
+    consensusAddress: newConsensusAddress.value,
+    consensusPower: rotation.power,
+    effectiveFromHeight,
+    openedByKind: 'key_rotation',
+    openedByEventId: rotation.sourceAppliedEventId,
+    openedByRotationId: rotation.id,
+    openedByLifecycleId: null,
+    rawOpenJson: buildRawRotationJson(rotation),
+    sourceHeight,
+  });
+  if (opened.ok) counters.windowsWritten += opened.written ? 1 : 0;
+  else counters.failuresCreated += 1;
+}
+
+async function openActiveWindow(
+  tx: CoreSlotTemporalMapProjectionPrisma,
+  input: OpenWindowInput,
+): Promise<{ ok: true; written: boolean } | { ok: false }> {
+  const existingSame = await findSlotConsensusWindowAtHeight(
+    tx,
+    input.slotId,
+    input.consensusAddress,
+    input.effectiveFromHeight,
+  );
+  if (existingSame) {
+    await tx.coreSlotConsensusWindow.update({
+      where: { id: existingSame.id },
+      data: {
+        operatorAddress: input.operatorAddress ?? existingSame.operatorAddress,
+        consensusPower: input.consensusPower ?? existingSame.consensusPower,
+        rawOpenJson: input.rawOpenJson ?? existingSame.rawOpenJson,
+      },
+    });
+    return { ok: true, written: false };
+  }
+
+  const activeSlotWindows = await findOpenSlotWindows(tx, input.slotId);
+  for (const window of activeSlotWindows) {
+    if (window.effectiveFromHeight >= input.effectiveFromHeight) {
+      await createFailure(tx, {
+        sourceHeight: input.sourceHeight,
+        sourceEventId: input.openedByEventId,
+        failureKind: 'temporal_window_conflict',
+        rawEventJson: input.rawOpenJson,
+        error: `Slot ${input.slotId.toString()} already has an active window at height ${input.effectiveFromHeight.toString()}.`,
+      });
+      return { ok: false };
+    }
+    await closeWindow(tx, window, {
+      effectiveToHeight: input.effectiveFromHeight,
+      closedByKind: input.openedByKind,
+      closedByEventId: input.openedByEventId,
+      closedByRotationId: input.openedByRotationId,
+      closedByLifecycleId: input.openedByLifecycleId,
+      rawCloseJson: input.rawOpenJson,
+      sourceHeight: input.sourceHeight,
+    });
+  }
+
+  const consensusConflicts = await findConsensusWindowsAtHeight(
+    tx,
+    input.consensusAddress,
+    input.effectiveFromHeight,
+  );
+  const conflictingWindow = consensusConflicts.find((window) => window.slotId !== input.slotId);
+  if (conflictingWindow) {
+    await createFailure(tx, {
+      sourceHeight: input.sourceHeight,
+      sourceEventId: input.openedByEventId,
+      failureKind: 'temporal_window_conflict',
+      rawEventJson: input.rawOpenJson,
+      error: `Consensus address ${input.consensusAddress} already maps to slot ${conflictingWindow.slotId.toString()} at height ${input.effectiveFromHeight.toString()}.`,
+    });
+    return { ok: false };
+  }
+
+  await tx.coreSlotConsensusWindow.create({
+    data: {
+      slotId: input.slotId,
+      operatorAddress: input.operatorAddress,
+      consensusAddress: input.consensusAddress,
+      status: ACTIVE_STATUS,
+      consensusPower: input.consensusPower,
+      effectiveFromHeight: input.effectiveFromHeight,
+      effectiveToHeight: null,
+      openedByKind: input.openedByKind,
+      openedByEventId: input.openedByEventId,
+      openedByRotationId: input.openedByRotationId,
+      openedByLifecycleId: input.openedByLifecycleId,
+      rawOpenJson: input.rawOpenJson,
+    },
+  });
+  return { ok: true, written: true };
+}
+
+async function closeActiveWindows(
+  tx: CoreSlotTemporalMapProjectionPrisma,
+  input: CloseWindowInput,
+): Promise<{ ok: true; written: number } | { ok: false }> {
+  const normalizedConsensusAddress = input.consensusAddress !== undefined
+    ? normalizeOptionalConsensusAddress(input.consensusAddress ?? null)
+    : { ok: true as const, value: undefined };
+  if (!normalizedConsensusAddress.ok) {
+    await createFailure(tx, {
+      sourceHeight: input.sourceHeight,
+      sourceEventId: input.closedByEventId,
+      failureKind: 'invalid_consensus_address',
+      rawEventJson: input.rawCloseJson,
+      error: normalizedConsensusAddress.error,
+    });
+    return { ok: false };
+  }
+
+  let windows = await findOpenSlotWindows(tx, input.slotId);
+  if (normalizedConsensusAddress.value !== undefined && normalizedConsensusAddress.value !== null) {
+    windows = windows.filter((window) => window.consensusAddress === normalizedConsensusAddress.value);
+  }
+
+  if (normalizedConsensusAddress.value === null && windows.length > 1) {
+    await createFailure(tx, {
+      sourceHeight: input.sourceHeight,
+      sourceEventId: input.closedByEventId,
+      failureKind: 'temporal_window_ambiguous',
+      rawEventJson: input.rawCloseJson,
+      error: `Cannot infer which active window to close for slot ${input.slotId.toString()}.`,
+    });
+    return { ok: false };
+  }
+
+  if (windows.length === 0) {
+    if (input.requireWindow) {
+      await createFailure(tx, {
+        sourceHeight: input.sourceHeight,
+        sourceEventId: input.closedByEventId,
+        failureKind: 'missing_activation_window',
+        rawEventJson: input.rawCloseJson,
+        error: `No active consensus window found for slot ${input.slotId.toString()}.`,
+      });
+      return { ok: false };
+    }
+    return { ok: true, written: 0 };
+  }
+
+  let written = 0;
+  for (const window of windows) {
+    const closed = await closeWindow(tx, window, input);
+    if (!closed.ok) return { ok: false };
+    written += 1;
+  }
+  return { ok: true, written };
+}
+
+async function closeWindow(
+  tx: CoreSlotTemporalMapProjectionPrisma,
+  window: ConsensusWindowSource,
+  input: {
+    effectiveToHeight: bigint;
+    closedByKind: string;
+    closedByEventId: bigint | null;
+    closedByRotationId: bigint | null;
+    closedByLifecycleId: bigint | null;
+    rawCloseJson: unknown | null;
+    sourceHeight: bigint;
+  },
+): Promise<{ ok: true } | { ok: false }> {
+  if (input.effectiveToHeight <= window.effectiveFromHeight) {
+    await createFailure(tx, {
+      sourceHeight: input.sourceHeight,
+      sourceEventId: input.closedByEventId,
+      failureKind: 'effective_height_invalid',
+      rawEventJson: input.rawCloseJson,
+      error: `Window close height ${input.effectiveToHeight.toString()} must be greater than open height ${window.effectiveFromHeight.toString()}.`,
+    });
+    return { ok: false };
+  }
+
+  if (window.effectiveToHeight !== null && window.effectiveToHeight <= input.effectiveToHeight) {
+    return { ok: true };
+  }
+
+  await tx.coreSlotConsensusWindow.update({
+    where: { id: window.id },
+    data: {
+      effectiveToHeight: input.effectiveToHeight,
+      closedByKind: input.closedByKind,
+      closedByEventId: input.closedByEventId,
+      closedByRotationId: input.closedByRotationId,
+      closedByLifecycleId: input.closedByLifecycleId,
+      rawCloseJson: input.rawCloseJson,
+    },
+  });
+  return { ok: true };
+}
+
+export async function findConsensusWindowAtHeight(
+  prisma: Pick<CoreSlotTemporalMapProjectionPrisma, 'coreSlotConsensusWindow'>,
+  consensusAddress: string,
+  height: bigint,
+): Promise<ConsensusWindowSource | null> {
+  const normalized = normalizeConsensusAddress(consensusAddress);
+  if (!normalized.ok) return null;
+  return prisma.coreSlotConsensusWindow.findFirst({
+    where: {
+      consensusAddress: normalized.value,
+      effectiveFromHeight: { lte: height },
+      OR: [{ effectiveToHeight: null }, { effectiveToHeight: { gt: height } }],
+    },
+    orderBy: [{ effectiveFromHeight: 'desc' }],
+  });
+}
+
+export async function findSlotConsensusWindowAtHeight(
+  prisma: Pick<CoreSlotTemporalMapProjectionPrisma, 'coreSlotConsensusWindow'>,
+  slotId: bigint,
+  consensusAddressOrHeight: string | bigint,
+  maybeHeight?: bigint,
+): Promise<ConsensusWindowSource | null> {
+  const height = typeof consensusAddressOrHeight === 'bigint'
+    ? consensusAddressOrHeight
+    : maybeHeight;
+  if (height === undefined) return null;
+  const consensusAddress = typeof consensusAddressOrHeight === 'string'
+    ? normalizeConsensusAddress(consensusAddressOrHeight)
+    : null;
+  if (consensusAddress && !consensusAddress.ok) return null;
+
+  return prisma.coreSlotConsensusWindow.findFirst({
+    where: {
+      slotId,
+      ...(consensusAddress ? { consensusAddress: consensusAddress.value } : {}),
+      effectiveFromHeight: { lte: height },
+      OR: [{ effectiveToHeight: null }, { effectiveToHeight: { gt: height } }],
+    },
+    orderBy: [{ effectiveFromHeight: 'desc' }],
+  });
+}
+
+async function findConsensusWindowsAtHeight(
+  prisma: Pick<CoreSlotTemporalMapProjectionPrisma, 'coreSlotConsensusWindow'>,
+  consensusAddress: string,
+  height: bigint,
+): Promise<ConsensusWindowSource[]> {
+  return prisma.coreSlotConsensusWindow.findMany({
+    where: {
+      consensusAddress,
+      effectiveFromHeight: { lte: height },
+      OR: [{ effectiveToHeight: null }, { effectiveToHeight: { gt: height } }],
+    },
+    orderBy: [{ effectiveFromHeight: 'asc' }],
+  });
+}
+
+async function findOpenSlotWindows(
+  prisma: Pick<CoreSlotTemporalMapProjectionPrisma, 'coreSlotConsensusWindow'>,
+  slotId: bigint,
+): Promise<ConsensusWindowSource[]> {
+  return prisma.coreSlotConsensusWindow.findMany({
+    where: {
+      slotId,
+      status: ACTIVE_STATUS,
+      effectiveToHeight: null,
+    },
+    orderBy: [{ effectiveFromHeight: 'asc' }],
+  });
+}
+
+function deriveLifecycleEffectiveHeight(event: LifecycleSource): bigint {
+  return readJsonHeight(event.rawEventJson, 'effective_height') ?? event.height + 1n;
+}
+
+function deriveRotationEffectiveHeight(rotation: RotationSource): bigint | null {
+  if (rotation.effectiveHeight !== null) return rotation.effectiveHeight;
+  if (rotation.appliedHeight !== null) return rotation.appliedHeight + 1n;
+  return null;
+}
+
+function readJsonHeight(value: unknown, key: string): bigint | null {
+  const raw = readString(asRecord(value)[key]);
+  if (!raw) return null;
+  try {
+    return BigInt(raw);
+  } catch {
+    return null;
+  }
+}
+
+function normalizeConsensusAddress(value: string | null): {
+  ok: true;
+  value: string;
+} | {
+  ok: false;
+  error: string;
+} {
+  if (!value) {
+    return { ok: false, error: 'CoreSlot consensus address is required.' };
+  }
+  const trimmed = value.trim();
+  if (!/^[0-9a-fA-F]{40}$/.test(trimmed)) {
+    return { ok: false, error: `CoreSlot consensus address must be 40-character hex: ${value}` };
+  }
+  return { ok: true, value: trimmed.toLowerCase() };
+}
+
+function normalizeOptionalConsensusAddress(value: string | null): {
+  ok: true;
+  value: string | null;
+} | {
+  ok: false;
+  error: string;
+} {
+  if (value === null || value.trim() === '') return { ok: true, value: null };
+  return normalizeConsensusAddress(value);
+}
+
+async function createFailure(
+  prisma: CoreSlotTemporalMapProjectionPrisma,
+  args: {
+    sourceHeight: bigint;
+    sourceEventId?: bigint | null | undefined;
+    eventType?: string | null | undefined;
+    failureKind: ProjectionFailureKind;
+    rawEventJson?: unknown | null | undefined;
+    error: string;
+  },
+): Promise<void> {
+  const failure: ProjectionFailureInput = {
+    projectionName: CORESLOT_TEMPORAL_MAP_PROJECTION,
+    module: 'coreslot',
+    sourceHeight: args.sourceHeight,
+    sourceEventId: args.sourceEventId ?? null,
+    eventType: args.eventType ?? null,
+    failureKind: args.failureKind,
+    rawEventJson: args.rawEventJson ?? null,
+    error: args.error,
+  };
+  const data = withProjectionFailureKey(failure);
+
+  await prisma.projectionFailure.upsert({
+    where: { failureKey: data.failureKey },
+    create: data,
+    update: {
+      ...data,
+      resolved: false,
+      resolvedAt: null,
+    },
+  });
+}
+
+function buildRawLifecycleJson(event: LifecycleSource): unknown {
+  return {
+    id: event.id.toString(),
+    sourceEventId: event.sourceEventId.toString(),
+    height: event.height.toString(),
+    eventType: event.eventType,
+    rawEventJson: event.rawEventJson,
+    rawMessageJson: event.rawMessageJson,
+  };
+}
+
+function buildRawRotationJson(rotation: RotationSource): unknown {
+  return {
+    id: rotation.id.toString(),
+    slotId: rotation.slotId.toString(),
+    status: rotation.status,
+    effectiveHeight: rotation.effectiveHeight?.toString() ?? null,
+    appliedHeight: rotation.appliedHeight?.toString() ?? null,
+    sourceAppliedEventId: rotation.sourceAppliedEventId?.toString() ?? null,
+    rawAppliedEventJson: rotation.rawAppliedEventJson,
+  };
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function readString(value: unknown): string | undefined {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'bigint') return value.toString();
+  return undefined;
+}
+
+// Height semantics for downstream consumers:
+// - block.header.proposer_address belongs to block height N, so proposer joins should query N.
+// - block.last_commit.signatures in block N are signatures for committed block N-1, so
+//   later liveness attribution should query N-1. This phase only builds the temporal map.

@@ -6,6 +6,7 @@ import {
   CORESLOT_METADATA_PROJECTION,
   CORESLOT_PARAMS_PROJECTION,
   CORESLOT_PAYOUT_PROJECTION,
+  CORESLOT_TEMPORAL_MAP_PROJECTION,
 } from '../../dist/projections/types.js';
 import {
   CORESLOT_SEMANTIC_REBUILD_ORDER,
@@ -18,6 +19,7 @@ const CHAIN_ID = 'twilight-test';
 const OPERATOR = 'twilight17n30thc6ntha6rpjvk46yrwvkd86guy9crevra';
 const NEW_PAYOUT = 'twilight1payoutaddressxxxxxxxxxxxxxxxxxxxxxxx';
 const AUTHORITY = 'twilight1authorityxxxxxxxxxxxxxxxxxxxxxxxxxxx';
+const CONSENSUS = 'abcdefabcdefabcdefabcdefabcdefabcdefabcd';
 
 const METADATA_TYPE_URL = '/twilight.coreslot.v1.MsgUpdateOperatorMetadata';
 const ACTIVATE_TYPE_URL = '/twilight.coreslot.v1.MsgActivateCoreSlot';
@@ -49,6 +51,7 @@ describe('CoreSlot semantic rebuild orchestration', () => {
         projectPayout: recorder(CORESLOT_PAYOUT_PROJECTION),
         projectParams: recorder(CORESLOT_PARAMS_PROJECTION),
         projectKeyRotation: recorder(CORESLOT_KEY_ROTATION_PROJECTION),
+        projectTemporalMap: recorder(CORESLOT_TEMPORAL_MAP_PROJECTION),
       },
     });
 
@@ -78,10 +81,11 @@ describe('CoreSlot semantic rebuild orchestration', () => {
         projectPayout: recorder(),
         projectParams: recorder(),
         projectKeyRotation: recorder(),
+        projectTemporalMap: recorder(),
       },
     });
 
-    assert.equal(ranges.length, 5);
+    assert.equal(ranges.length, 6);
     for (const [start, end] of ranges) {
       assert.equal(start, 119n);
       assert.equal(end, 121n);
@@ -110,6 +114,7 @@ describe('CoreSlot semantic rebuild orchestration', () => {
         projectPayout: recorder(CORESLOT_PAYOUT_PROJECTION),
         projectParams: recorder(CORESLOT_PARAMS_PROJECTION),
         projectKeyRotation: recorder(CORESLOT_KEY_ROTATION_PROJECTION),
+        projectTemporalMap: recorder(CORESLOT_TEMPORAL_MAP_PROJECTION),
       },
     });
 
@@ -120,6 +125,7 @@ describe('CoreSlot semantic rebuild orchestration', () => {
       CORESLOT_PAYOUT_PROJECTION,
       CORESLOT_PARAMS_PROJECTION,
       CORESLOT_KEY_ROTATION_PROJECTION,
+      CORESLOT_TEMPORAL_MAP_PROJECTION,
     ]);
   });
 
@@ -142,6 +148,7 @@ describe('CoreSlot semantic rebuild orchestration', () => {
         projectPayout: noop(),
         projectParams: noop(),
         projectKeyRotation: noop(),
+        projectTemporalMap: noop(),
       },
     });
 
@@ -173,6 +180,7 @@ describe('CoreSlot semantic rebuild orchestration', () => {
             projectPayout: recorder(CORESLOT_PAYOUT_PROJECTION),
             projectParams: recorder(CORESLOT_PARAMS_PROJECTION),
             projectKeyRotation: recorder(CORESLOT_KEY_ROTATION_PROJECTION),
+            projectTemporalMap: recorder(CORESLOT_TEMPORAL_MAP_PROJECTION),
           },
         }),
       (error) => {
@@ -207,6 +215,7 @@ describe('CoreSlot semantic reset safety', () => {
     assert.equal(prisma.payoutChanges.size, 0);
     assert.equal(prisma.parameterChanges.size, 0);
     assert.equal(prisma.keyRotations.length, 0);
+    assert.equal(prisma.consensusWindows.length, 0);
     assert.equal(prisma.coreSlotProjections.size, 0);
   });
 
@@ -217,6 +226,7 @@ describe('CoreSlot semantic reset safety', () => {
       { failureKey: 'b', projectionName: CORESLOT_LIFECYCLE_PROJECTION, sourceHeight: 1n },
       { failureKey: 'c', projectionName: CORESLOT_PAYOUT_PROJECTION, sourceHeight: 1n },
       { failureKey: 'd', projectionName: CORESLOT_PARAMS_PROJECTION, sourceHeight: 1n },
+      { failureKey: 'f', projectionName: CORESLOT_TEMPORAL_MAP_PROJECTION, sourceHeight: 1n },
       { failureKey: 'e', projectionName: 'rewards_v1', sourceHeight: 1n },
     );
 
@@ -234,6 +244,7 @@ describe('CoreSlot semantic reset safety', () => {
     prisma.seedCursor(CORESLOT_LIFECYCLE_PROJECTION, 121n);
     prisma.seedCursor(CORESLOT_PAYOUT_PROJECTION, 121n);
     prisma.seedCursor(CORESLOT_PARAMS_PROJECTION, 121n);
+    prisma.seedCursor(CORESLOT_TEMPORAL_MAP_PROJECTION, 121n);
     prisma.seedCursor('rewards_v1', 50n);
 
     await resetCoreSlotSemanticProjections(prisma);
@@ -391,6 +402,7 @@ describe('CoreSlot semantic rebuild against real projectors', () => {
       CORESLOT_PAYOUT_PROJECTION,
       CORESLOT_PARAMS_PROJECTION,
       CORESLOT_KEY_ROTATION_PROJECTION,
+      CORESLOT_TEMPORAL_MAP_PROJECTION,
     ]) {
       const cursor = prisma.projectionCursors.get(`${name}:${CHAIN_ID}`);
       assert.ok(cursor, `missing cursor for ${name}`);
@@ -436,6 +448,8 @@ function unresolvedCoreSlotFailures(prisma) {
     CORESLOT_LIFECYCLE_PROJECTION,
     CORESLOT_PAYOUT_PROJECTION,
     CORESLOT_PARAMS_PROJECTION,
+    CORESLOT_KEY_ROTATION_PROJECTION,
+    CORESLOT_TEMPORAL_MAP_PROJECTION,
   ]);
   return prisma.projectionFailures.filter((f) => names.has(f.projectionName) && !f.resolved);
 }
@@ -457,10 +471,13 @@ class CombinedMockPrisma {
     this.indexerCursors = [];
     this.metadataChanges = new Map();
     this.lifecycleEvents = new Map();
+    this.nextLifecycleEventId = 1n;
     this.payoutChanges = new Map();
     this.parameterChanges = new Map();
     this.keyRotations = [];
     this.nextKeyRotationId = 1n;
+    this.consensusWindows = [];
+    this.nextConsensusWindowId = 1n;
     this.coreSlotProjections = new Map();
     this.projectionFailures = [];
     this.projectionCursors = new Map();
@@ -507,9 +524,18 @@ class CombinedMockPrisma {
     this.coreSlotParameterChange = mapModel(this, 'parameterChanges', (args) =>
       args.where.sourceMessageId.toString());
     this.coreSlotLifecycleEvent = {
+      findMany: async (args) =>
+        [...this.lifecycleEvents.values()].filter((row) => matchConsensusWindow(row, args?.where ?? {})),
       upsert: async (args) => {
         if (this.options.failOnLifecycleUpsert) throw new Error('lifecycle upsert failed');
-        return upsertIntoMap(this.lifecycleEvents, args.where.sourceEventId.toString(), args);
+        const key = args.where.sourceEventId.toString();
+        const existing = this.lifecycleEvents.get(key);
+        const next = existing
+          ? { ...existing, ...args.update }
+          : { id: this.nextLifecycleEventId, ...args.create };
+        if (!existing) this.nextLifecycleEventId += 1n;
+        this.lifecycleEvents.set(key, next);
+        return next;
       },
       deleteMany: async () => {
         this.lifecycleEvents.clear();
@@ -546,6 +572,28 @@ class CombinedMockPrisma {
       deleteMany: async () => {
         const count = this.keyRotations.length;
         this.keyRotations = [];
+        return { count };
+      },
+    };
+    this.coreSlotConsensusWindow = {
+      findFirst: async (args) =>
+        this.consensusWindows.find((row) => matchConsensusWindow(row, args?.where ?? {})) ?? null,
+      findMany: async (args) =>
+        this.consensusWindows.filter((row) => matchConsensusWindow(row, args?.where ?? {})),
+      create: async (args) => {
+        const row = { id: this.nextConsensusWindowId, ...args.data };
+        this.nextConsensusWindowId += 1n;
+        this.consensusWindows.push(row);
+        return row;
+      },
+      update: async (args) => {
+        const row = this.consensusWindows.find((r) => r.id === args.where.id);
+        if (row) Object.assign(row, args.data);
+        return row;
+      },
+      deleteMany: async () => {
+        const count = this.consensusWindows.length;
+        this.consensusWindows = [];
         return { count };
       },
     };
@@ -637,10 +685,13 @@ class CombinedMockPrisma {
     clone.indexerCursors = this.indexerCursors.map((row) => ({ ...row }));
     clone.metadataChanges = cloneMap(this.metadataChanges);
     clone.lifecycleEvents = cloneMap(this.lifecycleEvents);
+    clone.nextLifecycleEventId = this.nextLifecycleEventId;
     clone.payoutChanges = cloneMap(this.payoutChanges);
     clone.parameterChanges = cloneMap(this.parameterChanges);
     clone.keyRotations = this.keyRotations.map((row) => ({ ...row }));
     clone.nextKeyRotationId = this.nextKeyRotationId;
+    clone.consensusWindows = this.consensusWindows.map((row) => ({ ...row }));
+    clone.nextConsensusWindowId = this.nextConsensusWindowId;
     clone.coreSlotProjections = cloneMap(this.coreSlotProjections);
     clone.projectionFailures = this.projectionFailures.map((row) => ({ ...row }));
     clone.projectionCursors = cloneMap(this.projectionCursors);
@@ -657,10 +708,13 @@ class CombinedMockPrisma {
     this.indexerCursors = other.indexerCursors;
     this.metadataChanges = other.metadataChanges;
     this.lifecycleEvents = other.lifecycleEvents;
+    this.nextLifecycleEventId = other.nextLifecycleEventId;
     this.payoutChanges = other.payoutChanges;
     this.parameterChanges = other.parameterChanges;
     this.keyRotations = other.keyRotations;
     this.nextKeyRotationId = other.nextKeyRotationId;
+    this.consensusWindows = other.consensusWindows;
+    this.nextConsensusWindowId = other.nextConsensusWindowId;
     this.coreSlotProjections = other.coreSlotProjections;
     this.projectionFailures = other.projectionFailures;
     this.projectionCursors = other.projectionCursors;
@@ -724,7 +778,9 @@ class CombinedMockPrisma {
       attributesJson: [
         { key: 'slot_id', value: '1' },
         { key: 'operator_address', value: OPERATOR },
+        { key: 'consensus_address', value: CONSENSUS },
         { key: 'new_status', value: 'ACTIVE' },
+        { key: 'power', value: '1' },
         { key: 'msg_index', value: '0' },
       ],
     });
@@ -793,14 +849,44 @@ class CombinedMockPrisma {
     this.payoutChanges.set('1', { sourceMessageId: 1n });
     this.parameterChanges.set('1', { sourceMessageId: 1n });
     this.keyRotations.push({ id: 1n, slotId: 1n, status: 'requested' });
+    this.consensusWindows.push({
+      id: 1n,
+      slotId: 1n,
+      consensusAddress: CONSENSUS,
+      status: 'ACTIVE',
+      effectiveFromHeight: 121n,
+      effectiveToHeight: null,
+      openedByKind: 'lifecycle',
+    });
     this.coreSlotProjections.set('1', { slotId: 1n });
   }
 }
 
 function matchRotation(row, where) {
   for (const [key, condition] of Object.entries(where)) {
+    if (key === 'OR' && Array.isArray(condition)) {
+      if (!condition.some((branch) => matchRotation(row, branch))) return false;
+      continue;
+    }
     if (condition !== null && typeof condition === 'object' && !Array.isArray(condition)) {
       return false;
+    }
+    if (row[key] !== condition) return false;
+  }
+  return true;
+}
+
+function matchConsensusWindow(row, where) {
+  for (const [key, condition] of Object.entries(where)) {
+    if (key === 'OR' && Array.isArray(condition)) {
+      if (!condition.some((branch) => matchConsensusWindow(row, branch))) return false;
+      continue;
+    }
+    if (condition !== null && typeof condition === 'object' && !Array.isArray(condition)) {
+      if (condition.lte !== undefined && !(row[key] <= condition.lte)) return false;
+      if (condition.gt !== undefined && !(row[key] !== null && row[key] > condition.gt)) return false;
+      if (condition.in !== undefined && !condition.in.includes(row[key])) return false;
+      continue;
     }
     if (row[key] !== condition) return false;
   }

@@ -19,6 +19,10 @@ import {
   type CoreSlotKeyRotationProjectionPrisma,
 } from './coreslot-key-rotation.js';
 import {
+  projectCoreSlotTemporalMapRange,
+  type CoreSlotTemporalMapProjectionPrisma,
+} from './coreslot-temporal-map.js';
+import {
   resetCoreSlotSemanticProjections,
   type ResetCoreSlotSemanticPrisma,
 } from './reset-semantic.js';
@@ -28,6 +32,7 @@ import {
   CORESLOT_METADATA_PROJECTION,
   CORESLOT_PARAMS_PROJECTION,
   CORESLOT_PAYOUT_PROJECTION,
+  CORESLOT_TEMPORAL_MAP_PROJECTION,
 } from './types.js';
 
 /**
@@ -38,8 +43,7 @@ import {
  * payout       -> establishes payoutAddress without clearing metadata/lifecycle fields
  * params       -> global module-change history only, never mutates CoreSlotProjection
  * key_rotation -> applies confirmed consensus-address rotations after the base state
- *
- * Future (Phase 6b-2, not implemented here): temporal consensus map.
+ * temporal_map -> derives ACTIVE consensus-address windows from lifecycle + rotations
  */
 export const CORESLOT_SEMANTIC_REBUILD_ORDER = [
   CORESLOT_METADATA_PROJECTION,
@@ -47,6 +51,7 @@ export const CORESLOT_SEMANTIC_REBUILD_ORDER = [
   CORESLOT_PAYOUT_PROJECTION,
   CORESLOT_PARAMS_PROJECTION,
   CORESLOT_KEY_ROTATION_PROJECTION,
+  CORESLOT_TEMPORAL_MAP_PROJECTION,
 ] as const;
 
 export interface CoreSlotSemanticRebuildStep {
@@ -70,7 +75,8 @@ export class CoreSlotSemanticRebuildError extends Error {
     ranProjections: string[],
     options?: { cause?: unknown },
   ) {
-    super(`CoreSlot semantic rebuild failed during ${projectionName} projection`);
+    const causeMessage = options?.cause instanceof Error ? `: ${options.cause.message}` : '';
+    super(`CoreSlot semantic rebuild failed during ${projectionName} projection${causeMessage}`);
     this.name = 'CoreSlotSemanticRebuildError';
     this.projectionName = projectionName;
     this.ranProjections = ranProjections;
@@ -128,6 +134,7 @@ export interface CoreSlotSemanticRebuildProjectors {
   projectPayout: typeof projectCoreSlotPayoutRange;
   projectParams: typeof projectCoreSlotParamsRange;
   projectKeyRotation: typeof projectCoreSlotKeyRotationRange;
+  projectTemporalMap: typeof projectCoreSlotTemporalMapRange;
 }
 
 export interface BuildCoreSlotSemanticRebuildStepsArgs {
@@ -150,6 +157,7 @@ export function buildCoreSlotSemanticRebuildSteps(
   const projectPayout = args.projectors?.projectPayout ?? projectCoreSlotPayoutRange;
   const projectParams = args.projectors?.projectParams ?? projectCoreSlotParamsRange;
   const projectKeyRotation = args.projectors?.projectKeyRotation ?? projectCoreSlotKeyRotationRange;
+  const projectTemporalMap = args.projectors?.projectTemporalMap ?? projectCoreSlotTemporalMapRange;
 
   return [
     {
@@ -201,6 +209,17 @@ export function buildCoreSlotSemanticRebuildSteps(
       run: async ({ startHeight, endHeight }) => {
         await projectKeyRotation({
           prisma: prisma as CoreSlotKeyRotationProjectionPrisma,
+          chainId,
+          startHeight,
+          endHeight,
+        });
+      },
+    },
+    {
+      projectionName: CORESLOT_TEMPORAL_MAP_PROJECTION,
+      run: async ({ startHeight, endHeight }) => {
+        await projectTemporalMap({
+          prisma: prisma as CoreSlotTemporalMapProjectionPrisma,
           chainId,
           startHeight,
           endHeight,

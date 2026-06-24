@@ -3,16 +3,17 @@ export const CORESLOT_LIFECYCLE_PROJECTION = 'coreslot_lifecycle_v1';
 export const CORESLOT_PAYOUT_PROJECTION = 'coreslot_payout_v1';
 export const CORESLOT_PARAMS_PROJECTION = 'coreslot_params_v1';
 export const CORESLOT_KEY_ROTATION_PROJECTION = 'coreslot_key_rotation_v1';
+export const CORESLOT_TEMPORAL_MAP_PROJECTION = 'coreslot_temporal_map_v1';
 
 // Currently implemented CoreSlot semantic projections, in deterministic rebuild
-// order. The temporal consensus map is intentionally absent until Phase 6b-2.
-// The combined reset/rebuild command is scoped to exactly these.
+// order. The combined reset/rebuild command is scoped to exactly these.
 export const CORESLOT_SEMANTIC_PROJECTIONS = [
   CORESLOT_METADATA_PROJECTION,
   CORESLOT_LIFECYCLE_PROJECTION,
   CORESLOT_PAYOUT_PROJECTION,
   CORESLOT_PARAMS_PROJECTION,
   CORESLOT_KEY_ROTATION_PROJECTION,
+  CORESLOT_TEMPORAL_MAP_PROJECTION,
 ] as const;
 
 export const PROJECTION_STATUS = {
@@ -83,6 +84,12 @@ export type ProjectionFailureKind =
   | 'invalid_params_payload'
   | 'missing_required_payload'
   | 'rotation_correlation_failed'
+  | 'missing_activation_window'
+  | 'temporal_window_conflict'
+  | 'temporal_window_ambiguous'
+  | 'temporal_order_ambiguous'
+  | 'effective_height_invalid'
+  | 'unknown_semantic_type'
   | 'unknown_coreslot_message'
   | 'unknown_coreslot_event'
   | 'unknown_coreslot_lifecycle_event'

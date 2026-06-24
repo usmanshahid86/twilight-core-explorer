@@ -7,6 +7,7 @@ import {
   CORESLOT_KEY_ROTATED_EVENT_TYPE,
   CORESLOT_ROTATION_CANCELLED_EVENT_TYPE,
   CORESLOT_METADATA_PROJECTION,
+  CORESLOT_TEMPORAL_MAP_PROJECTION,
 } from '../../dist/projections/types.js';
 import {
   projectCoreSlotKeyRotationHeight,
@@ -250,18 +251,20 @@ describe('CoreSlot key rotation projection', () => {
         projectPayout: recorder('coreslot_payout_v1'),
         projectParams: recorder('coreslot_params_v1'),
         projectKeyRotation: recorder(CORESLOT_KEY_ROTATION_PROJECTION),
+        projectTemporalMap: recorder(CORESLOT_TEMPORAL_MAP_PROJECTION),
       },
     });
 
     assert.deepEqual(calls, [...CORESLOT_SEMANTIC_REBUILD_ORDER]);
-    assert.equal(calls[calls.length - 1], CORESLOT_KEY_ROTATION_PROJECTION);
-    assert.equal(calls[calls.length - 2], 'coreslot_params_v1');
+    assert.equal(calls[calls.length - 2], CORESLOT_KEY_ROTATION_PROJECTION);
+    assert.equal(calls[calls.length - 1], CORESLOT_TEMPORAL_MAP_PROJECTION);
   });
 
   it('19. combined reset includes key rotation rows, failures, and cursor', async () => {
     const prisma = new MockKeyRotationPrisma();
     prisma.transactions.push(successTx('HASH', 100n));
     prisma.rotations.push({ id: 1n, slotId: 1n, status: 'applied' });
+    prisma.consensusWindows.push({ id: 1n, slotId: 1n, consensusAddress: NEW_CONS });
     prisma.coreSlotProjections.set('1', { slotId: 1n });
     prisma.projectionFailures.push(
       { failureKey: 'k', projectionName: CORESLOT_KEY_ROTATION_PROJECTION },
@@ -273,6 +276,7 @@ describe('CoreSlot key rotation projection', () => {
     await resetCoreSlotSemanticProjections(prisma);
 
     assert.equal(prisma.rotations.length, 0);
+    assert.equal(prisma.consensusWindows.length, 0);
     assert.equal(prisma.coreSlotProjections.size, 0);
     assert.equal(prisma.transactions.length, 1);
     assert.deepEqual(prisma.projectionFailures.map((f) => f.projectionName), ['rewards_v1']);
@@ -377,6 +381,7 @@ class MockKeyRotationPrisma {
     this.events = [];
     this.rotations = [];
     this.nextRotationId = 1n;
+    this.consensusWindows = [];
     this.coreSlotProjections = new Map();
     this.projectionFailures = [];
     this.projectionCursors = new Map();
@@ -464,6 +469,13 @@ class MockKeyRotationPrisma {
     this.coreSlotLifecycleEvent = mapModel(() => this.lifecycleEvents);
     this.coreSlotPayoutChange = mapModel(() => this.payoutChanges);
     this.coreSlotParameterChange = mapModel(() => this.parameterChanges);
+    this.coreSlotConsensusWindow = {
+      deleteMany: async () => {
+        const count = this.consensusWindows.length;
+        this.consensusWindows = [];
+        return { count };
+      },
+    };
     this.projectionFailure = {
       upsert: async (args) => {
         const key = args.where.failureKey;

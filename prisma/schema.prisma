@@ -297,6 +297,38 @@ model CoreSlotParameterChange {
   @@index([sourceEventId])
 }
 
+model CoreSlotConsensusWindow {
+  id                  BigInt   @id @default(autoincrement())
+  slotId              BigInt
+  operatorAddress     String?
+  consensusAddress    String
+  status              String // ACTIVE signing window
+  consensusPower      BigInt?
+  effectiveFromHeight BigInt
+  effectiveToHeight   BigInt?
+  openedByKind        String // lifecycle | key_rotation | inferred
+  openedByEventId     BigInt?
+  openedByRotationId  BigInt?
+  openedByLifecycleId BigInt?
+  closedByKind        String?
+  closedByEventId     BigInt?
+  closedByRotationId  BigInt?
+  closedByLifecycleId BigInt?
+  rawOpenJson         Json?
+  rawCloseJson        Json?
+  createdAt           DateTime @default(now())
+  updatedAtDb         DateTime @updatedAt
+
+  @@index([slotId])
+  @@index([operatorAddress])
+  @@index([consensusAddress])
+  @@index([effectiveFromHeight])
+  @@index([effectiveToHeight])
+  @@index([status])
+  @@index([slotId, effectiveFromHeight])
+  @@index([consensusAddress, effectiveFromHeight])
+}
+
 model CoreSlotConsensusKeyRotation {
   id                     BigInt   @id @default(autoincrement())
   slotId                 BigInt

@@ -16,6 +16,9 @@ export interface ResetCoreSlotSemanticPrisma {
   coreSlotConsensusKeyRotation: {
     deleteMany(args?: unknown): Promise<unknown>;
   };
+  coreSlotConsensusWindow: {
+    deleteMany(args?: unknown): Promise<unknown>;
+  };
   coreSlotProjection: {
     deleteMany(args?: unknown): Promise<unknown>;
   };
@@ -49,6 +52,7 @@ export async function resetCoreSlotSemanticProjections(
     await tx.coreSlotPayoutChange.deleteMany();
     await tx.coreSlotParameterChange.deleteMany();
     await tx.coreSlotConsensusKeyRotation.deleteMany();
+    await tx.coreSlotConsensusWindow.deleteMany();
     await tx.coreSlotProjection.deleteMany();
     await tx.projectionFailure.deleteMany({
       where: { projectionName: { in: projectionNames } },
