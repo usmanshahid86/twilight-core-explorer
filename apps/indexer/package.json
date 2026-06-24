@@ -24,7 +24,10 @@
     "project:coreslot-payout:reset": "node dist/projections/reset-coreslot-payout.js",
     "project:coreslot-params": "node dist/projections/coreslot-params-cli.js",
     "project:coreslot-params:dev": "npm run build && node dist/projections/coreslot-params-cli.js",
-    "project:coreslot-params:reset": "node dist/projections/reset-coreslot-params.js"
+    "project:coreslot-params:reset": "node dist/projections/reset-coreslot-params.js",
+    "project:coreslot-semantic": "node dist/projections/coreslot-semantic-rebuild-cli.js",
+    "project:coreslot-semantic:dev": "npm run build && node dist/projections/coreslot-semantic-rebuild-cli.js",
+    "project:coreslot-semantic:reset": "node dist/projections/reset-coreslot-semantic.js"
   },
   "dependencies": {
     "@twilight-explorer/chain-client": "0.0.0",

@@ -3,6 +3,16 @@ export const CORESLOT_LIFECYCLE_PROJECTION = 'coreslot_lifecycle_v1';
 export const CORESLOT_PAYOUT_PROJECTION = 'coreslot_payout_v1';
 export const CORESLOT_PARAMS_PROJECTION = 'coreslot_params_v1';
 
+// Currently implemented CoreSlot semantic projections, in deterministic rebuild
+// order. Key rotation and the temporal consensus map are intentionally absent
+// until Phase 6b. The combined reset/rebuild command is scoped to exactly these.
+export const CORESLOT_SEMANTIC_PROJECTIONS = [
+  CORESLOT_METADATA_PROJECTION,
+  CORESLOT_LIFECYCLE_PROJECTION,
+  CORESLOT_PAYOUT_PROJECTION,
+  CORESLOT_PARAMS_PROJECTION,
+] as const;
+
 export const PROJECTION_STATUS = {
   idle: 'idle',
   running: 'running',
