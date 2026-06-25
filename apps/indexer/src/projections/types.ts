@@ -53,6 +53,61 @@ export const CORESLOT_KEY_ROTATION_STATUS = {
   cancelled: 'cancelled',
 } as const;
 
+// --- Rewards (x/rewards) projections (Phase 7) ----------------------------
+
+// Rebuildable semantic projection derived from generic Message/Event/Transaction rows.
+export const REWARDS_SEMANTIC_PROJECTION = 'rewards_semantic_v1';
+// Observed-sample projection populated from live ChainClient snapshots at a height.
+export const REWARDS_SNAPSHOT_PROJECTION = 'rewards_snapshot_v1';
+
+// Rewards is a separate domain from CoreSlot; it is NOT part of the CoreSlot combined
+// rebuild. These names scope the rewards reset only.
+export const REWARDS_PROJECTIONS = [
+  REWARDS_SEMANTIC_PROJECTION,
+  REWARDS_SNAPSHOT_PROJECTION,
+] as const;
+
+export const REWARDS_CLAIM_TYPE_URL = '/twilight.rewards.v1.MsgClaimRewards';
+export const REWARDS_UPDATE_PARAMS_TYPE_URL =
+  '/twilight.rewards.v1.MsgUpdateRewardsParams';
+export const REWARDS_PAUSE_TYPE_URL = '/twilight.rewards.v1.MsgPauseRewards';
+export const REWARDS_RESUME_TYPE_URL = '/twilight.rewards.v1.MsgResumeRewards';
+
+export const REWARDS_MESSAGE_TYPE_URLS = [
+  REWARDS_CLAIM_TYPE_URL,
+  REWARDS_UPDATE_PARAMS_TYPE_URL,
+  REWARDS_PAUSE_TYPE_URL,
+  REWARDS_RESUME_TYPE_URL,
+] as const;
+
+export const EPOCH_FINALIZED_EVENT_TYPE = 'epoch_finalized';
+export const REWARD_CLAIMED_EVENT_TYPE = 'reward_claimed';
+export const PARAMS_UPDATE_QUEUED_EVENT_TYPE = 'params_update_queued';
+export const PARAMS_ACTIVATED_EVENT_TYPE = 'params_activated';
+export const REWARDS_PAUSED_EVENT_TYPE = 'rewards_paused';
+export const REWARDS_RESUMED_EVENT_TYPE = 'rewards_resumed';
+export const TREASURY_PAID_EVENT_TYPE = 'treasury_paid';
+
+export const REWARDS_EVENT_TYPES = [
+  EPOCH_FINALIZED_EVENT_TYPE,
+  REWARD_CLAIMED_EVENT_TYPE,
+  PARAMS_UPDATE_QUEUED_EVENT_TYPE,
+  PARAMS_ACTIVATED_EVENT_TYPE,
+  REWARDS_PAUSED_EVENT_TYPE,
+  REWARDS_RESUMED_EVENT_TYPE,
+  TREASURY_PAID_EVENT_TYPE,
+] as const;
+
+export const REWARDS_PARAMS_CHANGE_TYPE = {
+  queued: 'queued',
+  activated: 'activated',
+  pause: 'pause',
+  resume: 'resume',
+  directUpdate: 'direct_update',
+} as const;
+
+export const REWARDS_NATIVE_DENOM = 'utwlt';
+
 export const CORESLOT_LIFECYCLE_MESSAGE_TO_EVENT = {
   '/twilight.coreslot.v1.MsgRegisterCoreSlot': 'coreslot_registered',
   '/twilight.coreslot.v1.MsgActivateCoreSlot': 'coreslot_activated',
@@ -89,6 +144,10 @@ export type ProjectionFailureKind =
   | 'temporal_window_ambiguous'
   | 'temporal_order_ambiguous'
   | 'effective_height_invalid'
+  | 'invalid_epoch'
+  | 'invalid_amount'
+  | 'missing_reward_records'
+  | 'claim_correlation_failed'
   | 'unknown_semantic_type'
   | 'unknown_coreslot_message'
   | 'unknown_coreslot_event'

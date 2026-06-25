@@ -33,7 +33,12 @@
     "project:coreslot-temporal-map:reset": "node dist/projections/reset-coreslot-temporal-map.js",
     "project:coreslot-semantic": "node dist/projections/coreslot-semantic-rebuild-cli.js",
     "project:coreslot-semantic:dev": "npm run build && node dist/projections/coreslot-semantic-rebuild-cli.js",
-    "project:coreslot-semantic:reset": "node dist/projections/reset-coreslot-semantic.js"
+    "project:coreslot-semantic:reset": "node dist/projections/reset-coreslot-semantic.js",
+    "project:rewards": "node dist/projections/rewards-semantic-cli.js",
+    "project:rewards:dev": "npm run build && node dist/projections/rewards-semantic-cli.js",
+    "project:rewards:reset": "node dist/projections/reset-rewards-cli.js",
+    "project:rewards-snapshot": "node dist/projections/rewards-snapshot-cli.js",
+    "project:rewards-snapshot:dev": "npm run build && node dist/projections/rewards-snapshot-cli.js"
   },
   "dependencies": {
     "@twilight-explorer/chain-client": "0.0.0",

@@ -372,3 +372,146 @@ model CoreSlotConsensusKeyRotation {
   @@index([cancelledHeight])
   @@index([sourceMessageId])
 }
+
+// ---------------------------------------------------------------------------
+// Rewards (x/rewards) semantic projection (Phase 7)
+//
+// Two categories, kept strictly separate:
+//   - Rebuildable semantic rows (projection rewards_semantic_v1) derived only from
+//     generic indexed Message/Event/Transaction rows: RewardEpochProjection,
+//     RewardClaimEvent, RewardsParamsChange, RewardsTreasuryPayment.
+//   - Observed-sample rows (projection rewards_snapshot_v1) captured from live
+//     ChainClient snapshots and tied to the height at which they were sampled:
+//     SlotRewardProjection (sampledAtHeight), RewardsBalanceSample.
+// ---------------------------------------------------------------------------
+
+// Aggregate/finalization context from epoch_finalized. NOT claim truth.
+model RewardEpochProjection {
+  id              BigInt    @id @default(autoincrement())
+  epochNumber     BigInt    @unique
+  height          BigInt
+  blockTime       DateTime?
+  totalReward     String?
+  denom           String?
+  activeSlotCount Int?
+  sourceEventId   BigInt?   @unique
+  rawEventJson    Json?
+  rawSnapshotJson Json?
+  createdAt       DateTime  @default(now())
+  updatedAtDb     DateTime  @updatedAt
+
+  @@index([height])
+}
+
+// Observed sample of a slot's per-epoch reward, tied to the height it was sampled at.
+// Claimed truth has two sources reconciled here: the snapshot's own claimed flag
+// (observed at sampledAtHeight) and claim provenance written by RewardClaimEvent.
+model SlotRewardProjection {
+  id              BigInt   @id @default(autoincrement())
+  slotId          BigInt
+  epochNumber     BigInt
+  amount          String
+  denom           String
+  claimed         Boolean  @default(false)
+  claimedAtHeight BigInt?
+  claimTxHash     String?
+  claimMsgIndex   Int?
+  claimEventId    BigInt?
+  sampledAtHeight BigInt?
+  rawSnapshotJson Json?
+  rawClaimJson    Json?
+  createdAt       DateTime @default(now())
+  updatedAtDb     DateTime @updatedAt
+
+  @@unique([slotId, epochNumber])
+  @@index([slotId])
+  @@index([epochNumber])
+  @@index([claimed])
+  @@index([claimTxHash])
+  @@index([sampledAtHeight])
+}
+
+// Rebuildable claim history from MsgClaimRewards + reward_claimed.
+model RewardClaimEvent {
+  id              BigInt   @id @default(autoincrement())
+  slotId          BigInt
+  claimant        String?
+  payoutAddress   String?
+  startEpoch      BigInt?
+  endEpoch        BigInt?
+  amount          String?
+  denom           String?
+  height          BigInt
+  txHash          String
+  msgIndex        Int?
+  sourceMessageId BigInt?
+  sourceEventId   BigInt?  @unique
+  rawMessageJson  Json?
+  rawEventJson    Json?
+  createdAt       DateTime @default(now())
+
+  @@index([slotId])
+  @@index([height])
+  @@index([txHash])
+  @@index([claimant])
+}
+
+// Rebuildable rewards params/pause/resume history.
+model RewardsParamsChange {
+  id              BigInt   @id @default(autoincrement())
+  height          BigInt
+  txHash          String?
+  msgIndex        Int?
+  authority       String?
+  changeType      String // queued | activated | pause | resume | direct_update
+  paramsJson      Json?
+  sourceMessageId BigInt?  @unique
+  sourceEventId   BigInt?  @unique
+  rawMessageJson  Json?
+  rawEventJson    Json?
+  createdAt       DateTime @default(now())
+
+  @@index([height])
+  @@index([changeType])
+  @@index([authority])
+  @@index([txHash])
+}
+
+// Rebuildable treasury_paid event history. Not slot reward claim truth.
+model RewardsTreasuryPayment {
+  id            BigInt   @id @default(autoincrement())
+  height        BigInt
+  recipient     String?
+  denom         String?
+  amount        String?
+  purpose       String?
+  sourceEventId BigInt?  @unique
+  rawEventJson  Json?
+  createdAt     DateTime @default(now())
+
+  @@index([height])
+  @@index([recipient])
+}
+
+// Observed live samples (module balances, cumulative emitted, supply schedule),
+// tied to the sampled height. Never treated as rebuildable semantic truth.
+model RewardsBalanceSample {
+  id         BigInt   @id @default(autoincrement())
+  height     BigInt
+  address    String?
+  moduleName String?
+  denom      String
+  amount     String
+  sampleKind String // module_balance | treasury | supply | cumulative_emitted
+  // Deterministic non-null idempotency key. A compound @@unique over nullable
+  // address/moduleName cannot be used as an upsert selector (Prisma) and Postgres
+  // does not dedupe NULLs in a unique index, so identity is carried by sampleKey:
+  // `${height}:${sampleKind}:${address ?? '-'}:${moduleName ?? '-'}:${denom}`.
+  sampleKey  String   @unique
+  rawJson    Json?
+  createdAt  DateTime @default(now())
+
+  @@index([height, sampleKind])
+  @@index([height])
+  @@index([sampleKind])
+}
