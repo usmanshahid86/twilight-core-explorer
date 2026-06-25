@@ -263,12 +263,54 @@ describe('ingestHeight', () => {
 
   it('stores finalize_block_events with distinct idempotent event keys', async () => {
     const base = loadFixture('empty-block.json');
-    const blockResults3582 = JSON.parse(
-      readFileSync(
-        join(repoRoot, 'docs/research/artifacts/phase-6b-3/rotate-slot4/block-results-3582.json'),
-        'utf8',
-      ),
-    );
+    const finalizeBlockEvents = [
+      {
+        type: 'coreslot_key_rotated',
+        attributes: [
+          { key: 'slot_id', value: '4', index: true },
+          {
+            key: 'operator_address',
+            value: 'twilight10c2jwy9vnhvtznflfr9urt87l34vrat7hfqsqq',
+            index: true,
+          },
+          { key: 'old_consensus_address', value: 'f060bf2347c76488a0390285e3b9ef3a44ec7d23', index: true },
+          { key: 'new_consensus_address', value: 'fa90d27eb73b75fed0fc7587d95da6537dc76f23', index: true },
+          { key: 'power', value: '1', index: true },
+          { key: 'effective_height', value: '3582', index: true },
+          { key: 'mode', value: 'EndBlock', index: true },
+        ],
+      },
+      {
+        type: 'coreslot_validator_update_emitted',
+        attributes: [
+          { key: 'slot_id', value: '4', index: true },
+          {
+            key: 'operator_address',
+            value: 'twilight10c2jwy9vnhvtznflfr9urt87l34vrat7hfqsqq',
+            index: true,
+          },
+          { key: 'consensus_address', value: 'f060bf2347c76488a0390285e3b9ef3a44ec7d23', index: true },
+          { key: 'power', value: '0', index: true },
+          { key: 'height', value: '3582', index: true },
+          { key: 'mode', value: 'EndBlock', index: true },
+        ],
+      },
+      {
+        type: 'coreslot_validator_update_emitted',
+        attributes: [
+          { key: 'slot_id', value: '4', index: true },
+          {
+            key: 'operator_address',
+            value: 'twilight10c2jwy9vnhvtznflfr9urt87l34vrat7hfqsqq',
+            index: true,
+          },
+          { key: 'consensus_address', value: 'fa90d27eb73b75fed0fc7587d95da6537dc76f23', index: true },
+          { key: 'power', value: '1', index: true },
+          { key: 'height', value: '3582', index: true },
+          { key: 'mode', value: 'EndBlock', index: true },
+        ],
+      },
+    ];
     const fixture = structuredClone(base);
     fixture.block.height = '3582';
     fixture.block.hash = 'BLOCK3582';
@@ -278,9 +320,9 @@ describe('ingestHeight', () => {
       height: '3582',
       beginBlockEvents: [{ type: 'phase_collision', attributes: [] }],
       endBlockEvents: [{ type: 'phase_collision', attributes: [] }],
-      finalizeBlockEvents: blockResults3582.result.finalize_block_events,
-      txResults: blockResults3582.result.txs_results ?? [],
-      raw: blockResults3582,
+      finalizeBlockEvents,
+      txResults: [],
+      raw: { result: { finalize_block_events: finalizeBlockEvents, txs_results: null } },
     };
 
     const client = createClient(fixture);

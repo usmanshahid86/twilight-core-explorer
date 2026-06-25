@@ -37,6 +37,7 @@
     "node": ">=18.0.0"
   },
   "devDependencies": {
+    "@types/node": "^26.0.0",
     "pg": "^8.13.1",
     "prisma": "^6.18.0"
   }
