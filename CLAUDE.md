@@ -33,7 +33,8 @@ docs/research/   one report per phase; checkpoint is the index/source of truth
 Data model: **generic canonical rows** (`Block`, `ExplorerTransaction`, `Message`, `Event`,
 `Account`, `DecodeFailure`, `IndexerCursor`) are ingested from chain data and are the single
 source of truth. **Semantic projections** (CoreSlot lifecycle/metadata/payout/params/key-
-rotation, temporal consensus map, rewards) are *derived* and *rebuildable* from those rows.
+rotation, temporal consensus map, rewards, block signatures, operator signing evidence,
+liveness, and health) are *derived* and *rebuildable* from those rows.
 
 ## Hard invariants (do not violate)
 
@@ -102,5 +103,6 @@ grep -R "/cosmos/staking\|/cosmos/gov\|/cosmos/mint\|/cosmos/distribution" apps 
 ## Status
 
 `docs/research/explorer-project-checkpoint.md` is the canonical status index. As of the latest
-work: CoreSlot semantic layer (6a/6b) and rewards projection (7) are done; next up is Phase 8
-(block-signature ingestion + liveness) on the corrected temporal map, then API and web.
+work: CoreSlot semantic layer (6a/6b), rewards projection (7), and Phase 8 CoreSlot liveness
+backend projections are done. Next major work is the public API and web explorer UI, with
+generated gRPC/proto clients still preserved as a later `ChainClient` transport.

@@ -168,9 +168,9 @@ Current cursor:
 
 Source inspected:
 
-- `/Users/quasar/Github/nyks-core/proto/twilight/coreslot/v1/tx.proto`
-- `/Users/quasar/Github/nyks-core/x/coreslot/keeper/msg_server.go`
-- `/Users/quasar/Github/nyks-core/x/coreslot/types/events.go`
+- `<path-to-nyks-core>/proto/twilight/coreslot/v1/tx.proto`
+- `<path-to-nyks-core>/x/coreslot/keeper/msg_server.go`
+- `<path-to-nyks-core>/x/coreslot/types/events.go`
 
 Messages:
 
@@ -192,10 +192,10 @@ Projection note: message rows capture intent and rich payloads such as metadata 
 
 Source inspected:
 
-- `/Users/quasar/Github/nyks-core/x/coreslot/types/events.go`
-- `/Users/quasar/Github/nyks-core/x/coreslot/keeper/events.go`
-- `/Users/quasar/Github/nyks-core/x/coreslot/keeper/msg_server.go`
-- `/Users/quasar/Github/nyks-core/x/coreslot/keeper/endblock.go`
+- `<path-to-nyks-core>/x/coreslot/types/events.go`
+- `<path-to-nyks-core>/x/coreslot/keeper/events.go`
+- `<path-to-nyks-core>/x/coreslot/keeper/msg_server.go`
+- `<path-to-nyks-core>/x/coreslot/keeper/endblock.go`
 
 CoreSlot event types and attributes:
 
@@ -235,9 +235,9 @@ Observed event example from DB:
 
 Source inspected:
 
-- `/Users/quasar/Github/nyks-core/proto/twilight/rewards/v1/tx.proto`
-- `/Users/quasar/Github/nyks-core/x/rewards/keeper/msg_server.go`
-- `/Users/quasar/Github/nyks-core/x/rewards/keeper/claims.go`
+- `<path-to-nyks-core>/proto/twilight/rewards/v1/tx.proto`
+- `<path-to-nyks-core>/x/rewards/keeper/msg_server.go`
+- `<path-to-nyks-core>/x/rewards/keeper/claims.go`
 
 Messages:
 
@@ -259,11 +259,11 @@ Rewards state/query structures of interest:
 
 Source inspected:
 
-- `/Users/quasar/Github/nyks-core/x/rewards/types/events.go`
-- `/Users/quasar/Github/nyks-core/x/rewards/keeper/events.go`
-- `/Users/quasar/Github/nyks-core/x/rewards/keeper/claims.go`
-- `/Users/quasar/Github/nyks-core/x/rewards/keeper/finalize.go`
-- `/Users/quasar/Github/nyks-core/x/rewards/keeper/msg_server.go`
+- `<path-to-nyks-core>/x/rewards/types/events.go`
+- `<path-to-nyks-core>/x/rewards/keeper/events.go`
+- `<path-to-nyks-core>/x/rewards/keeper/claims.go`
+- `<path-to-nyks-core>/x/rewards/keeper/finalize.go`
+- `<path-to-nyks-core>/x/rewards/keeper/msg_server.go`
 
 Rewards event types and attributes:
 

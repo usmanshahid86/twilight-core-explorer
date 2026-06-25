@@ -29,9 +29,9 @@ No CoreSlot or rewards semantic projection was implemented.
 Copied from the local chain repo:
 
 ```text
-/Users/quasar/Github/nyks-core/docs/proto/twilight-descriptors.pb
-/Users/quasar/Github/nyks-core/docs/proto/twilight-msg-type-urls.json
-/Users/quasar/Github/nyks-core/docs/proto/README.md
+<path-to-nyks-core>/docs/proto/twilight-descriptors.pb
+<path-to-nyks-core>/docs/proto/twilight-msg-type-urls.json
+<path-to-nyks-core>/docs/proto/README.md
 ```
 
 Copied into:

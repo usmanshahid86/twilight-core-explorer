@@ -3,7 +3,8 @@
 A Twilight-native blockchain explorer for **Twilight Core** — a CometBFT chain with a custom
 **CoreSlot PoA** validator model and a native **`x/rewards`** module. It indexes chain data
 into canonical generic rows and derives rebuildable semantic projections for CoreSlot
-ownership/lifecycle, consensus key rotation, the validator-set timeline, and rewards/economics.
+ownership/lifecycle, consensus key rotation, the validator-set timeline, rewards/economics,
+block signatures, operator signing evidence, CoreSlot liveness, and network health.
 
 It is intentionally **not** a standard Cosmos staking explorer: there is no
 staking/governance/mint/distribution support. Native denom is `utwlt` (display `TWLT`).
@@ -51,6 +52,13 @@ RESET_PROJECTION=true npm --prefix apps/indexer run project:coreslot-semantic
 
 # build the rewards semantic projection
 RESET_PROJECTION=true npm --prefix apps/indexer run project:rewards
+
+# build operator liveness projections
+RESET_PROJECTION=true npm --prefix apps/indexer run project:block-signatures
+RESET_PROJECTION=true npm --prefix apps/indexer run project:operator-signing-evidence
+RESET_PROJECTION=true npm --prefix apps/indexer run project:coreslot-liveness
+RESET_PROJECTION=true npm --prefix apps/indexer run project:coreslot-liveness-summary
+RESET_PROJECTION=true npm --prefix apps/indexer run project:coreslot-health
 ```
 
 ## Development
@@ -71,5 +79,31 @@ for current status and the phase history.
 ## Status
 
 CoreSlot semantic layer (metadata, lifecycle, payout/params, key rotation, temporal consensus
-map) and rewards semantic projection are implemented. Block-signature ingestion + liveness,
-the HTTP API, and the web UI are upcoming. Status is tracked in the project checkpoint.
+map), rewards semantic projection, rewards snapshots, block-signature ingestion, operator
+signature attribution, CoreSlot liveness evidence, liveness summaries, and health/risk snapshots
+are implemented.
+
+## Current Scope
+
+Implemented:
+
+- Generic block, transaction, message, event, account, cursor, and decode-failure indexing.
+- Descriptor-backed Cosmos SDK raw transaction decoding.
+- CoreSlot semantic projections and deterministic rebuild/reset tooling.
+- Rewards semantic and observed-snapshot projections.
+- Block-signature ingestion, signature-to-CoreSlot attribution, liveness evidence, liveness
+  summaries, and CoreSlot/network health snapshots.
+
+Not yet implemented:
+
+- Public HTTP API routes.
+- Web explorer UI.
+- Proposer enrichment.
+- Production deployment packaging and operating runbooks.
+- Generated gRPC/proto client transport behind `ChainClient`.
+
+Status is tracked in the project checkpoint.
+
+## License
+
+Apache-2.0. See [LICENSE](./LICENSE).

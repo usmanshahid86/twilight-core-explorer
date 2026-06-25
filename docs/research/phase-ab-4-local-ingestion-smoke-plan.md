@@ -12,7 +12,7 @@ The Twilight Core repo has enough localnet and smoke infrastructure to support A
 
 Chain repo path inspected:
 
-`/Users/quasar/Github/nyks-core`
+`<path-to-nyks-core>`
 
 Files inspected:
 
@@ -56,7 +56,7 @@ Relevant Makefile targets:
 | bank supply works | `smoke-api-surface.sh` checks `/cosmos/bank/v1beta1/supply` | PASS | Requires REST enabled. | Explorer wrapper checks it. |
 | at least one tx-containing block can be produced | `lifecycle-e2e.sh` submits CoreSlot txs; `rewards-smoke.sh` submits a rewards claim tx | MOSTLY | These scripts are full drills and may own lifecycle/teardown. No minimal harmless bank-send helper found. | Use a documented tx-producing drill, or submit a small bank send from a funded operator account manually. |
 | localnet can be reset | `scripts/localnet/stop.sh`, `scripts/localnet/init.sh` wipes `$TWILIGHT_LOCALNET_HOME` | PASS | None. | Use stop/init for reset. |
-| command can run from explorer repo | Chain commands require `cd /Users/quasar/Github/nyks-core`; explorer wrapper runs from explorer repo | PASS | Two-repo workflow. | Document exact directories and commands. |
+| command can run from explorer repo | Chain commands require `cd <path-to-nyks-core>`; explorer wrapper runs from explorer repo | PASS | Two-repo workflow. | Document exact directories and commands. |
 | API surface smoke exists | `make api-smoke` / `scripts/smoke-local.sh` | PASS | Self-contained script tears down localnet. | Use it to validate API wiring separately; use manual localnet for explorer ingestion. |
 
 ## 4. Exact Local Chain Start Commands
@@ -64,8 +64,8 @@ Relevant Makefile targets:
 Manual REST-enabled localnet that remains running for explorer smoke:
 
 ```sh
-cd /Users/quasar/Github/nyks-core
-export TWILIGHT_LOCALNET_HOME=/tmp/twilight-localnet
+cd <path-to-nyks-core>
+export TWILIGHT_LOCALNET_HOME=<twilight-localnet-home>
 export CHAIN_ID=twilight-localnet-1
 scripts/localnet/stop.sh || true
 scripts/localnet/init.sh
@@ -94,15 +94,15 @@ BASE_REST=http://localhost:1317 scripts/smoke-swagger-api.sh
 Reset/stop:
 
 ```sh
-cd /Users/quasar/Github/nyks-core
+cd <path-to-nyks-core>
 scripts/localnet/stop.sh
-rm -rf /tmp/twilight-localnet
+rm -rf <twilight-localnet-home>
 ```
 
 Self-contained API smoke, useful for route validation but not for explorer ingestion because it tears down:
 
 ```sh
-cd /Users/quasar/Github/nyks-core
+cd <path-to-nyks-core>
 make api-smoke
 ```
 
@@ -129,7 +129,7 @@ The chain API smoke also verifies:
 From the explorer repo:
 
 ```sh
-cd /Users/quasar/Github/twilight-core-explorer
+cd <path-to-twilight-core-explorer>
 docker compose up -d postgres
 DATABASE_URL=postgresql://twilight:twilight@localhost:5432/twilight_explorer?schema=public node scripts/wait-for-postgres.js
 DATABASE_URL=postgresql://twilight:twilight@localhost:5432/twilight_explorer?schema=public npm run db:deploy
@@ -146,7 +146,7 @@ TEST_DATABASE_URL=postgresql://twilight:twilight@localhost:5432/twilight_explore
 Explorer-side wrapper added:
 
 ```sh
-cd /Users/quasar/Github/twilight-core-explorer
+cd <path-to-twilight-core-explorer>
 CHAIN_ID=twilight-localnet-1 \
 COMET_RPC_URL=http://localhost:26657 \
 REST_URL=http://localhost:1317 \

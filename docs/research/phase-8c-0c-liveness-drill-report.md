@@ -21,7 +21,7 @@ the commit evidence, or must we deduce it?**
 
 - Chain: fresh 4-CoreSlot genesis localnet (`twilight-localnet-1`), all four slots
   `SLOT_STATUS_ACTIVE` from genesis, power 1 each. Node repo `nyks-core`, home
-  `/tmp/twilight-localnet`.
+  `<twilight-localnet-home>`.
 - Explorer: schema dropped/recreated, contiguous ingest **heights 1..361**, projections rebuilt
   (semantic incl. genesis seed → block_signatures_v1 → operator_signing_evidence_v1).
 - Genesis-seeded consensus windows (all open across the range):

@@ -34,11 +34,8 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: chain-client tests
-        run: npm --prefix packages/chain-client test
-
-      - name: indexer tests
-        run: npm --prefix apps/indexer test
+      - name: Root workspace tests
+        run: npm test
 
   route-guards:
     name: static route guards

@@ -1,19 +1,56 @@
+# OS
 .DS_Store
+Thumbs.db
+
+# Dependencies
 node_modules/
+
+# Build outputs
 dist/
-coverage/
+build/
+out/
+bin/
+.next/
+
+# Caches
+.cache/
+.parcel-cache/
+.turbo/
+*.tsbuildinfo
+
+# Logs
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Test / coverage artifacts
+coverage/
+coverage.txt
+.nyc_output/
+*.out
+*.prof
+*.pprof
+junit.xml
+
+# Environment / local config
 .env
 .env.*
 !.env.example
-node_modules/
 
-.next/
-build/
+# Local databases / dumps
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+*.sql
 
-.DS_Store
-reference/twilight-explorer/
-reference/twilight-indexer-api/
-reference/twilight-indexer/
+# IDEs
+.idea/
+*.iml
+*.iws
 
+# Local reference repos and generated research artifacts
+reference/
 docs/research/artifacts/

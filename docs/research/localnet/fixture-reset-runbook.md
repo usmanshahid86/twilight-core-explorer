@@ -24,16 +24,16 @@ explorer rows; reset the DB only at the start, then let projections rebuild from
 ## 0. Conventions / env
 
 ```sh
-export CHAIN_REPO=/Users/quasar/Github/nyks-core
-export EXPLORER_REPO=/Users/quasar/Github/twilight-core-explorer
-export TWILIGHT_LOCALNET_HOME=/tmp/twilight-localnet
+export CHAIN_REPO=<path-to-nyks-core>
+export EXPLORER_REPO=<path-to-twilight-core-explorer>
+export TWILIGHT_LOCALNET_HOME=<twilight-localnet-home>
 export CHAIN_ID=twilight-localnet-1
 
 export COMET_RPC_URL=http://127.0.0.1:26657
 export REST_URL=http://127.0.0.1:1317
 export DATABASE_URL='postgresql://twilight:twilight@localhost:5432/twilight_explorer?schema=public'
 export PG='postgresql://twilight:twilight@localhost:5432/twilight_explorer'   # psql form, no ?schema
-export PSQL='/Applications/Postgres.app/Contents/Versions/latest/bin/psql'
+export PSQL='psql'
 ```
 
 BFT quorum note (4 validators, equal power 1): the chain stays live with **3** signers. Stopping **1**
@@ -278,6 +278,6 @@ DATABASE_URL="$DATABASE_URL" npm run db:deploy
   stack rely only on RPC (`/block`, `/block_results`, `/genesis`). REST is needed only for observed-sample
   snapshots (rewards), not for liveness.
 - Node repo + localnet tooling live in `nyks-core` (`scripts/localnet/{stop,init,start}.sh`,
-  `./build/twilightd`). Localnet home is `/tmp/twilight-localnet`; logs in `.../logs`.
+  `./build/twilightd`). Localnet home is `<twilight-localnet-home>`; logs in `.../logs`.
 - Combined corrections replay globally — when correcting boundaries, reset + replay over the FULL
   indexed range, never a partial slice.

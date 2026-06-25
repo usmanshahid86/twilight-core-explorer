@@ -22,9 +22,9 @@ The smoke proved:
 The local chain was started from the chain repo:
 
 ```sh
-cd /Users/quasar/Github/nyks-core
+cd <path-to-nyks-core>
 
-export TWILIGHT_LOCALNET_HOME=/tmp/twilight-localnet
+export TWILIGHT_LOCALNET_HOME=<twilight-localnet-home>
 export CHAIN_ID=twilight-localnet-1
 
 scripts/localnet/stop.sh || true
@@ -60,10 +60,10 @@ No generic bank-send CLI was available through `twilightd tx bank send`; this ap
 A low-impact local CoreSlot metadata update tx was submitted instead:
 
 ```sh
-/Users/quasar/Github/nyks-core/build/twilightd coreslot update-metadata 1 explorer-smoke-<timestamp> \
+<path-to-nyks-core>/build/twilightd coreslot update-metadata 1 explorer-smoke-<timestamp> \
   --from operator0 \
   --keyring-backend test \
-  --home /tmp/twilight-localnet/node0 \
+  --home <twilight-localnet-home>/node0 \
   --chain-id twilight-localnet-1 \
   --node tcp://127.0.0.1:26657 \
   --gas 200000 \

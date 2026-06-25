@@ -70,6 +70,6 @@ Smoke check: `./scripts/smoke-api-surface.sh` (honors `BASE_REST`, `BASE_GRPC`,
   produce one on a localnet, run `scripts/seed-reservation.sh` after `init.sh` and before
   `start.sh`; it seeds a reservation into genesis and prints the hex to export:
   ```sh
-  RESERVED_CONS_HEX="$(TWILIGHT_LOCALNET_HOME=/tmp/twilight-localnet ./scripts/seed-reservation.sh -q)" \
+  RESERVED_CONS_HEX="$(TWILIGHT_LOCALNET_HOME=<twilight-localnet-home> ./scripts/seed-reservation.sh -q)" \
     ./scripts/smoke-api-surface.sh
   ```

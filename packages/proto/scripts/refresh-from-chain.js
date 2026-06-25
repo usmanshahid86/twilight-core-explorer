@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(here, '..');
-const chainRepoPath = resolve(process.env.CHAIN_REPO_PATH ?? '/Users/quasar/Github/nyks-core');
+const chainRepoPath = resolve(process.env.CHAIN_REPO_PATH ?? '../nyks-core');
 const sourceDir = join(chainRepoPath, 'docs', 'proto');
 const targetDir = join(packageRoot, 'descriptors');
 

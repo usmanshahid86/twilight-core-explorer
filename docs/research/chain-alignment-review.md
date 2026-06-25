@@ -4,7 +4,7 @@ Date: 2026-06-24
 Reviewer scope: READ-ONLY. Compares the explorer design + implementation reports in
 `docs/research/*.md` and the implemented packages (`packages/chain-client`,
 `packages/decoder`, `packages/proto`) against the verified chain source in
-`/Users/quasar/Github/nyks-core`. Every chain claim below was checked against code, not
+`<path-to-nyks-core>`. Every chain claim below was checked against code, not
 only against the handoff.
 
 Ground-truth reference: `nyks-core/docs/reference/explorer-integration-handoff.md`.

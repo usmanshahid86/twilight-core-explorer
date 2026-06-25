@@ -35,14 +35,14 @@ No projector code was changed in this phase. A follow-up implementation patch is
 
 ## 2. Localnet Environment
 
-- Chain repo: `/Users/quasar/Github/nyks-core`
-- Explorer repo: `/Users/quasar/Github/twilight-core-explorer`
-- Localnet home: `/tmp/twilight-localnet`
+- Chain repo: `<path-to-nyks-core>`
+- Explorer repo: `<path-to-twilight-core-explorer>`
+- Localnet home: `<twilight-localnet-home>`
 - Chain ID: `twilight-localnet-1`
 - RPC: `http://127.0.0.1:26657`
 - REST: `http://127.0.0.1:1317`
 - Topology: 4 local validator nodes
-- Binary: `/Users/quasar/Github/nyks-core/build/twilightd`
+- Binary: `<path-to-nyks-core>/build/twilightd`
 
 Baseline status:
 
@@ -81,7 +81,7 @@ Lifecycle closure:
 
 ```text
 twilightd coreslot inactivate 4 phase-6b-3-boundary \
-  --from operator0 --keyring-backend test --home /tmp/twilight-localnet/node0 \
+  --from operator0 --keyring-backend test --home <twilight-localnet-home>/node0 \
   --chain-id twilight-localnet-1 --node tcp://127.0.0.1:26657 \
   --gas 600000 --fees 0utwlt --broadcast-mode sync --output json -y
 ```
@@ -90,7 +90,7 @@ Lifecycle activation:
 
 ```text
 twilightd coreslot activate 4 \
-  --from operator0 --keyring-backend test --home /tmp/twilight-localnet/node0 \
+  --from operator0 --keyring-backend test --home <twilight-localnet-home>/node0 \
   --chain-id twilight-localnet-1 --node tcp://127.0.0.1:26657 \
   --gas 600000 --fees 0utwlt --broadcast-mode sync --output json -y
 ```
@@ -98,10 +98,10 @@ twilightd coreslot activate 4 \
 Key rotation:
 
 ```text
-/Users/quasar/Github/nyks-core/scripts/localnet/gen-consensus-key.sh phase-6b-3-slot4-rotation
+<path-to-nyks-core>/scripts/localnet/gen-consensus-key.sh phase-6b-3-slot4-rotation
 
 twilightd coreslot rotate-key 4 <new-consensus-pubkey-base64> \
-  --from operator0 --keyring-backend test --home /tmp/twilight-localnet/node0 \
+  --from operator0 --keyring-backend test --home <twilight-localnet-home>/node0 \
   --chain-id twilight-localnet-1 --node tcp://127.0.0.1:26657 \
   --gas 600000 --fees 0utwlt --broadcast-mode sync --output json -y
 ```
@@ -110,8 +110,8 @@ After the key rotation, node3 was restarted with the generated key file so the l
 remained healthy:
 
 ```text
-cp /tmp/twilight-localnet/keys/phase-6b-3-slot4-rotation/config/priv_validator_key.json \
-  /tmp/twilight-localnet/node3/config/priv_validator_key.json
+cp <twilight-localnet-home>/keys/phase-6b-3-slot4-rotation/config/priv_validator_key.json \
+  <twilight-localnet-home>/node3/config/priv_validator_key.json
 ```
 
 ## 5. Lifecycle Boundary Evidence
