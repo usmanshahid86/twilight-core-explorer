@@ -13,7 +13,8 @@ seed; 8c-0c proved an absent validator is anonymous in the commit (so misses are
 set-difference); 8c-1 materializes the per-height expected-signer / missed evidence and was
 live-validated on a clean 4-operator fixture (1440 rows, 41 slot-4 misses = 39 absent + 2 nil);
 8c-2 aggregates that evidence into per-(slot, window) liveness summaries (slot 4 lifetime uptime
-8861 bps, recent_100 5900 bps; slots 1-3 = 10000).
+8861 bps, recent_100 5900 bps; slots 1-3 = 10000); 8c-3 derives health labels + a network halt-risk
+snapshot from those summaries (slots 1-3 healthy, slot 4 degraded, network = warning).
 
 This document summarizes what has already been decided and built, what is still only
 designed, and the recommended sequence from here. It is intended to keep implementation
@@ -771,6 +772,29 @@ Status: **PASS.** See `docs/research/phase-8c-2-coreslot-liveness-summaries-repo
 
 Health labels/thresholds, network halt-risk, per-operator grain, API, and web remain deferred.
 
+### Phase 8c-3: CoreSlot Health / Network Halt-Risk (completed)
+
+Status: **PASS.** See `docs/research/phase-8c-3-coreslot-health-report.md`. Implemented
+`coreslot_health_v1` writing `CoreSlotHealthSnapshot` (per active CoreSlot) +
+`NetworkLivenessRiskSnapshot` (single latest). Policy layer over 8c-2; numeric truth stays in the
+summaries.
+
+- consumes `CoreSlotLivenessSummary` + `CoreSlotConsensusWindow` (active set via
+  `findActiveCoreSlotWindowsAtHeight`) + `ProjectionFailure`; no BlockSignature/OperatorSigningEvidence,
+  no live reads, no proposer/API/web, equal-power v1.
+- health from recent_100 (lifetime/recent_500/recent_1000 = context); strict precedence
+  unknown → incomplete → down(streak≥10) → degraded(streak 1-9 / recent misses) → healthy. Constants
+  `degradedUptimeBps 9900`, `downMissedStreak 10`, versioned `coreslot_health_policy_v1`.
+- active set = temporal-map windows at networkLatestHeight; only active slots emitted; active-without-
+  summary → unknown/missing_summary; an active unknown/incomplete slot forces network
+  unknown/coverage_unknown.
+- network halt-risk (equal power): unknown(no_slots/coverage) → critical(avail ≤ 6666 bps) →
+  warning(down/degraded present) → normal; single deterministic latest row.
+- live-validated: slots 1-3 healthy, slot 4 degraded (recovered, streak 0 → not down), network
+  warning, availablePowerBps 10000, 0 failures.
+
+API, web, per-operator grain, consensusPower weighting, historical network snapshots remain deferred.
+
 ### Sequencing note: rewards and liveness
 
 Rewards and liveness can proceed in parallel after the CoreSlot temporal map exists. Rewards
@@ -981,23 +1005,20 @@ The phases can be batched differently, but the dependencies should not be blurre
 
 Recommended next implementation step:
 
-**Phase 8c-3: liveness health labels** — now unblocked by the Phase 8c-2 numeric summaries.
-8c-2 is complete and live-validated (`coreslot_liveness_summary_v1` / `CoreSlotLivenessSummary`,
-16 summary rows; slot 4 lifetime uptime 8861 bps / recent_100 5900 bps; slots 1-3 = 10000; 0
-unresolved failures). 8c-3 should derive health labels/thresholds (`healthy`/`degraded`/`down`/
-`unknown`/`incomplete`) from the summary `uptimeBps` / streaks / `summaryStatus`, plus optional
-network-level halt-risk margin vs BFT quorum — still derived/rebuildable, no live snapshots. Then
-API/web can surface operator liveness.
+**Phase 9: API foundation** — the full liveness backend stack (8a → 8b → 8c-0b/0c → 8c-1 → 8c-2 →
+8c-3) is complete and live-validated, so the next step is exposing indexed/derived data through a
+stable explorer API (health/live/ready, indexer status, blocks/txs/accounts/search, CoreSlot +
+rewards projections, operator liveness/health/economics). Web (Phase 10) and Twilight-specific pages
+(Phase 11) follow.
 
-Candidate 8c-3 scope:
+The operator-liveness data dependency that gated the operator UX milestone is now fully satisfied:
+`CoreSlotHealthSnapshot` + `NetworkLivenessRiskSnapshot` give per-operator health and network
+halt-risk directly.
 
-- per-(slot, window) health label from uptimeBps thresholds + current streak + summaryStatus.
-- network-level liveness (active CoreSlot count, missed-this-window, halt-risk margin vs quorum).
-- a `down` slot driven by `currentMissedStreak`; `incomplete` propagated from summary coverage.
-
-Broader liveness fixtures still worth exercising before product surfaces: multi-node simultaneous
-outage, and a consensus-key rotation mid-outage (to live-exercise the
-`observed_attributed_slot_not_expected` boundary guard).
+Broader liveness fixtures still worth exercising before product surfaces (not blockers): multi-node
+simultaneous outage (network `critical`), and a consensus-key rotation mid-outage (to live-exercise
+the `observed_attributed_slot_not_expected` boundary guard). Phase 7.2 live rewards claim fixture
+also remains open before rewards economics pages rely on live claim behavior.
 
 Phase 7.2 can run in parallel later once a finalized claimable rewards epoch exists. It does
 not block this work, but should happen before rewards API/web/operator-economics claim

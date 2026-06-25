@@ -260,6 +260,75 @@ model CoreSlotLivenessSummary {
   @@index([slotId, windowKind])
 }
 
+// Phase 8c-3: per-active-CoreSlot health label derived from the recent_100 CoreSlotLivenessSummary,
+// with lifetime/recent_500/recent_1000 as context. Numeric truth lives in 8c-2; this is the policy
+// layer (coreslot_health_policy_v1). Only slots active at the latest observed height are emitted.
+model CoreSlotHealthSnapshot {
+  id                   BigInt   @id @default(autoincrement())
+  healthKey            String   @unique
+  slotId               BigInt
+  operatorAddress      String?
+  consensusAddress     String?
+  consensusWindowId    BigInt?
+  primaryWindowKind    String
+  primarySummaryId     BigInt?
+  lifetimeSummaryId    BigInt?
+  recent500SummaryId   BigInt?
+  recent1000SummaryId  BigInt?
+  expectedCount        Int
+  signedCount          Int
+  missedCount          Int
+  absentMissedCount    Int
+  nilMissedCount       Int
+  uptimeBps            Int?
+  currentSignedStreak  Int
+  currentMissedStreak  Int
+  latestMissedHeight   BigInt?
+  summaryStatus        String?
+  invalidHeightCount   Int
+  firstCommittedHeight BigInt?
+  lastCommittedHeight  BigInt?
+  lifetimeUptimeBps    Int?
+  recent500UptimeBps   Int?
+  recent1000UptimeBps  Int?
+  isActiveAtLatest     Boolean
+  healthStatus         String
+  healthReason         String?
+  policyVersion        String
+  createdAt            DateTime @default(now())
+  updatedAtDb          DateTime @updatedAt
+
+  @@index([slotId])
+  @@index([healthStatus])
+  @@index([isActiveAtLatest])
+  @@index([operatorAddress])
+}
+
+// Phase 8c-3: single deterministic latest network halt-risk snapshot derived from the active
+// CoreSlotHealthSnapshot set (equal-power v1). Explorer/operator heuristic, NOT a consensus rule.
+model NetworkLivenessRiskSnapshot {
+  id                   BigInt   @id @default(autoincrement())
+  riskKey              String   @unique
+  policyVersion        String
+  latestCommittedHeight BigInt?
+  activeSlotCount      Int
+  healthySlotCount     Int
+  degradedSlotCount    Int
+  downSlotCount        Int
+  incompleteSlotCount  Int
+  unknownSlotCount     Int
+  availableSlotCount   Int
+  unavailableSlotCount Int
+  availablePowerBps    Int?
+  unavailablePowerBps  Int?
+  haltRiskLevel        String
+  haltRiskReason       String?
+  createdAt            DateTime @default(now())
+  updatedAtDb          DateTime @updatedAt
+
+  @@index([haltRiskLevel])
+}
+
 model ProjectionCursor {
   projectionName      String
   chainId             String

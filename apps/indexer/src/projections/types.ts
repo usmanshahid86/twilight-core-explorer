@@ -55,6 +55,54 @@ export const CORESLOT_LIVENESS_SUMMARY_STATUS = {
   incomplete: 'incomplete',
 } as const;
 
+// Phase 8c-3: operator-facing health/risk semantics derived from CoreSlotLivenessSummary.
+export const CORESLOT_HEALTH_PROJECTION = 'coreslot_health_v1';
+
+export const CORESLOT_HEALTH_STATUS = {
+  healthy: 'healthy',
+  degraded: 'degraded',
+  down: 'down',
+  unknown: 'unknown',
+  incomplete: 'incomplete',
+} as const;
+
+export const CORESLOT_HEALTH_REASON = {
+  completeNoRecentMisses: 'complete_no_recent_misses',
+  recentMisses: 'recent_misses',
+  currentMissStreak: 'current_miss_streak',
+  sustainedMissStreak: 'sustained_miss_streak',
+  incompleteSummary: 'incomplete_summary',
+  corruptSummary: 'corrupt_summary',
+  missingSummary: 'missing_summary',
+} as const;
+
+export const NETWORK_HALT_RISK_LEVEL = {
+  normal: 'normal',
+  warning: 'warning',
+  critical: 'critical',
+  unknown: 'unknown',
+} as const;
+
+export const NETWORK_HALT_RISK_REASON = {
+  noSlots: 'no_slots',
+  coverageUnknown: 'coverage_unknown',
+  insufficientAvailablePower: 'insufficient_available_power',
+  degradedOrDownPresent: 'degraded_or_down_present',
+  allHealthy: 'all_healthy',
+} as const;
+
+// v1 health/risk POLICY constants (explorer heuristics, NOT protocol rules). Centralized + versioned.
+export const CORESLOT_HEALTH_POLICY = {
+  version: 'coreslot_health_policy_v1',
+  // current health is based on the recent_100 window
+  primaryWindowKind: 'recent_100',
+  degradedUptimeBps: 9900,
+  downMissedStreak: 10,
+  // network halt-risk (equal-power v1): critical at <= 2/3 available, warning margin at >= 25% down
+  criticalAvailablePowerBps: 6666,
+  warningUnavailablePowerBps: 2500,
+} as const;
+
 // Currently implemented CoreSlot semantic projections, in deterministic rebuild
 // order. The combined reset/rebuild command is scoped to exactly these.
 export const CORESLOT_SEMANTIC_PROJECTIONS = [
@@ -220,6 +268,9 @@ export type ProjectionFailureKind =
   | 'unknown_liveness_shape'
   | 'malformed_liveness_input'
   | 'liveness_summary_invariant_violation'
+  | 'coreslot_health_invariant_violation'
+  | 'network_liveness_risk_invariant_violation'
+  | 'unknown_coreslot_health_shape'
   | 'unknown_semantic_type'
   | 'unknown_coreslot_message'
   | 'unknown_coreslot_event'
