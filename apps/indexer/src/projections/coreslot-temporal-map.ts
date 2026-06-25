@@ -95,7 +95,7 @@ interface RotationSource {
   rawAppliedEventJson: unknown | null;
 }
 
-interface ConsensusWindowSource {
+export interface ConsensusWindowSource {
   id: bigint;
   slotId: bigint;
   operatorAddress: string | null;
@@ -882,6 +882,36 @@ export async function findConsensusWindowAtHeight(
       OR: [{ effectiveToHeight: null }, { effectiveToHeight: { gt: height } }],
     },
     orderBy: [{ effectiveFromHeight: 'desc' }],
+  });
+}
+
+/**
+ * Returns every materialized CoreSlot consensus window that covers `committedHeight`
+ * (across all slots / consensus addresses). This is the expected-signer enumeration used by
+ * the liveness projection (Phase 8c-1).
+ *
+ * Coverage is decided purely from the materialized window bounds:
+ *   effectiveFromHeight <= committedHeight AND (effectiveToHeight IS NULL OR effectiveToHeight > committedHeight)
+ *
+ * It does NOT consult current CoreSlotProjection.status, does NOT apply the +2 membership
+ * offset (that offset is already baked into effectiveFromHeight at window-open time via
+ * membershipHeightFromValidatorUpdate), and naturally excludes closed/inactive windows (a window
+ * closed at boundary B has effectiveToHeight=B, so it is excluded for committedHeight >= B).
+ * Mirrors the coverage predicate of findConsensusWindowAtHeight; the temporal-map module remains
+ * the sole owner of window-boundary semantics.
+ */
+export async function findActiveCoreSlotWindowsAtHeight(
+  prisma: {
+    coreSlotConsensusWindow: { findMany(args: unknown): Promise<ConsensusWindowSource[]> };
+  },
+  committedHeight: bigint,
+): Promise<ConsensusWindowSource[]> {
+  return prisma.coreSlotConsensusWindow.findMany({
+    where: {
+      effectiveFromHeight: { lte: committedHeight },
+      OR: [{ effectiveToHeight: null }, { effectiveToHeight: { gt: committedHeight } }],
+    },
+    orderBy: [{ slotId: 'asc' }, { effectiveFromHeight: 'asc' }],
   });
 }
 

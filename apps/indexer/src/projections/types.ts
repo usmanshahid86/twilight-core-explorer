@@ -6,6 +6,7 @@ export const CORESLOT_KEY_ROTATION_PROJECTION = 'coreslot_key_rotation_v1';
 export const CORESLOT_TEMPORAL_MAP_PROJECTION = 'coreslot_temporal_map_v1';
 export const BLOCK_SIGNATURES_PROJECTION = 'block_signatures_v1';
 export const OPERATOR_SIGNING_EVIDENCE_PROJECTION = 'operator_signing_evidence_v1';
+export const CORESLOT_LIVENESS_PROJECTION = 'coreslot_liveness_v1';
 
 export const OPERATOR_SIGNING_ATTRIBUTION_STATUS = {
   attributed: 'attributed',
@@ -14,6 +15,19 @@ export const OPERATOR_SIGNING_ATTRIBUTION_STATUS = {
   unmappedValidator: 'unmapped_validator',
   invalidValidatorAddress: 'invalid_validator_address',
   unknownShape: 'unknown_shape',
+} as const;
+
+// Phase 8c-1 liveness verdict per (committed height, expected active CoreSlot).
+export const CORESLOT_LIVENESS_STATUS = {
+  signed: 'signed',
+  missed: 'missed',
+} as const;
+
+// Why a missed expected-signer did not commit. `absent` = anonymous flag-1 gap assigned by
+// set-difference; `nil` = address-bearing flag-3 vote. Both are `missed`.
+export const CORESLOT_LIVENESS_MISS_CAUSE = {
+  absent: 'absent',
+  nil: 'nil',
 } as const;
 
 // Currently implemented CoreSlot semantic projections, in deterministic rebuild
@@ -173,6 +187,13 @@ export type ProjectionFailureKind =
   | 'malformed_temporal_window'
   | 'database_write_failure'
   | 'unknown_operator_signing_evidence_shape'
+  | 'liveness_absent_count_mismatch'
+  | 'duplicate_expected_slot_at_height'
+  | 'duplicate_observed_signed_slot_at_height'
+  | 'nil_and_signed_same_slot_height'
+  | 'observed_attributed_slot_not_expected'
+  | 'unknown_liveness_shape'
+  | 'malformed_liveness_input'
   | 'unknown_semantic_type'
   | 'unknown_coreslot_message'
   | 'unknown_coreslot_event'

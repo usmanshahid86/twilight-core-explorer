@@ -5,10 +5,13 @@ Date: 2026-06-25
 Status: checkpoint after Phase A/B foundation, descriptor decoder work, chain-alignment
 cleanup, the full CoreSlot semantic projection set, temporal consensus map/boundary
 corrections, Phase 7 / 7.1 rewards semantic projection, Phase 8a/8b signature
-ingestion + attribution, the Phase 8c-0 coverage-truth check, and Phase 8c-0b genesis
-temporal-map seed. The 8c-0 check established that liveness is **CoreSlots-only** and that
+ingestion + attribution, the Phase 8c-0 coverage-truth check, Phase 8c-0b genesis
+temporal-map seed, the Phase 8c-0c live one-node liveness drill, and Phase 8c-1 CoreSlot
+liveness evidence. The 8c-0 check established that liveness is **CoreSlots-only** and that
 genesis CoreSlots emit no indexable event; 8c-0b implements the required height-1 temporal-map
-seed.
+seed; 8c-0c proved an absent validator is anonymous in the commit (so misses are computed by
+set-difference); 8c-1 materializes the per-height expected-signer / missed evidence and was
+live-validated on a clean 4-operator fixture (1440 rows, 41 slot-4 misses = 39 absent + 2 nil).
 
 This document summarizes what has already been decided and built, what is still only
 designed, and the recommended sequence from here. It is intended to keep implementation
@@ -711,21 +714,38 @@ This removes the Phase 8c-1 blocker at the design/code level. A fresh contiguous
 with active genesis CoreSlot operators is still recommended before using liveness evidence as a
 product signal.
 
-### Phase 8c-1: Liveness — Expected Set + Missed Evidence
+### Phase 8c-0c: Live One-Node Liveness Drill (completed)
 
-Goal:
+Status: DONE (analysis + live evidence; no projection added). See
+`docs/research/phase-8c-0c-liveness-drill-report.md`. Stopped one of four CoreSlot operators
+(slot 4) on the clean fixture and re-ingested. Key empirical finding: an absent validator is
+**anonymous in the commit** — flag-1 ABSENT entries carry an empty `validator_address`, so 8b
+classifies them `absent_no_validator`. Misses therefore **must** be computed by set-difference
+(expected active CoreSlots minus flag-2 signed observations), never read off a flag. NIL (flag 3)
+entries are address-bearing and identifiable but still missed. This fixed the 8c-1 design.
 
-- Add per-height expected-signer / missed-signature evidence (CoreSlots-only).
+### Phase 8c-1: Liveness — Expected Set + Missed Evidence (completed)
 
-Scope:
+Status: **PASS.** See `docs/research/phase-8c-1-coreslot-liveness-report.md`. Implemented
+`coreslot_liveness_v1` / `CoreSlotLivenessEvidence`: one row per (committed height, active CoreSlot),
+`signed` | `missed` with cause `absent` | `nil`.
 
-- consume `OperatorSigningEvidence` + genesis-seeded `CoreSlotConsensusWindow`.
-- enumerate expected signers at committed height = active CoreSlots (not the consensus commit set).
-- missed = expected active CoreSlots minus observed attributed+signed evidence.
-- keep `no_consensus_window`/`unmapped_validator`/`absent_no_validator` out of missed semantics.
-- defer uptime percentages / rolling summaries to Phase 8c-2.
+- consumes materialized `OperatorSigningEvidence` + genesis-seeded `CoreSlotConsensusWindow` only
+  (no live RPC/genesis/validator-set reads).
+- expected signers = active CoreSlots at committed H via new
+  `findActiveCoreSlotWindowsAtHeight` (CoreSlots-only, not the consensus commit set).
+- missed = expected active CoreSlots minus flag-2 signed evidence; both ABSENT and NIL are missed,
+  cause retained. Committed heights read from `OperatorSigningEvidence.committedBlockHeight`, never
+  derived. Cursor axis = `sourceBlockHeight` (matches 8a/8b).
+- per-height compute→validate→write with hard height-level guards (absent-count mismatch, duplicate
+  expected/signed slot, nil+signed same slot, attributed-not-expected). Failure policy: a hard
+  failure invalidates the committed height — existing rows for H are deleted, no new rows are
+  written, and a deterministic `ProjectionFailure` is recorded; processing continues.
+- live-validated on the 4-operator fixture (heights 1..361): 1440 rows, 1399 signed, 41 missed (all
+  slot 4: 39 absent + 2 nil), 0 unresolved failures.
 
-No staking validator APIs.
+No staking validator APIs. Uptime %, rolling summaries, current health, proposer enrichment, API,
+and web remain deferred to Phase 8c-2+.
 
 ### Sequencing note: rewards and liveness
 
@@ -937,22 +957,21 @@ The phases can be batched differently, but the dependencies should not be blurre
 
 Recommended next implementation step:
 
-**Phase 8c-1: expected set + missed evidence** — now unblocked by the genesis temporal-map seed.
+**Phase 8c-2: uptime/liveness summaries** — now unblocked by the Phase 8c-1 per-height evidence.
+8c-1 is complete and live-validated on the clean 4-operator fixture (1440 rows, 41 slot-4 misses).
+8c-2 should aggregate `CoreSlotLivenessEvidence` into per-operator/rolling-window uptime and
+network halt-risk summaries (still derived/rebuildable, no live snapshots), then API/web can surface
+operator liveness.
 
-Before treating the Phase 8c-1 output as product-grade, rebuild the localnet fixture with active
-genesis CoreSlot operators and re-ingest contiguously from height 1. The current DB is a sparse
-36-block smoke set and is useful for attribution checks, not final liveness confidence.
+Candidate 8c-2 scope:
 
-Minimum acceptance:
+- per-operator signed/missed counts and rolling-window uptime over committed-height ranges.
+- network-level liveness (active CoreSlot count, missed-this-window, halt-risk margin vs BFT quorum).
+- keep it rebuildable from `CoreSlotLivenessEvidence`; no current-snapshot-only health.
 
-- consume `OperatorSigningEvidence` and genesis-seeded `CoreSlotConsensusWindow`.
-- expected signer set = active CoreSlots at committed height.
-- missed = expected active CoreSlots minus observed attributed signed evidence.
-- preserve the Phase 8b taxonomy: `no_consensus_window`, `unmapped_validator`, and
-  `absent_no_validator` are not themselves missed-signature evidence.
-- no uptime percentages, proposer enrichment, API/web, or staking validator APIs yet.
-
-Then Phase 8c-1 (expected set + missed evidence, CoreSlots-only) consumes the now-complete map.
+Broader liveness fixtures still worth exercising before product surfaces: multi-node simultaneous
+outage, and a consensus-key rotation mid-outage (to live-exercise the
+`observed_attributed_slot_not_expected` boundary guard).
 
 Phase 7.2 can run in parallel later once a finalized claimable rewards epoch exists. It does
 not block this work, but should happen before rewards API/web/operator-economics claim

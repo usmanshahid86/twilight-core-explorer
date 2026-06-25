@@ -190,6 +190,38 @@ model OperatorSigningEvidence {
   @@index([attributionStatus])
 }
 
+// Phase 8c-1: per-(committed height, expected active CoreSlot) liveness evidence. Stores BOTH
+// signed and missed rows. Misses are computed by set-difference (expected active CoreSlots minus
+// flag-2 signed observations); an absent operator is anonymous in the commit, so misses are never
+// read off a flag. Rebuildable from CoreSlotConsensusWindow + OperatorSigningEvidence.
+model CoreSlotLivenessEvidence {
+  id                      BigInt   @id @default(autoincrement())
+  evidenceKey             String   @unique
+  committedBlockHeight    BigInt
+  sourceBlockHeight       BigInt?
+  slotId                  BigInt
+  operatorAddress         String?
+  consensusAddress        String?
+  consensusPower          BigInt?
+  consensusWindowId       BigInt?
+  status                  String
+  missCause               String?
+  observedSignatureKey    String?
+  observedBlockIdFlag     String?
+  observedBlockIdFlagCode Int?
+  observedSigned          Boolean?
+  observedAttributionStatus String?
+  createdAt               DateTime @default(now())
+  updatedAtDb             DateTime @updatedAt
+
+  @@index([committedBlockHeight])
+  @@index([slotId])
+  @@index([operatorAddress])
+  @@index([consensusAddress])
+  @@index([status])
+  @@index([missCause])
+}
+
 model ProjectionCursor {
   projectionName      String
   chainId             String
