@@ -264,6 +264,110 @@ DATABASE_URL="$DATABASE_URL" npm run db:deploy
 
 ────────────────────────────────
 
+## Part G — Real-transaction behavioral pass (semantic + lifecycle + rotation)
+
+Drive the chain with REAL `twilightd coreslot` txs and verify the indexer's semantic/temporal/liveness
+rows respond. This is the natural-transaction validation (no DB manipulation) — see
+`../phase-8c-live-behavioral-validation-report.md` for a full run (all categories PASS, 2026-06-26).
+
+> Do NOT run `scripts/localnet/lifecycle-e2e.sh` / `restart-rotation.sh` directly — they create and
+> tear down their OWN network. Mine them for command shapes; run the individual txs against the live
+> localnet as below.
+
+Setup (sourceable helpers):
+
+```sh
+BIN="$CHAIN_REPO/build/twilightd"
+# cs <authority|emergency> <subcmd> <args...>   (authority=operator0/node0, emergency=operator1/node1)
+cs() { local who="$1"; shift; local home=node0 from=operator0;
+  [ "$who" = emergency ] && { home=node1; from=operator1; }
+  "$BIN" coreslot "$@" --from "$from" --keyring-backend test --home "$TWILIGHT_LOCALNET_HOME/$home" \
+    --chain-id "$CHAIN_ID" --node "tcp://127.0.0.1:26657" --gas 600000 --fees 0utwlt \
+    --broadcast-mode sync --output json -y | jq -c '{code, txhash}'; }
+# after each tx: ingest new heights, run the affected projections incrementally, then verify in psql.
+ingest() { local last tip; last=$($PSQL "$PG" -tAc 'select coalesce(max(height),0) from "Block";');
+  tip=$(curl -s "$COMET_RPC_URL/status" | jq -r '.result.sync_info.latest_block_height');
+  ( cd "$EXPLORER_REPO" && START_HEIGHT=$((last+1)) END_HEIGHT="$tip" npm --prefix apps/indexer run start ); }
+```
+
+**Verify landing via the indexer, NOT `twilightd query tx`** (the localnet tx index is unreliable; the
+explorer is block-results based and authoritative). Slot N owner = `operator(N-1)`.
+
+### G1 metadata / payout / params (no validator-set effect)
+```sh
+cs authority update-metadata 1 "explorer-live-test"
+cs authority update-payout  1 twilight1fj2mxgv4ptjz8vhkaga7grhftp7e39pud6ze6v
+# params: int64 fields must be NUMBERS, not the strings coreslot-query returns
+$BIN coreslot-query params --node tcp://127.0.0.1:26657 -o json | jq '.params
+  | .slot_voting_power|=tonumber | .min_active_slots|=tonumber | .activation_delay_blocks|=tonumber
+  | .key_rotation_delay_blocks|=tonumber | .removal_delay_blocks|=tonumber
+  | .consensus_key_reuse_lockout|=tonumber | .max_active_slots=101' > /tmp/params.json
+cs authority update-params /tmp/params.json
+ingest
+( cd "$EXPLORER_REPO" && for p in coreslot-metadata coreslot-payout coreslot-params; do \
+    npm --prefix apps/indexer run project:$p; sleep 1; done )
+$PSQL "$PG" -tAc 'select "slotId","metadataJson","payoutAddress" from "CoreSlotProjection" where "slotId"=1;'
+$PSQL "$PG" -tAc 'select height from "Event" where type='"'"'coreslot_params_updated'"'"' order by height desc limit 1;'
+```
+
+### G2 lifecycle inactivate→reactivate (validator-set close/reopen at +2)
+```sh
+cs authority inactivate 4 "maintenance"   # watch /validators drop 4->3 at tx+2
+cs authority activate   4                 # watch /validators return 3->4 at tx+2
+ingest
+( cd "$EXPLORER_REPO" && for p in coreslot-lifecycle coreslot-temporal-map block-signatures \
+    operator-signing-evidence coreslot-liveness coreslot-liveness-summary coreslot-health; do \
+    npm --prefix apps/indexer run project:$p; sleep 1; done )
+# expect: slot 4 window closed at inactivate+2, new window opened at reactivate+2; ZERO missed rows in the gap
+$PSQL "$PG" -tAc 'select "effectiveFromHeight","effectiveToHeight","openedByKind","closedByKind" from "CoreSlotConsensusWindow" where "slotId"=4 order by "effectiveFromHeight";'
+```
+`suspend` is identical but emergency-signed: `cs emergency suspend <slot> "evidence" "incident-001"`
+then `cs authority activate <slot>` (status ACTIVE→SUSPENDED→ACTIVE).
+
+### G3 key rotation (attribution switch at +2, with node restart)
+```sh
+KEYOUT=$("$CHAIN_REPO/scripts/localnet/gen-consensus-key.sh" rotated-node2)   # <pubkey_b64>\t<keyfile>
+NEWPUB=$(cut -f1 <<<"$KEYOUT"); NEWKEY=$(cut -f2 <<<"$KEYOUT")
+cs authority rotate-key 3 "$NEWPUB"        # KeyRotationDelayBlocks=1; applies at tx+1
+# swap node2's key (LEAVE priv_validator_state.json) and restart so it signs with the new key:
+kill "$(cat "$TWILIGHT_LOCALNET_HOME/node2.pid")"; rm -f "$TWILIGHT_LOCALNET_HOME/node2.pid"; sleep 2
+cp "$NEWKEY" "$TWILIGHT_LOCALNET_HOME/node2/config/priv_validator_key.json"
+"$BIN" start --home "$TWILIGHT_LOCALNET_HOME/node2" --minimum-gas-prices 0utwlt --log_no_color \
+  >>"$TWILIGHT_LOCALNET_HOME/logs/node2.log" 2>&1 & echo $! > "$TWILIGHT_LOCALNET_HOME/node2.pid"
+ingest
+( cd "$EXPLORER_REPO" && for p in coreslot-key-rotation coreslot-temporal-map block-signatures \
+    operator-signing-evidence coreslot-liveness coreslot-liveness-summary coreslot-health; do \
+    npm --prefix apps/indexer run project:$p; sleep 1; done )
+# expect: old window closed + new window opened at applied+2; attribution follows the SAME slotId
+$PSQL "$PG" -tAc 'select "consensusAddress","effectiveFromHeight","effectiveToHeight" from "CoreSlotConsensusWindow" where "slotId"=3 order by "effectiveFromHeight";'
+```
+
+### G4 add + remove operator (down detection)
+```sh
+$BIN keys add newop5 --keyring-backend test --home "$TWILIGHT_LOCALNET_HOME/node0" 2>/dev/null || true
+NEWOP=$($BIN keys show newop5 -a --keyring-backend test --home "$TWILIGHT_LOCALNET_HOME/node0")
+S5PUB=$("$CHAIN_REPO/scripts/localnet/gen-consensus-key.sh" slot5key | cut -f1)
+cs authority register "$NEWOP" "$NEWOP" "$S5PUB" "core5"   # -> PENDING
+cs authority activate 5                                    # -> validator set 4->5; slot 5 never signs
+sleep 45; ingest                                           # let slot 5 miss >= 10 blocks
+( cd "$EXPLORER_REPO" && for p in coreslot-lifecycle coreslot-temporal-map block-signatures \
+    operator-signing-evidence coreslot-liveness coreslot-liveness-summary coreslot-health; do \
+    npm --prefix apps/indexer run project:$p; sleep 1; done )
+# expect: slot 5 healthStatus=down (sustained_miss_streak); network warning, availablePowerBps 8000
+$PSQL "$PG" -tAc 'select "slotId","healthStatus","currentMissedStreak" from "CoreSlotHealthSnapshot" order by "slotId";'
+cs authority inactivate 5 "decommission"; cs authority remove 5 "decommission"   # remove is irreversible
+ingest
+( cd "$EXPLORER_REPO" && for p in coreslot-lifecycle coreslot-temporal-map block-signatures \
+    operator-signing-evidence coreslot-liveness coreslot-liveness-summary coreslot-health; do \
+    npm --prefix apps/indexer run project:$p; sleep 1; done )
+# expect: slot 5 window closed; dropped from CoreSlotHealthSnapshot (removed != active); network back to 4
+```
+
+Final assertion for the whole pass: `select "projectionName",count(*) from "ProjectionFailure" where
+resolved=false group by 1;` must be empty.
+
+────────────────────────────────
+
 ## Optional drills (for future fixtures)
 
 - **Network critical:** stop 2 of 4 nodes briefly — the chain halts (no new blocks), but demonstrates
