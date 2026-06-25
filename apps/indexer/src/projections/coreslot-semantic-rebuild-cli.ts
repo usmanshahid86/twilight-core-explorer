@@ -1,3 +1,5 @@
+import { RestRpcChainClient } from '@twilight-explorer/chain-client';
+import { loadConfig } from '@twilight-explorer/config';
 import { createPrismaClient } from '@twilight-explorer/db';
 import { withProjectionAdvisoryLock } from './advisory-lock.js';
 import {
@@ -38,10 +40,16 @@ async function main(): Promise<void> {
     throw new Error('DATABASE_URL is required for the CoreSlot semantic rebuild');
   }
 
-  const chainId = process.env.CHAIN_ID ?? 'twilight-localnet-1';
+  const config = loadConfig(process.env);
+  const chainId = config.chainId;
   const reset = process.env.RESET_PROJECTION === 'true';
   const dryRun = process.env.DRY_RUN === 'true';
   const prisma = createPrismaClient();
+  const client = new RestRpcChainClient({
+    cometRpcUrl: config.cometRpcUrl,
+    restUrl: config.restUrl,
+    timeoutMs: config.requestTimeoutMs,
+  });
 
   try {
     await withProjectionAdvisoryLock(prisma, async () => {
@@ -68,6 +76,7 @@ async function main(): Promise<void> {
           startHeight,
           endHeight,
           reset,
+          client,
         });
         console.log(
           `[coreslot-semantic] rebuilt ${result.ranProjections.join(' -> ')} `

@@ -22,6 +22,7 @@ export type {
   BlockSource,
   ChainClient,
   ChainStatus,
+  GenesisSource,
   ModuleSnapshot,
   PaginationRequest,
   SupplySource,

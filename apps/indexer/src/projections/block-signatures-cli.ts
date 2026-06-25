@@ -1,17 +1,15 @@
-import { RestRpcChainClient } from '@twilight-explorer/chain-client';
-import { loadConfig } from '@twilight-explorer/config';
 import { createPrismaClient } from '@twilight-explorer/db';
 import { withProjectionAdvisoryLock } from './advisory-lock.js';
 import { getOrCreateProjectionCursor } from './cursor.js';
 import {
-  projectCoreSlotTemporalMapRange,
-  type CoreSlotTemporalMapProjectionPrisma,
-} from './coreslot-temporal-map.js';
+  projectBlockSignaturesRange,
+  type BlockSignaturesProjectionPrisma,
+} from './block-signatures.js';
 import {
-  resetCoreSlotTemporalMapProjection,
-  type ResetTemporalMapProjectionPrisma,
-} from './reset-temporal-map.js';
-import { CORESLOT_TEMPORAL_MAP_PROJECTION } from './types.js';
+  resetBlockSignaturesProjection,
+  type ResetBlockSignaturesProjectionPrisma,
+} from './reset-block-signatures.js';
+import { BLOCK_SIGNATURES_PROJECTION } from './types.js';
 
 declare const process: {
   env: Record<string, string | undefined>;
@@ -20,29 +18,23 @@ declare const process: {
 
 async function main(): Promise<void> {
   if (!process.env.DATABASE_URL) {
-    throw new Error('DATABASE_URL is required for CoreSlot temporal map projection');
+    throw new Error('DATABASE_URL is required for block signature projection');
   }
 
-  const config = loadConfig(process.env);
-  const chainId = config.chainId;
+  const chainId = process.env.CHAIN_ID ?? 'twilight-localnet-1';
   const prisma = createPrismaClient();
-  const client = new RestRpcChainClient({
-    cometRpcUrl: config.cometRpcUrl,
-    restUrl: config.restUrl,
-    timeoutMs: config.requestTimeoutMs,
-  });
 
   try {
     await withProjectionAdvisoryLock(prisma, async () => {
       if (process.env.RESET_PROJECTION === 'true') {
-        await resetCoreSlotTemporalMapProjection(
-          prisma as unknown as ResetTemporalMapProjectionPrisma,
+        await resetBlockSignaturesProjection(
+          prisma as unknown as ResetBlockSignaturesProjectionPrisma,
         );
       }
 
       const cursor = await getOrCreateProjectionCursor(
         prisma,
-        CORESLOT_TEMPORAL_MAP_PROJECTION,
+        BLOCK_SIGNATURES_PROJECTION,
         chainId,
       );
       const startHeight = parseOptionalHeight(process.env.START_HEIGHT)
@@ -52,13 +44,11 @@ async function main(): Promise<void> {
 
       if (endHeight < startHeight) return;
 
-      await projectCoreSlotTemporalMapRange({
-        prisma: prisma as unknown as CoreSlotTemporalMapProjectionPrisma,
+      await projectBlockSignaturesRange({
+        prisma: prisma as unknown as BlockSignaturesProjectionPrisma,
         chainId,
         startHeight,
         endHeight,
-        client,
-        seedGenesis: process.env.RESET_PROJECTION === 'true',
       });
     });
   } finally {

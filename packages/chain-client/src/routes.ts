@@ -2,6 +2,8 @@ export const COMET_RPC_ROUTES = {
   status: '/status',
   block: '/block',
   blockResults: '/block_results',
+  genesis: '/genesis',
+  genesisChunked: '/genesis_chunked',
   tx: '/tx',
 } as const;
 

@@ -16,6 +16,7 @@ import type {
   BlockSource,
   ChainClient,
   ChainStatus,
+  GenesisSource,
   ModuleSnapshot,
   PaginationRequest,
   SupplySource,
@@ -57,6 +58,23 @@ export class RestRpcChainClient implements ChainClient {
     };
   }
 
+  async getGenesis(): Promise<GenesisSource> {
+    let raw: unknown;
+    try {
+      raw = await this.rpc(COMET_RPC_ROUTES.genesis);
+      if (isLargeGenesisRpcResponse(raw)) {
+        raw = await this.getGenesisFromChunks();
+      }
+    } catch (error) {
+      if (isLargeGenesisError(error)) {
+        raw = await this.getGenesisFromChunks();
+      } else {
+        throw error;
+      }
+    }
+    return mapGenesisSource(raw);
+  }
+
   async getBlock(height: bigint): Promise<BlockSource> {
     const raw = await this.rpc(COMET_RPC_ROUTES.block, { height });
     const result = getRecord(raw).result;
@@ -71,6 +89,33 @@ export class RestRpcChainClient implements ChainClient {
       time: readString(header.time),
       raw,
     };
+  }
+
+  private async getGenesisFromChunks(): Promise<unknown> {
+    const chunks: string[] = [];
+    let total = 1;
+
+    for (let chunk = 0; chunk < total; chunk += 1) {
+      const raw = await this.rpc(COMET_RPC_ROUTES.genesisChunked, { chunk });
+      const result = getRecord(getRecord(raw).result);
+      const data = readString(result.data);
+      if (!data) {
+        throw new ChainClientError(
+          'CometBFT genesis_chunked response is missing result.data',
+          {
+            url: `${this.cometRpcUrl}${COMET_RPC_ROUTES.genesisChunked}`,
+            path: COMET_RPC_ROUTES.genesisChunked,
+            status: 200,
+            bodySnippet: JSON.stringify(raw).slice(0, 500),
+          },
+        );
+      }
+      chunks.push(data);
+      total = readNumber(result.total) ?? total;
+    }
+
+    const json = decodeBase64Utf8(chunks.join(''));
+    return JSON.parse(json) as unknown;
   }
 
   async getBlockResults(height: bigint): Promise<BlockResultsSource> {
@@ -379,6 +424,44 @@ function readNumber(value: unknown): number | undefined {
 
 function readBoolean(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
+}
+
+function mapGenesisSource(raw: unknown): GenesisSource {
+  const root = getRecord(raw);
+  const result = getRecord(root.result);
+  const genesis = getRecord(result.genesis ?? root.genesis);
+  const appState = getRecord(genesis.app_state ?? genesis.appState);
+  const coreSlot = appState.coreslot ?? appState.coreSlot ?? null;
+
+  return {
+    chainId: readString(genesis.chain_id ?? genesis.chainId),
+    initialHeight: readString(genesis.initial_height ?? genesis.initialHeight) ?? '1',
+    coreSlot,
+    raw,
+  };
+}
+
+function isLargeGenesisRpcResponse(raw: unknown): boolean {
+  const error = getRecord(getRecord(raw).error);
+  return isLargeGenesisMessage(readString(error.message) ?? readString(error.data));
+}
+
+function isLargeGenesisError(error: unknown): boolean {
+  if (error instanceof ChainClientError) {
+    return isLargeGenesisMessage(error.message) || isLargeGenesisMessage(error.bodySnippet);
+  }
+  return false;
+}
+
+function isLargeGenesisMessage(value: string | undefined): boolean {
+  return value?.toLowerCase().includes('genesis response is large') === true
+    || value?.toLowerCase().includes('genesis_chunked') === true;
+}
+
+function decodeBase64Utf8(value: string): string {
+  const binary = atob(value);
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
 }
 
 async function sha256Base64ToHex(value: string): Promise<string> {

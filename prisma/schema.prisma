@@ -140,6 +140,56 @@ model DecodeFailure {
   @@index([resolved])
 }
 
+model BlockSignature {
+  id                   BigInt    @id @default(autoincrement())
+  signatureKey         String    @unique
+  sourceBlockHeight    BigInt
+  committedBlockHeight BigInt
+  signatureIndex       Int
+  validatorAddress     String?
+  blockIdFlag          String?
+  blockIdFlagCode      Int?
+  timestamp            DateTime?
+  signature            String?
+  signed               Boolean
+  rawSignatureJson     Json
+  createdAt            DateTime  @default(now())
+  updatedAtDb          DateTime  @updatedAt
+
+  @@index([sourceBlockHeight])
+  @@index([committedBlockHeight])
+  @@index([validatorAddress])
+  @@index([signed])
+  @@index([blockIdFlagCode])
+}
+
+model OperatorSigningEvidence {
+  id                   BigInt   @id @default(autoincrement())
+  signatureKey         String   @unique
+  sourceBlockHeight    BigInt
+  committedBlockHeight BigInt
+  signatureIndex       Int
+  validatorAddress     String?
+  slotId               BigInt?
+  operatorAddress      String?
+  consensusPower       BigInt?
+  consensusWindowId    BigInt?
+  attributionStatus    String
+  blockIdFlag          String?
+  blockIdFlagCode      Int?
+  signed               Boolean
+  rawSignatureJson     Json
+  createdAt            DateTime @default(now())
+  updatedAtDb          DateTime @updatedAt
+
+  @@index([committedBlockHeight])
+  @@index([sourceBlockHeight])
+  @@index([validatorAddress])
+  @@index([slotId])
+  @@index([operatorAddress])
+  @@index([attributionStatus])
+}
+
 model ProjectionCursor {
   projectionName      String
   chainId             String

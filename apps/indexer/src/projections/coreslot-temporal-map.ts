@@ -1,8 +1,10 @@
+import { createHash } from 'node:crypto';
 import {
   haltProjectionCursorError,
   updateProjectionCursorSuccess,
   type ProjectionCursorPrisma,
 } from './cursor.js';
+import type { ChainClient, GenesisSource } from '@twilight-explorer/chain-client';
 import {
   CORESLOT_KEY_ROTATION_STATUS,
   CORESLOT_TEMPORAL_MAP_PROJECTION,
@@ -25,6 +27,8 @@ export interface ProjectCoreSlotTemporalMapRangeArgs {
   chainId: string;
   startHeight: bigint;
   endHeight: bigint;
+  client?: Pick<ChainClient, 'getGenesis'> | undefined;
+  seedGenesis?: boolean | undefined;
 }
 
 export interface ProjectCoreSlotTemporalMapHeightArgs {
@@ -118,12 +122,17 @@ interface Counters {
   failuresCreated: number;
 }
 
+interface GenesisSeedResult {
+  windowsWritten: number;
+  failuresCreated: number;
+}
+
 interface OpenWindowInput {
   slotId: bigint;
   operatorAddress: string | null;
   consensusAddress: string;
   consensusPower: bigint | null;
-  validatorUpdateHeight: bigint;
+  validatorUpdateHeight: bigint | null;
   effectiveFromHeight: bigint;
   openedByKind: string;
   openedByEventId: bigint | null;
@@ -150,6 +159,21 @@ export async function projectCoreSlotTemporalMapRange(
   args: ProjectCoreSlotTemporalMapRangeArgs,
 ): Promise<ProjectCoreSlotTemporalMapResult[]> {
   const results: ProjectCoreSlotTemporalMapResult[] = [];
+  const shouldSeedGenesis = args.seedGenesis === true || args.startHeight <= 1n;
+  if (shouldSeedGenesis) {
+    if (!args.client) {
+      await recordGenesisUnavailable(args.prisma, args.chainId, {
+        error: 'ChainClient.getGenesis is required when rebuilding the temporal map genesis baseline.',
+      });
+      throw new Error('ChainClient.getGenesis is required for CoreSlot temporal genesis seed');
+    }
+    await seedCoreSlotGenesisTemporalMap({
+      prisma: args.prisma,
+      chainId: args.chainId,
+      client: args.client,
+    });
+  }
+
   for (let height = args.startHeight; height <= args.endHeight; height += 1n) {
     results.push(await projectCoreSlotTemporalMapHeight({
       prisma: args.prisma,
@@ -158,6 +182,64 @@ export async function projectCoreSlotTemporalMapRange(
     }));
   }
   return results;
+}
+
+export async function seedCoreSlotGenesisTemporalMap(args: {
+  prisma: CoreSlotTemporalMapProjectionPrisma;
+  chainId: string;
+  client: Pick<ChainClient, 'getGenesis'>;
+}): Promise<GenesisSeedResult> {
+  let genesis: GenesisSource;
+  try {
+    genesis = await args.client.getGenesis();
+  } catch (error) {
+    await recordGenesisUnavailable(args.prisma, args.chainId, { error });
+    throw error;
+  }
+
+  const slots = extractGenesisSlots(genesis);
+  if (!slots.ok) {
+    await recordGenesisMalformed(args.prisma, args.chainId, {
+      raw: genesis.raw,
+      error: slots.error,
+    });
+    throw new Error(slots.error);
+  }
+
+  try {
+    return await args.prisma.$transaction(async (tx) => {
+      await tx.projectionFailure.deleteMany({
+        where: {
+          projectionName: CORESLOT_TEMPORAL_MAP_PROJECTION,
+          sourceHeight: 1n,
+          failureKind: { in: ['genesis_unavailable', 'genesis_coreslot_malformed'] },
+          resolved: false,
+        },
+      });
+
+      const counters: Counters = { windowsWritten: 0, failuresCreated: 0 };
+      for (const slot of slots.value) {
+        await seedGenesisSlot(tx, slot, counters);
+      }
+
+      await updateProjectionCursorSuccess(
+        tx,
+        CORESLOT_TEMPORAL_MAP_PROJECTION,
+        args.chainId,
+        1n,
+      );
+      return counters;
+    });
+  } catch (error) {
+    await haltProjectionCursorError(
+      args.prisma,
+      CORESLOT_TEMPORAL_MAP_PROJECTION,
+      args.chainId,
+      1n,
+      error,
+    );
+    throw error;
+  }
 }
 
 export async function projectCoreSlotTemporalMapHeight(
@@ -228,6 +310,174 @@ export async function projectCoreSlotTemporalMapHeight(
       error,
     );
     throw error;
+  }
+}
+
+async function recordGenesisUnavailable(
+  prisma: CoreSlotTemporalMapProjectionPrisma,
+  chainId: string,
+  input: { error: unknown },
+): Promise<void> {
+  const error = input.error instanceof Error ? input.error.message : String(input.error);
+  await prisma.$transaction(async (tx) => {
+    await createFailure(tx, {
+      sourceHeight: 1n,
+      failureKind: 'genesis_unavailable',
+      error,
+    });
+    await haltProjectionCursorError(
+      tx,
+      CORESLOT_TEMPORAL_MAP_PROJECTION,
+      chainId,
+      1n,
+      error,
+    );
+  });
+}
+
+async function recordGenesisMalformed(
+  prisma: CoreSlotTemporalMapProjectionPrisma,
+  chainId: string,
+  input: { raw: unknown; error: string },
+): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    await createFailure(tx, {
+      sourceHeight: 1n,
+      failureKind: 'genesis_coreslot_malformed',
+      rawEventJson: input.raw,
+      error: input.error,
+    });
+    await haltProjectionCursorError(
+      tx,
+      CORESLOT_TEMPORAL_MAP_PROJECTION,
+      chainId,
+      1n,
+      input.error,
+    );
+  });
+}
+
+async function seedGenesisSlot(
+  tx: CoreSlotTemporalMapProjectionPrisma,
+  slot: GenesisSlotSource,
+  counters: Counters,
+): Promise<void> {
+  if (!isActiveGenesisSlot(slot.raw)) return;
+
+  if (slot.slotId === null) {
+    await createFailure(tx, {
+      sourceHeight: 1n,
+      failureKind: 'genesis_coreslot_malformed',
+      rawEventJson: slot.raw,
+      error: 'Active genesis CoreSlot is missing a valid slot id.',
+    });
+    counters.failuresCreated += 1;
+    return;
+  }
+
+  const consensusAddress = normalizeOptionalConsensusAddress(slot.consensusAddress);
+  if (!consensusAddress.ok || consensusAddress.value === null) {
+    await createFailure(tx, {
+      sourceHeight: 1n,
+      failureKind: 'invalid_consensus_address',
+      rawEventJson: slot.raw,
+      error: consensusAddress.ok
+        ? 'Active genesis CoreSlot is missing a consensus address.'
+        : consensusAddress.error,
+    });
+    counters.failuresCreated += 1;
+    return;
+  }
+
+  // Genesis is the initial validator set, not a validator-set update. The Phase 6b-4
+  // validatorUpdateHeight + 2 rule applies only to later lifecycle/rotation updates.
+  const opened = await openActiveWindow(tx, {
+    slotId: slot.slotId,
+    operatorAddress: slot.operatorAddress,
+    consensusAddress: consensusAddress.value,
+    consensusPower: slot.consensusPower,
+    validatorUpdateHeight: null,
+    effectiveFromHeight: 1n,
+    openedByKind: 'genesis',
+    openedByEventId: null,
+    openedByRotationId: null,
+    openedByLifecycleId: null,
+    rawOpenJson: slot.raw,
+    sourceHeight: 1n,
+  });
+  if (opened.ok) counters.windowsWritten += opened.written ? 1 : 0;
+  else counters.failuresCreated += 1;
+}
+
+interface GenesisSlotSource {
+  slotId: bigint | null;
+  operatorAddress: string | null;
+  consensusAddress: string | null;
+  consensusPower: bigint | null;
+  raw: unknown;
+}
+
+function extractGenesisSlots(
+  genesis: GenesisSource,
+): { ok: true; value: GenesisSlotSource[] } | { ok: false; error: string } {
+  const coreSlot = asRecord(genesis.coreSlot);
+  if (Object.keys(coreSlot).length === 0) {
+    return { ok: false, error: 'Genesis app_state.coreslot is missing or empty.' };
+  }
+
+  const slotsRaw = coreSlot.slots ?? coreSlot.Slots;
+  const slotsRecord = asRecord(slotsRaw);
+  const slots = Array.isArray(slotsRaw)
+    ? slotsRaw
+    : Object.keys(slotsRecord).length > 0
+      ? Object.values(slotsRecord)
+      : null;
+  if (!slots) {
+    return { ok: false, error: 'Genesis app_state.coreslot.slots is missing or not an array/map.' };
+  }
+
+  return {
+    ok: true,
+    value: slots.map((slot) => {
+      const record = asRecord(slot);
+      return {
+        slotId: parseBigInt(readString(
+          record.slot_id ?? record.slotId ?? record.id,
+        )) ?? null,
+        operatorAddress: readString(record.operator_address ?? record.operatorAddress) ?? null,
+        consensusAddress: readString(
+          record.consensus_address
+            ?? record.consensusAddress
+            ?? record.consensus_addr
+            ?? record.consensusAddr,
+        ) ?? deriveConsensusAddressFromPubkey(
+          record.consensus_pubkey ?? record.consensusPubkey,
+        ),
+        consensusPower: parseBigInt(readString(
+          record.consensus_power ?? record.consensusPower ?? record.power,
+        )) ?? null,
+        raw: slot,
+      };
+    }),
+  };
+}
+
+function isActiveGenesisSlot(raw: unknown): boolean {
+  const record = asRecord(raw);
+  const status = readString(record.status)?.trim().toLowerCase();
+  return status === 'active' || status === 'slot_status_active';
+}
+
+function deriveConsensusAddressFromPubkey(value: unknown): string | null {
+  const record = asRecord(value);
+  const key = readString(record.key);
+  if (!key) return null;
+  try {
+    const pubkey = Buffer.from(key, 'base64');
+    if (pubkey.length === 0) return null;
+    return createHash('sha256').update(pubkey).digest().subarray(0, 20).toString('hex');
+  } catch {
+    return null;
   }
 }
 
@@ -809,6 +1059,15 @@ function readString(value: unknown): string | undefined {
   if (typeof value === 'string') return value;
   if (typeof value === 'number' || typeof value === 'bigint') return value.toString();
   return undefined;
+}
+
+function parseBigInt(value: string | undefined): bigint | undefined {
+  if (value === undefined || value.trim() === '') return undefined;
+  try {
+    return BigInt(value);
+  } catch {
+    return undefined;
+  }
 }
 
 // Height semantics for downstream consumers:

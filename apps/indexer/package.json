@@ -38,7 +38,13 @@
     "project:rewards:dev": "npm run build && node dist/projections/rewards-semantic-cli.js",
     "project:rewards:reset": "node dist/projections/reset-rewards-cli.js",
     "project:rewards-snapshot": "node dist/projections/rewards-snapshot-cli.js",
-    "project:rewards-snapshot:dev": "npm run build && node dist/projections/rewards-snapshot-cli.js"
+    "project:rewards-snapshot:dev": "npm run build && node dist/projections/rewards-snapshot-cli.js",
+    "project:block-signatures": "node dist/projections/block-signatures-cli.js",
+    "project:block-signatures:dev": "npm run build && node dist/projections/block-signatures-cli.js",
+    "project:block-signatures:reset": "node dist/projections/reset-block-signatures-cli.js",
+    "project:operator-signing-evidence": "node dist/projections/operator-signing-evidence-cli.js",
+    "project:operator-signing-evidence:dev": "npm run build && node dist/projections/operator-signing-evidence-cli.js",
+    "project:operator-signing-evidence:reset": "node dist/projections/reset-operator-signing-evidence-cli.js"
   },
   "dependencies": {
     "@twilight-explorer/chain-client": "0.0.0",

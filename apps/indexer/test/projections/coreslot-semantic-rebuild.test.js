@@ -26,6 +26,17 @@ const ACTIVATE_TYPE_URL = '/twilight.coreslot.v1.MsgActivateCoreSlot';
 const PAYOUT_TYPE_URL = '/twilight.coreslot.v1.MsgUpdatePayoutAddress';
 const PARAMS_TYPE_URL = '/twilight.coreslot.v1.MsgUpdateParams';
 
+const EMPTY_GENESIS_CLIENT = {
+  async getGenesis() {
+    return {
+      chainId: CHAIN_ID,
+      initialHeight: '1',
+      coreSlot: { slots: [] },
+      raw: { app_state: { coreslot: { slots: [] } } },
+    };
+  },
+};
+
 // --------------------------------------------------------------------------
 // Seam-based tests: ordering, reset-before-project, failure-stop.
 // These inject recording projectors / reset so no DB behavior is required.
@@ -292,6 +303,7 @@ describe('CoreSlot semantic rebuild against real projectors', () => {
       startHeight: 120n,
       endHeight: 122n,
       reset: true,
+      client: EMPTY_GENESIS_CLIENT,
     });
 
     assert.equal(prisma.metadataChanges.size, 1);
@@ -316,6 +328,7 @@ describe('CoreSlot semantic rebuild against real projectors', () => {
       startHeight: 120n,
       endHeight: 121n,
       reset: true,
+      client: EMPTY_GENESIS_CLIENT,
     });
 
     const projection = prisma.coreSlotProjections.get('1');
@@ -334,6 +347,7 @@ describe('CoreSlot semantic rebuild against real projectors', () => {
       startHeight: 121n,
       endHeight: 122n,
       reset: true,
+      client: EMPTY_GENESIS_CLIENT,
     });
 
     const projection = prisma.coreSlotProjections.get('1');
@@ -351,6 +365,7 @@ describe('CoreSlot semantic rebuild against real projectors', () => {
       startHeight: 120n,
       endHeight: 120n,
       reset: true,
+      client: EMPTY_GENESIS_CLIENT,
     });
 
     assert.equal(prisma.parameterChanges.size, 1);
@@ -394,6 +409,7 @@ describe('CoreSlot semantic rebuild against real projectors', () => {
       startHeight: 120n,
       endHeight: 121n,
       reset: true,
+      client: EMPTY_GENESIS_CLIENT,
     });
 
     for (const name of [

@@ -1,3 +1,4 @@
+import type { ChainClient } from '@twilight-explorer/chain-client';
 import {
   projectCoreSlotMetadataRange,
   type CoreSlotMetadataProjectionPrisma,
@@ -140,6 +141,8 @@ export interface CoreSlotSemanticRebuildProjectors {
 export interface BuildCoreSlotSemanticRebuildStepsArgs {
   prisma: unknown;
   chainId: string;
+  client?: Pick<ChainClient, 'getGenesis'> | undefined;
+  seedGenesis?: boolean | undefined;
   projectors?: Partial<CoreSlotSemanticRebuildProjectors>;
 }
 
@@ -223,6 +226,8 @@ export function buildCoreSlotSemanticRebuildSteps(
           chainId,
           startHeight,
           endHeight,
+          client: args.client,
+          seedGenesis: args.seedGenesis,
         });
       },
     },
@@ -236,6 +241,7 @@ export interface ProjectCoreSlotSemanticRebuildArgs {
   endHeight: bigint;
   reset: boolean;
   resetSemantic?: (prisma: ResetCoreSlotSemanticPrisma) => Promise<void>;
+  client?: Pick<ChainClient, 'getGenesis'> | undefined;
   projectors?: Partial<CoreSlotSemanticRebuildProjectors>;
 }
 
@@ -252,6 +258,8 @@ export async function projectCoreSlotSemanticRebuild(
   const steps = buildCoreSlotSemanticRebuildSteps({
     prisma: args.prisma,
     chainId: args.chainId,
+    client: args.client,
+    seedGenesis: args.reset,
     ...(args.projectors ? { projectors: args.projectors } : {}),
   });
 

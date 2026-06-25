@@ -4,6 +4,17 @@ export const CORESLOT_PAYOUT_PROJECTION = 'coreslot_payout_v1';
 export const CORESLOT_PARAMS_PROJECTION = 'coreslot_params_v1';
 export const CORESLOT_KEY_ROTATION_PROJECTION = 'coreslot_key_rotation_v1';
 export const CORESLOT_TEMPORAL_MAP_PROJECTION = 'coreslot_temporal_map_v1';
+export const BLOCK_SIGNATURES_PROJECTION = 'block_signatures_v1';
+export const OPERATOR_SIGNING_EVIDENCE_PROJECTION = 'operator_signing_evidence_v1';
+
+export const OPERATOR_SIGNING_ATTRIBUTION_STATUS = {
+  attributed: 'attributed',
+  absentNoValidator: 'absent_no_validator',
+  noConsensusWindow: 'no_consensus_window',
+  unmappedValidator: 'unmapped_validator',
+  invalidValidatorAddress: 'invalid_validator_address',
+  unknownShape: 'unknown_shape',
+} as const;
 
 // Currently implemented CoreSlot semantic projections, in deterministic rebuild
 // order. The combined reset/rebuild command is scoped to exactly these.
@@ -148,6 +159,20 @@ export type ProjectionFailureKind =
   | 'invalid_amount'
   | 'missing_reward_records'
   | 'claim_correlation_failed'
+  | 'missing_block_raw'
+  | 'missing_last_commit'
+  | 'missing_signatures'
+  | 'invalid_signature_payload'
+  | 'invalid_validator_address'
+  | 'invalid_height'
+  | 'unknown_block_signature_shape'
+  | 'genesis_unavailable'
+  | 'genesis_coreslot_malformed'
+  | 'invalid_committed_height'
+  | 'missing_required_block_signature_field'
+  | 'malformed_temporal_window'
+  | 'database_write_failure'
+  | 'unknown_operator_signing_evidence_shape'
   | 'unknown_semantic_type'
   | 'unknown_coreslot_message'
   | 'unknown_coreslot_event'

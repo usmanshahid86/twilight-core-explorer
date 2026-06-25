@@ -60,6 +60,21 @@ function createRecordingFetch(responses = {}) {
         result: { height: '17', tx_result: { code: 0 } },
       });
     }
+    if (parsed.pathname === '/genesis') {
+      return createJsonResponse({
+        result: {
+          genesis: {
+            chain_id: 'twilight-localnet-1',
+            initial_height: '1',
+            app_state: {
+              coreslot: {
+                slots: [{ slot_id: '1', status: 'SLOT_STATUS_ACTIVE' }],
+              },
+            },
+          },
+        },
+      });
+    }
     if (parsed.pathname === '/cosmos/tx/v1beta1/txs') {
       return createJsonResponse({
         tx_responses: [{ txhash: 'HASH17', height: '17', code: 0 }],
@@ -97,6 +112,73 @@ describe('RestRpcChainClient', () => {
     assert.equal(calls[1], 'http://rpc.test/block?height=17');
     assert.equal(calls[2], 'http://rpc.test/block_results?height=17');
     assert.equal(calls[3], 'http://rpc.test/tx?hash=ABC123');
+  });
+
+  it('loads CometBFT genesis as a deterministic CoreSlot baseline source', async () => {
+    const { calls, fetchImpl } = createRecordingFetch();
+    const client = new RestRpcChainClient({
+      cometRpcUrl: 'http://rpc.test',
+      restUrl: 'http://rest.test',
+      fetchImpl,
+    });
+
+    const genesis = await client.getGenesis();
+
+    assert.equal(genesis.chainId, 'twilight-localnet-1');
+    assert.equal(genesis.initialHeight, '1');
+    assert.deepEqual(genesis.coreSlot, {
+      slots: [{ slot_id: '1', status: 'SLOT_STATUS_ACTIVE' }],
+    });
+    assert.equal(calls[0], 'http://rpc.test/genesis');
+  });
+
+  it('falls back to genesis_chunked when /genesis is too large', async () => {
+    const genesis = {
+      result: {
+        genesis: {
+          chain_id: 'twilight-localnet-1',
+          initial_height: '1',
+          app_state: {
+            coreslot: {
+              slots: [{ slot_id: '4', status: 'SLOT_STATUS_ACTIVE' }],
+            },
+          },
+        },
+      },
+    };
+    const encoded = Buffer.from(JSON.stringify(genesis), 'utf8').toString('base64');
+    const splitAt = Math.ceil(encoded.length / 2);
+    const { calls, fetchImpl } = createRecordingFetch({
+      'http://rpc.test/genesis': createJsonResponse({
+        error: {
+          code: -32603,
+          message: 'genesis response is large, please use the genesis_chunked API instead',
+        },
+      }),
+      'http://rpc.test/genesis_chunked?chunk=0': createJsonResponse({
+        result: { chunk: 0, total: 2, data: encoded.slice(0, splitAt) },
+      }),
+      'http://rpc.test/genesis_chunked?chunk=1': createJsonResponse({
+        result: { chunk: 1, total: 2, data: encoded.slice(splitAt) },
+      }),
+    });
+    const client = new RestRpcChainClient({
+      cometRpcUrl: 'http://rpc.test',
+      restUrl: 'http://rest.test',
+      fetchImpl,
+    });
+
+    const loaded = await client.getGenesis();
+
+    assert.equal(loaded.chainId, 'twilight-localnet-1');
+    assert.deepEqual(loaded.coreSlot, {
+      slots: [{ slot_id: '4', status: 'SLOT_STATUS_ACTIVE' }],
+    });
+    assert.deepEqual(calls, [
+      'http://rpc.test/genesis',
+      'http://rpc.test/genesis_chunked?chunk=0',
+      'http://rpc.test/genesis_chunked?chunk=1',
+    ]);
   });
 
   it('routes generic Cosmos reads through REST', async () => {

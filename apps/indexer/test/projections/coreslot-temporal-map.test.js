@@ -10,6 +10,7 @@ import {
   findSlotConsensusWindowAtHeight,
   projectCoreSlotTemporalMapHeight,
   projectCoreSlotTemporalMapRange,
+  seedCoreSlotGenesisTemporalMap,
 } from '../../dist/projections/coreslot-temporal-map.js';
 import { resetCoreSlotTemporalMapProjection } from '../../dist/projections/reset-temporal-map.js';
 import {
@@ -21,6 +22,8 @@ const OPERATOR = 'twilight17n30thc6ntha6rpjvk46yrwvkd86guy9crevra';
 const OLD = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const NEW = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
 const OTHER = 'cccccccccccccccccccccccccccccccccccccccc';
+const SLOT4_GENESIS_PUBKEY = 'tUWPEa11HIE67ApPunYmzh1ixkPZJyS32mZAGrpaLJs=';
+const SLOT4_CONSENSUS = 'f060bf2347c76488a0390285e3b9ef3a44ec7d23';
 
 class TemporalMockPrisma {
   constructor() {
@@ -160,6 +163,216 @@ class TemporalMockPrisma {
 describe('CoreSlot temporal consensus map projection', () => {
   it('uses the Phase 6b-3 validator-set membership offset', () => {
     assert.equal(VALIDATOR_SET_MEMBERSHIP_OFFSET, 2n);
+  });
+
+  it('seeds one ACTIVE genesis window per active genesis CoreSlot at height 1', async () => {
+    const prisma = new TemporalMockPrisma();
+
+    await seedCoreSlotGenesisTemporalMap({
+      prisma,
+      chainId: CHAIN_ID,
+      client: genesisClient([
+        genesisSlot({ slotId: '1', consensusAddress: OLD }),
+        genesisSlot({ slotId: '2', consensusAddress: NEW, operatorAddress: 'twilight1two' }),
+      ]),
+    });
+
+    assert.equal(prisma.windows.length, 2);
+    assert.deepEqual(prisma.windows.map((window) => window.effectiveFromHeight), [1n, 1n]);
+    assert.deepEqual(prisma.windows.map((window) => window.openedByKind), ['genesis', 'genesis']);
+    assert.deepEqual(prisma.windows.map((window) => window.validatorUpdateHeight), [null, null]);
+  });
+
+  it('derives genesis consensus address from consensus_pubkey when hex address is omitted', async () => {
+    const prisma = new TemporalMockPrisma();
+
+    await seedCoreSlotGenesisTemporalMap({
+      prisma,
+      chainId: CHAIN_ID,
+      client: genesisClient([
+        genesisSlot({
+          slotId: '4',
+          consensusAddress: null,
+          consensusPubkey: SLOT4_GENESIS_PUBKEY,
+        }),
+      ]),
+    });
+
+    assert.equal(prisma.windows.length, 1);
+    assert.equal(prisma.windows[0].consensusAddress, SLOT4_CONSENSUS);
+    assert.equal(prisma.windows[0].openedByKind, 'genesis');
+  });
+
+  it('does not apply the +2 membership offset to the genesis baseline', async () => {
+    const prisma = new TemporalMockPrisma();
+
+    await seedCoreSlotGenesisTemporalMap({
+      prisma,
+      chainId: CHAIN_ID,
+      client: genesisClient([genesisSlot({ slotId: '1', consensusAddress: OLD })]),
+    });
+    prisma.seedActivation({ slotId: 2n, consensusAddress: NEW });
+    await projectCoreSlotTemporalMapHeight({ prisma, chainId: CHAIN_ID, height: 10n });
+
+    assert.equal(prisma.windows.find((window) => window.slotId === 1n).effectiveFromHeight, 1n);
+    assert.equal(prisma.windows.find((window) => window.slotId === 2n).effectiveFromHeight, 12n);
+  });
+
+  it('skips inactive or keyless genesis slots without failure', async () => {
+    const prisma = new TemporalMockPrisma();
+
+    await seedCoreSlotGenesisTemporalMap({
+      prisma,
+      chainId: CHAIN_ID,
+      client: genesisClient([
+        genesisSlot({ slotId: '1', status: 'SLOT_STATUS_INACTIVE', consensusAddress: OLD }),
+        genesisSlot({ slotId: '2', status: 'SLOT_STATUS_INACTIVE', consensusAddress: '' }),
+      ]),
+    });
+
+    assert.equal(prisma.windows.length, 0);
+    assert.equal(prisma.projectionFailures.length, 0);
+  });
+
+  it('closes a seeded genesis window at the later inactivation +2 height', async () => {
+    const prisma = new TemporalMockPrisma();
+
+    await seedCoreSlotGenesisTemporalMap({
+      prisma,
+      chainId: CHAIN_ID,
+      client: genesisClient([genesisSlot({ slotId: '4', consensusAddress: OLD })]),
+    });
+    prisma.lifecycleEvents.push(lifecycle('coreslot_inactivated', 3554n, {
+      slotId: 4n,
+      consensusAddress: OLD,
+    }));
+    await projectCoreSlotTemporalMapHeight({ prisma, chainId: CHAIN_ID, height: 3554n });
+
+    assert.equal(prisma.windows.length, 1);
+    assert.equal(prisma.windows[0].effectiveFromHeight, 1n);
+    assert.equal(prisma.windows[0].effectiveToHeight, 3556n);
+    assert.equal(prisma.projectionFailures.length, 0);
+  });
+
+  it('supersedes a seeded genesis window at a later rotation boundary', async () => {
+    const prisma = new TemporalMockPrisma();
+
+    await seedCoreSlotGenesisTemporalMap({
+      prisma,
+      chainId: CHAIN_ID,
+      client: genesisClient([genesisSlot({ slotId: '1', consensusAddress: OLD })]),
+    });
+    prisma.seedRotation(CORESLOT_KEY_ROTATION_STATUS.applied, {
+      slotId: 1n,
+      oldConsensusAddress: OLD,
+      newConsensusAddress: NEW,
+      effectiveHeight: 15n,
+      appliedHeight: 15n,
+    });
+    await projectCoreSlotTemporalMapHeight({ prisma, chainId: CHAIN_ID, height: 15n });
+
+    assert.equal(prisma.windows.length, 2);
+    assert.equal(prisma.windows[0].effectiveToHeight, 17n);
+    assert.equal(prisma.windows[1].consensusAddress, NEW);
+    assert.equal(prisma.windows[1].effectiveFromHeight, 17n);
+  });
+
+  it('re-seeding genesis is idempotent', async () => {
+    const prisma = new TemporalMockPrisma();
+    const client = genesisClient([genesisSlot({ slotId: '1', consensusAddress: OLD })]);
+
+    await seedCoreSlotGenesisTemporalMap({ prisma, chainId: CHAIN_ID, client });
+    await seedCoreSlotGenesisTemporalMap({ prisma, chainId: CHAIN_ID, client });
+
+    assert.equal(prisma.windows.length, 1);
+    assert.equal(prisma.projectionFailures.length, 0);
+  });
+
+  it('full reset plus seed rebuild reproduces equivalent windows', async () => {
+    const prisma = new TemporalMockPrisma();
+    const client = genesisClient([genesisSlot({ slotId: '1', consensusAddress: OLD })]);
+
+    await seedCoreSlotGenesisTemporalMap({ prisma, chainId: CHAIN_ID, client });
+    const first = comparableWindows(prisma.windows);
+    await resetCoreSlotTemporalMapProjection(prisma);
+    await seedCoreSlotGenesisTemporalMap({ prisma, chainId: CHAIN_ID, client });
+
+    assert.deepEqual(comparableWindows(prisma.windows), first);
+  });
+
+  it('records invalid_consensus_address for active genesis slots with invalid consensus address', async () => {
+    const prisma = new TemporalMockPrisma();
+
+    await seedCoreSlotGenesisTemporalMap({
+      prisma,
+      chainId: CHAIN_ID,
+      client: genesisClient([genesisSlot({ slotId: '1', consensusAddress: 'bad' })]),
+    });
+
+    assert.equal(prisma.windows.length, 0);
+    assert.equal(prisma.projectionFailures[0].failureKind, 'invalid_consensus_address');
+  });
+
+  it('records invalid_consensus_address for active genesis slots missing consensus address', async () => {
+    const prisma = new TemporalMockPrisma();
+
+    await seedCoreSlotGenesisTemporalMap({
+      prisma,
+      chainId: CHAIN_ID,
+      client: genesisClient([genesisSlot({ slotId: '1', consensusAddress: '' })]),
+    });
+
+    assert.equal(prisma.windows.length, 0);
+    assert.equal(prisma.projectionFailures[0].failureKind, 'invalid_consensus_address');
+  });
+
+  it('records temporal_window_conflict for duplicate active genesis consensus addresses', async () => {
+    const prisma = new TemporalMockPrisma();
+
+    await seedCoreSlotGenesisTemporalMap({
+      prisma,
+      chainId: CHAIN_ID,
+      client: genesisClient([
+        genesisSlot({ slotId: '1', consensusAddress: OLD }),
+        genesisSlot({ slotId: '2', consensusAddress: OLD }),
+      ]),
+    });
+
+    assert.equal(prisma.windows.length, 1);
+    assert.equal(prisma.projectionFailures[0].failureKind, 'temporal_window_conflict');
+  });
+
+  it('records genesis_coreslot_malformed when genesis app_state.coreslot is missing', async () => {
+    const prisma = new TemporalMockPrisma();
+
+    await assert.rejects(
+      () => seedCoreSlotGenesisTemporalMap({
+        prisma,
+        chainId: CHAIN_ID,
+        client: genesisClient(null),
+      }),
+      /app_state\.coreslot/,
+    );
+    assert.equal(prisma.projectionFailures[0].failureKind, 'genesis_coreslot_malformed');
+  });
+
+  it('range projection can seed genesis before event replay', async () => {
+    const prisma = new TemporalMockPrisma();
+    prisma.lifecycleEvents.push(lifecycle('coreslot_inactivated', 10n, {
+      slotId: 1n,
+      consensusAddress: OLD,
+    }));
+
+    await projectCoreSlotTemporalMapRange({
+      prisma,
+      chainId: CHAIN_ID,
+      startHeight: 1n,
+      endHeight: 10n,
+      client: genesisClient([genesisSlot({ slotId: '1', consensusAddress: OLD })]),
+    });
+
+    assert.equal(prisma.windows[0].effectiveFromHeight, 1n);
+    assert.equal(prisma.windows[0].effectiveToHeight, 12n);
   });
 
   it('activation opens ACTIVE consensus window', async () => {
@@ -524,6 +737,49 @@ function lifecycle(eventType, height, overrides = {}) {
     rawEventJson: overrides.rawEventJson ?? {},
     rawMessageJson: null,
   };
+}
+
+function genesisClient(slots) {
+  return {
+    async getGenesis() {
+      return {
+        chainId: CHAIN_ID,
+        initialHeight: '1',
+        coreSlot: slots === null ? null : { slots },
+        raw: { app_state: { coreslot: slots === null ? null : { slots } } },
+      };
+    },
+  };
+}
+
+function genesisSlot(overrides = {}) {
+  const slot = {
+    slot_id: overrides.slotId ?? '1',
+    status: overrides.status ?? 'SLOT_STATUS_ACTIVE',
+    operator_address: overrides.operatorAddress ?? OPERATOR,
+    consensus_address: overrides.consensusAddress === undefined ? OLD : overrides.consensusAddress,
+    consensus_power: overrides.consensusPower ?? '1',
+  };
+  if (overrides.consensusPubkey !== undefined) {
+    slot.consensus_pubkey = {
+      '@type': '/cosmos.crypto.ed25519.PubKey',
+      key: overrides.consensusPubkey,
+    };
+  }
+  return slot;
+}
+
+function comparableWindows(windows) {
+  return windows.map((window) => ({
+    slotId: window.slotId,
+    operatorAddress: window.operatorAddress,
+    consensusAddress: window.consensusAddress,
+    consensusPower: window.consensusPower,
+    validatorUpdateHeight: window.validatorUpdateHeight,
+    effectiveFromHeight: window.effectiveFromHeight,
+    effectiveToHeight: window.effectiveToHeight,
+    openedByKind: window.openedByKind,
+  }));
 }
 
 function rotation(status, overrides = {}) {

@@ -415,3 +415,21 @@ Matches are docs-only guardrails / historical non-goals. No source dependency wa
 Phase 8 operator liveness / uptime design can now consume the temporal map rather than
 building a parallel consensus-address mapping. Before productionizing liveness, add a live
 localnet fixture that confirms activation and key-rotation effective-height boundaries.
+
+## 19. Correction Note (2026-06-25, Phase 8c-0) — genesis seeding is a missing prerequisite
+
+The event-only design here has a structural gap: **genesis CoreSlots emit no indexable event**, so
+the temporal map cannot be built from block events alone. Verified in the Twilight Core node source:
+`InitGenesis` (`x/coreslot/keeper/genesis.go:22-41`) writes slot state directly with no
+emit-registered/activated; the only event (`coreslot_validator_update_emitted`, `endblock.go:212`)
+fires inside `InitChain` (`module.go:79-82`), which CometBFT never surfaces in `/block_results`.
+Consequence: every genesis-created CoreSlot is invisible to this projection until it emits a later
+lifecycle/rotation event, so its signatures fail cons-addr→slot resolution (founding validators
+mis-reported as unmapped at launch).
+
+Fix (rebuildable, additive): a **genesis-baseline seed** — `ChainClient.getGenesis()` over CometBFT
+`/genesis`, parse `app_state.coreslot.{slots, …}`, open one ACTIVE window per genesis slot at
+`effectiveFromHeight = 1` (the `validatorUpdateHeight + 2` offset does **not** apply to the genesis
+set), then replay event deltas from h1+. See `docs/research/phase-8c-0-coverage-truth-report.md` §5.
+This is a prerequisite for Phase 8c liveness and should precede the event replay in the temporal-map
+rebuild order.

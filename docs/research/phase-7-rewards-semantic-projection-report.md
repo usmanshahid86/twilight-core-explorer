@@ -52,8 +52,8 @@ Migration `20260625000800_rewards_semantic_projection` adds:
 - `RewardsTreasuryPayment` (rebuildable) — `treasury_paid` history; `sourceEventId` unique.
 - `SlotRewardProjection` (observed sample) — `@@unique([slotId, epochNumber])`, carries
   `sampledAtHeight` plus claim provenance fields.
-- `RewardsBalanceSample` (observed sample) — `@@unique([height, sampleKind, address,
-  moduleName, denom])`.
+- `RewardsBalanceSample` (observed sample) — deterministic non-null `sampleKey @unique`
+  added in Phase 7.1 after live validation found nullable compound-key upserts were unsafe.
 
 No generic or CoreSlot tables changed.
 
@@ -185,11 +185,13 @@ Postgres integration), 0 failed. `npm --prefix packages/chain-client test` → 1
 
 ## 16. Next Recommended Step
 
-A live claim fixture (a real `MsgClaimRewards` once a slot has finalized epochs) would
-exercise the claim/snapshot reconciliation end-to-end. After that, Phase 8 (block signature
-ingestion + liveness projection) can proceed on the corrected temporal map, and
-operator-economics views can join `RewardClaimEvent` / `SlotRewardProjection` to the CoreSlot
-operator identity.
+Phase 8a (block signature ingestion) can proceed independently of rewards claim live-fixture
+work.
+
+Before rewards API/web surfaces or public operator-economics pages rely on live claim
+behavior, run Phase 7.2: a live `MsgClaimRewards` / `reward_claimed` fixture once at least
+one epoch has finalized and `getClaimableRewards(slotId, startEpoch, endEpoch)` returns a
+non-empty range.
 
 ## 17. Phase 7.1 — Snapshot Idempotency + Pagination Fix
 
@@ -239,3 +241,35 @@ signal. Documented in code; not changed.
   previously-failing case); a second run left it at 1 row (idempotent) with the
   `rewards_snapshot_v1` cursor advanced. `SlotRewardProjection = 0` because slot 4 has no
   finalized epochs yet (`getEpochReward(1)` is 404 — expected, epoch not finalized).
+
+## 18. Open Item — Phase 7.2 Live Rewards Claim Fixture
+
+Phase 7 implemented rebuildable rewards semantics and observed rewards snapshots. Live
+snapshot smoke passed, but no real `MsgClaimRewards` / `reward_claimed` fixture has been
+exercised yet because the localnet had no finalized claimable rewards. Synthetic tests cover
+claim correlation, missing/ambiguous events, failed tx filtering, and reconciliation onto
+sampled `SlotRewardProjection` rows.
+
+This is not a Phase 7 merge blocker, but it should be completed before rewards/claim API,
+rewards UI, or public operator-economics pages rely on live claim behavior.
+
+### Phase 7.2 — Live Rewards Claim Fixture
+
+Scope:
+
+- wait for or configure a finalized epoch.
+- query claimable rewards for one active slot with
+  `getClaimableRewards(slotId, startEpoch, endEpoch)`.
+- submit `MsgClaimRewards`.
+- index the tx/event.
+- run `rewards_semantic_v1`.
+- verify `RewardClaimEvent` exists.
+- verify matching `SlotRewardProjection` rows reconcile if sampled rows exist.
+- verify no fabricated amounts.
+- verify idempotent rerun.
+
+Sequencing:
+
+- Phase 7.2 does not block Phase 8a block-signature ingestion.
+- Phase 7.2 should be completed before rewards API/web surfaces or public
+  operator-economics pages expose claim behavior as production-ready.

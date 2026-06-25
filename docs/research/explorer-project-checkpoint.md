@@ -3,14 +3,16 @@
 Date: 2026-06-25
 
 Status: checkpoint after Phase A/B foundation, descriptor decoder work, chain-alignment
-cleanup, the full CoreSlot semantic projection set (Phases 6a-1 through 6a-4: metadata,
-lifecycle, payout, params, and the combined rebuild command), and operator-experience
-review.
+cleanup, the full CoreSlot semantic projection set, temporal consensus map/boundary
+corrections, Phase 7 / 7.1 rewards semantic projection, Phase 8a/8b signature
+ingestion + attribution, the Phase 8c-0 coverage-truth check, and Phase 8c-0b genesis
+temporal-map seed. The 8c-0 check established that liveness is **CoreSlots-only** and that
+genesis CoreSlots emit no indexable event; 8c-0b implements the required height-1 temporal-map
+seed.
 
 This document summarizes what has already been decided and built, what is still only
 designed, and the recommended sequence from here. It is intended to keep implementation
-aligned before the next semantic projection phase (6b: key rotation and temporal consensus
-map).
+aligned before Phase 8a block-signature ingestion and later API/web work.
 
 ## 1. Product North Star
 
@@ -277,6 +279,131 @@ Explicitly not implemented:
 - temporal consensus map.
 - rewards, liveness, API routes, and web pages.
 
+### Phase 7 / 7.1: Rewards Semantic Projection
+
+Status: PASS and merge-ready.
+
+Completed:
+
+- `rewards_semantic_v1` rebuildable projection from generic indexed `ExplorerTransaction`,
+  `Message`, and `Event` rows.
+- `RewardEpochProjection` for `epoch_finalized` aggregate context. `EpochReward` /
+  `epoch_finalized` is not treated as claim truth.
+- `RewardClaimEvent` from `MsgClaimRewards` + `reward_claimed` correlation.
+- rewards params, pause/resume, and treasury event history.
+- `rewards_snapshot_v1` observed-sample path tied to `sampledAtHeight`.
+- `SlotRewardProjection` observed slot reward samples with explicit claim reconciliation.
+- `RewardsBalanceSample` observed module/cumulative samples.
+- `RewardsBalanceSample` nullable-upsert bug fixed with deterministic non-null `sampleKey`.
+- `getSlotRewards` pagination fixed by following `pagination.next_key`.
+- live rewards snapshot smoke passed against local RPC/REST/Postgres.
+- rewards reset preserves generic canonical rows and CoreSlot semantic rows.
+
+Remaining open item:
+
+- Phase 7.2 live `MsgClaimRewards` / `reward_claimed` fixture. This is pending a finalized
+  claimable epoch; the localnet used for Phase 7 / 7.1 had no finalized claimable rewards.
+  Synthetic tests cover claim correlation, but live claim behavior still needs evidence
+  before rewards API/web or public operator-economics pages rely on claim behavior.
+
+Sequencing:
+
+- Phase 7.2 does not block Phase 8a block-signature ingestion.
+- Phase 7.2 should be completed before rewards API/web/operator-economics pages expose claim
+  behavior as production-ready.
+
+### Phase 8a: Block Signature Ingestion Foundation
+
+Status: PASS.
+
+Completed:
+
+- `block_signatures_v1` projection.
+- `BlockSignature` derived rows from indexed `Block.rawJson`.
+- deterministic `signatureKey` upserts.
+- scoped `BlockSignature` reset command.
+- projection cursor/failure behavior.
+- raw signature JSON preservation.
+- lowercased 40-character hex `validatorAddress` normalization.
+- raw and numeric `block_id_flag` preservation.
+- absent / commit / nil vote distinction.
+- optional local DB smoke over heights `119..3585` produced 131 `BlockSignature` rows,
+  zero unresolved `block_signatures_v1` failures, and an idle cursor at height `3585`.
+
+Height semantics:
+
+- `sourceBlockHeight` is the containing block height `N`.
+- `committedBlockHeight` comes from `last_commit.height` when present.
+- fallback is `sourceBlockHeight - 1` only when `last_commit.height` is absent.
+- `last_commit.signatures` in block `N` are signatures for the committed block, normally
+  `N - 1`.
+
+Explicitly not implemented:
+
+- liveness percentages.
+- missed-count calculations.
+- proposer enrichment.
+- API routes.
+- web pages.
+
+### Phase 8b: Signature-To-CoreSlot Attribution Foundation
+
+Status: PASS.
+
+Completed:
+
+- `operator_signing_evidence_v1` projection.
+- `OperatorSigningEvidence` derived rows from `BlockSignature`.
+- deterministic `signatureKey` upserts.
+- scoped attribution reset command.
+- projection cursor/failure behavior.
+- attribution by `committedBlockHeight`, not `sourceBlockHeight`.
+- temporal lookup via `findConsensusWindowAtHeight`.
+- read-only coverage-existence check to distinguish `no_consensus_window` from
+  `unmapped_validator`.
+- historical `slotId`, `operatorAddress`, `consensusPower`, and `consensusWindowId` from
+  `CoreSlotConsensusWindow`, not current `CoreSlotProjection`.
+- explicit statuses: `attributed`, `absent_no_validator`, `no_consensus_window`,
+  `unmapped_validator`, `invalid_validator_address`, and `unknown_shape`.
+
+Height semantics:
+
+- range/cursor axis follows Phase 8a: containing block `sourceBlockHeight`.
+- attribution axis uses `committedBlockHeight`.
+- proposer semantics remain out of scope.
+
+Explicitly not implemented:
+
+- liveness percentages.
+- missed-count calculations.
+- proposer enrichment.
+- API routes.
+- web pages.
+
+### Phase 8c-0: Coverage-Truth Check (analysis + scope decision)
+
+Status: DONE (no projection/model added). See
+`docs/research/phase-8c-0-coverage-truth-report.md`.
+
+Established before building liveness:
+
+- Ran the deferred Phase 8b live smoke: `OperatorSigningEvidence` = 131 rows (1:1 with
+  `BlockSignature`), zero unresolved failures, cursor idle at 3585. `attributed` rows are
+  exclusively slot 4 / `f060` over committed heights 3569–3583 (its reactivation window). 8b is
+  confirmed correct on real data; the "smoke not run" caveat is discharged.
+- **Scope decision: liveness is CoreSlots-only.** The localnet consensus set is 4 PoA validators,
+  but only 2 are CoreSlots (slot 1 registered/never-active; slot 4 the one active operator). The
+  three remaining genesis validators are not CoreSlots and are out of scope. The expected signer set
+  is the **active-CoreSlot** set, NOT the consensus commit set; a completeness check against
+  `commitSetSize` would be wrong.
+- **Genesis seeding is a structural prerequisite (verified in node source).** `InitGenesis`
+  (`x/coreslot/keeper/genesis.go:22-41`) writes slot state directly with no lifecycle emitters; its
+  one event fires in `InitChain` (`module.go:79-82`), which CometBFT does not surface in
+  `/block_results`. So genesis CoreSlots are invisible to an event-only temporal map and must be
+  seeded from `/genesis` app_state. This blocks Phase 8c-1.
+- Current local DB is a sparse smoke set (36 non-contiguous blocks, 119–3585). Recommended fixture
+  reset: restart localnet with 4 genesis CoreSlot operators and re-ingest contiguously from height 1.
+
 ## 4. Designed But Not Yet Implemented
 
 ### Phase A/B-6: CoreSlot Semantic Projection Design
@@ -328,14 +455,23 @@ Important conclusion:
 
 ### Data Gaps
 
-1. Block commit signatures are not stored yet.
-   - Needed for per-operator liveness/uptime.
-   - Source is already in `/block` as `last_commit.signatures`.
-   - No new RPC call is required.
+1. Block commit signatures and CoreSlot attribution are stored, but liveness is not computed.
+   - Phase 8a stores raw commit-signature evidence in `BlockSignature`.
+   - Phase 8b attributes signatures to historical CoreSlot windows in
+     `OperatorSigningEvidence`.
+   - Phase 8c still needs expected signer-set enumeration and liveness/uptime summaries.
 
-2. Temporal consensus-address map is not implemented.
-   - Needed for liveness, proposer-to-slot joins, and historical slot identity.
-   - Must account for activation, removal, suspension, inactivation, and key rotation.
+2. Temporal consensus-address map exists, but it is **not genesis-complete** — resolved by
+   Phase 8c-0 into a concrete prerequisite.
+   - `CoreSlotConsensusWindow` uses the Phase 6b-4 `validatorUpdateHeight + 2` membership
+     boundary.
+   - Phase 8b writes `no_consensus_window` for coverage gaps.
+   - **8c-0 finding:** genesis CoreSlots emit no indexable event, so the event-only map never opens
+     windows for the founding set. The fix is a **genesis-baseline seed** of the temporal map from
+     `/genesis` app_state (one ACTIVE window per genesis slot at `effectiveFromHeight = 1`, no `+2`
+     offset for the genesis set), then event replay on top. This is a temporal-map (6b) correctness
+     fix and a hard prerequisite for Phase 8c-1. Liveness scope is CoreSlots-only; the expected set
+     is the active-CoreSlot set, not the consensus commit set.
 
 3. Snapshot tables must be categorized clearly.
    - Rebuildable derived projections are different from observed live samples.
@@ -345,6 +481,23 @@ Important conclusion:
 4. User-facing bech32 consensus address decoding is deferred.
    - Low-level transport can reject bech32.
    - Search/self-service should eventually decode `twilightvalcons...` to lowercase hex.
+
+5. Phase 7.2 live rewards claim fixture is still open.
+   - Phase 7 / 7.1 is merge-ready, and live rewards snapshot smoke passed.
+   - A real `MsgClaimRewards` / `reward_claimed` fixture has not been exercised because the
+     localnet had no finalized claimable rewards.
+   - Implement once at least one epoch has finalized and
+     `getClaimableRewards(slotId, startEpoch, endEpoch)` returns a non-empty range.
+   - This does not block Phase 8a block-signature ingestion, but it should be completed
+     before rewards API/web/operator-economics pages rely on live claim behavior.
+
+6. Phase 8c must preserve the attribution taxonomy from Phase 8b.
+   - `no_consensus_window` means temporal coverage gap.
+   - `unmapped_validator` means coverage exists but this validator address did not map.
+   - `absent_no_validator` means last-commit evidence carried no validator address.
+   - None of these statuses means missed signature by itself.
+   - Phase 8c missed-count logic must use expected signers at committed height minus observed
+     commit signatures at committed height.
 
 ### Proposer and signature height semantics
 
@@ -386,12 +539,13 @@ preserving generic canonical rows.
 Future Phase 6b projections must extend this command rather than creating a second rebuild
 path. The expected future order is:
 
+0. genesis seed (temporal-map baseline from `/genesis` app_state — see Phase 8c-0)
 1. metadata
 2. lifecycle
 3. payout
 4. params
 5. key rotation
-6. temporal consensus map
+6. temporal consensus map (genesis seed first, then event replay)
 
 #### Deterministic ProjectionFailure keys
 
@@ -443,7 +597,7 @@ This phase unlocks:
 - operator timeline.
 - authority-action views.
 
-### Phase 7: Rewards Semantic Projection
+### Phase 7: Rewards Semantic Projection (completed)
 
 Goal:
 
@@ -461,21 +615,115 @@ Scope:
 
 Do not treat `EpochReward` as claim truth.
 
-### Phase 8: Liveness Ingestion and Projection
+Completed in Phase 7 / 7.1. Remaining evidence task is Phase 7.2 live rewards claim
+fixture, which is not a merge blocker for Phase 7 / 7.1.
+
+### Phase 7.2: Live Rewards Claim Fixture
 
 Goal:
 
-- Add operator signing/uptime data.
+- Exercise live claim behavior once a finalized claimable epoch exists.
+
+Scope:
+
+- wait for or configure a finalized epoch.
+- query claimable rewards for one active slot.
+- submit `MsgClaimRewards`.
+- index the tx/event.
+- run `rewards_semantic_v1`.
+- verify `RewardClaimEvent` exists.
+- verify matching `SlotRewardProjection` rows reconcile if sampled rows exist.
+- verify no fabricated amounts.
+- verify idempotent rerun.
+
+Sequencing:
+
+- Does not block Phase 8a block-signature ingestion.
+- Should be completed before rewards API/web/operator-economics pages expose claim behavior
+  as production-ready.
+
+### Phase 8a: Block Signature Ingestion (completed)
+
+Goal:
+
+- Add canonical-adjacent block signature data.
 
 Scope:
 
 - parse `block.last_commit.signatures` from stored/fetched block raw JSON.
 - store `BlockSignature`.
 - attribute signatures to committed height N-1.
-- join signatures to temporal consensus map.
-- compute per-slot/operator liveness windows.
-- detect unmapped signers as projection failures.
-- fixture activation/rotation boundary behavior on localnet.
+
+No staking validator APIs.
+
+Completed in Phase 8a as `block_signatures_v1`. It stores raw commit-signature evidence only:
+no CoreSlot attribution, liveness score, proposer enrichment, API, or web work.
+
+### Phase 8b: Signature-To-CoreSlot Attribution (completed)
+
+Goal:
+
+- Add operator/CoreSlot attribution for observed commit-signature evidence.
+
+Scope:
+
+- consume `BlockSignature` rows.
+- join validator addresses to `CoreSlotConsensusWindow` by committed height.
+- store `OperatorSigningEvidence`.
+- keep no-window/unmapped/absent rows separate from missed signatures.
+
+No staking validator APIs.
+
+Completed in Phase 8b as `operator_signing_evidence_v1`. It stores attribution evidence
+only: no liveness score, missed-count calculation, proposer enrichment, API, or web work.
+
+### Phase 8c-0b: Genesis Temporal-Map Seed (completed)
+
+Goal:
+
+- Make the temporal map genesis-complete so the expected CoreSlot signer set is trustworthy.
+
+Scope:
+
+- added `ChainClient.getGenesis()` over CometBFT `/genesis`, with `/genesis_chunked` fallback for
+  large genesis responses.
+- parse `app_state.coreslot.{slots, params, reward_weights, reserved_consensus_addresses,
+  pending_key_rotations}`.
+- seed one ACTIVE `CoreSlotConsensusWindow` per genesis slot with `status==ACTIVE`,
+  `effectiveFromHeight = 1` (no `+2` offset for the genesis baseline), then replay event deltas.
+- derive consensus address from `consensus_pubkey` when genesis omits a precomputed
+  `consensus_address`.
+- rebuildable, idempotent, `ProjectionFailure` on any unmappable genesis slot.
+
+Result:
+
+- genesis seed runs as step 0 of `coreslot_temporal_map_v1`.
+- combined CoreSlot semantic rebuild passes the ChainClient into temporal-map replay and runs
+  `metadata -> lifecycle -> payout -> params -> key_rotation -> temporal_map(seed -> replay)`.
+- no new Prisma model was needed; the seed reuses `CoreSlotConsensusWindow`.
+- inactive/keyless genesis slots are skipped without failure; active missing/invalid consensus
+  addresses fail deterministically.
+- local sparse smoke over 119..3585 confirmed four genesis windows at height 1, zero temporal-map
+  failures, slot 4's seeded `f060...` window closing at 3556, and attribution improving to
+  `130 attributed / 1 absent_no_validator / 0 unresolved failures`.
+
+This removes the Phase 8c-1 blocker at the design/code level. A fresh contiguous localnet fixture
+with active genesis CoreSlot operators is still recommended before using liveness evidence as a
+product signal.
+
+### Phase 8c-1: Liveness — Expected Set + Missed Evidence
+
+Goal:
+
+- Add per-height expected-signer / missed-signature evidence (CoreSlots-only).
+
+Scope:
+
+- consume `OperatorSigningEvidence` + genesis-seeded `CoreSlotConsensusWindow`.
+- enumerate expected signers at committed height = active CoreSlots (not the consensus commit set).
+- missed = expected active CoreSlots minus observed attributed+signed evidence.
+- keep `no_consensus_window`/`unmapped_validator`/`absent_no_validator` out of missed semantics.
+- defer uptime percentages / rolling summaries to Phase 8c-2.
 
 No staking validator APIs.
 
@@ -631,6 +879,9 @@ The phases can be batched differently, but the dependencies should not be blurre
      `effective_height` still need live fixture coverage (corrected by consistency, not yet
      live-proven). The inactivation close boundary is unit-tested but was not exercisable in
      the live range (no indexed genesis-activation window to close).
+   - Phase 8c-0 explains *why* there was no genesis-activation window to close: genesis CoreSlots
+     emit no indexable event. Once the genesis seed lands, slot 4's seeded genesis window closes at
+     its 3554/3556 inactivation, making that boundary live-exercisable.
 
 2. Should `BlockSignature` be added as generic indexed data or projection data?
    - Recommended: canonical-adjacent generic data because it comes directly from `/block`.
@@ -660,6 +911,12 @@ The phases can be batched differently, but the dependencies should not be blurre
 - Do not treat failed tx messages as successful semantic state changes.
 - Do not treat `EpochReward` as current claim truth.
 - Do not build liveness from current snapshots only; it must be historical and temporal.
+- Liveness is CoreSlots-only: the expected signer set is the active-CoreSlot set, never the full
+  consensus commit set. Do not enumerate non-CoreSlot consensus validators as expected signers or
+  misses, and do not gauge completeness by comparing window count to `commitSetSize`.
+- The temporal map must be genesis-seeded from `/genesis` app_state (genesis CoreSlots emit no
+  indexable event). Seed one ACTIVE window per genesis slot at `effectiveFromHeight = 1` (no `+2`
+  offset for the genesis baseline), then replay events on top. Keep it rebuildable — genesis is fixed.
 - For block-height validator-set membership, CoreSlot temporal windows use
   `validatorUpdateHeight + 2`, based on Phase 6b-3 live localnet evidence and live-confirmed by
   the Phase 6b-4 rerun (reactivation 3567->3569, rotation 3582->3584 matched
@@ -680,19 +937,27 @@ The phases can be batched differently, but the dependencies should not be blurre
 
 Recommended next implementation step:
 
-Phase 6b-1: CoreSlot key rotation projection.
+**Phase 8c-1: expected set + missed evidence** — now unblocked by the genesis temporal-map seed.
+
+Before treating the Phase 8c-1 output as product-grade, rebuild the localnet fixture with active
+genesis CoreSlot operators and re-ingest contiguously from height 1. The current DB is a sparse
+36-block smoke set and is useful for attribution checks, not final liveness confidence.
 
 Minimum acceptance:
 
-- `CoreSlotConsensusKeyRotation` or equivalent key-rotation history model.
-- projection name `coreslot_key_rotation_v1`.
-- projection from existing generic `ExplorerTransaction`, `Message`, and `Event` rows.
-- support for requested, applied, immediate-applied, and cancelled rotations.
-- requested/cancelled rotations must not update `CoreSlotProjection.consensusAddress`.
-- applied rotations update `CoreSlotProjection.consensusAddress`.
-- deterministic `ProjectionFailure.failureKey` behavior.
-- combined CoreSlot semantic rebuild order extended after params with key rotation.
-- no temporal consensus map yet.
-- no rewards/liveness/API/web pages yet.
+- consume `OperatorSigningEvidence` and genesis-seeded `CoreSlotConsensusWindow`.
+- expected signer set = active CoreSlots at committed height.
+- missed = expected active CoreSlots minus observed attributed signed evidence.
+- preserve the Phase 8b taxonomy: `no_consensus_window`, `unmapped_validator`, and
+  `absent_no_validator` are not themselves missed-signature evidence.
+- no uptime percentages, proposer enrichment, API/web, or staking validator APIs yet.
 
-After that, proceed to Phase 6b-2: temporal consensus map / validator-set timeline.
+Then Phase 8c-1 (expected set + missed evidence, CoreSlots-only) consumes the now-complete map.
+
+Phase 7.2 can run in parallel later once a finalized claimable rewards epoch exists. It does
+not block this work, but should happen before rewards API/web/operator-economics claim
+surfaces are considered production-ready.
+
+Phase 7.2 can run in parallel later once a finalized claimable rewards epoch exists. It does
+not block Phase 8a, but should happen before rewards API/web/operator-economics claim
+surfaces are considered production-ready.

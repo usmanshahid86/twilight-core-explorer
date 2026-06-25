@@ -1,5 +1,6 @@
 export interface ChainClient {
   getStatus(): Promise<ChainStatus>;
+  getGenesis(): Promise<GenesisSource>;
   getBlock(height: bigint): Promise<BlockSource>;
   getBlockResults(height: bigint): Promise<BlockResultsSource>;
   getTx(hash: string): Promise<TxSource>;
@@ -30,6 +31,13 @@ export interface ChainClient {
   getSupplySchedule(): Promise<ModuleSnapshot>;
   getCurrentEpochActiveBlocks(): Promise<ModuleSnapshot>;
   getModuleBalances(): Promise<ModuleSnapshot>;
+}
+
+export interface GenesisSource {
+  chainId: string | undefined;
+  initialHeight: string;
+  coreSlot: unknown;
+  raw: unknown;
 }
 
 export interface ChainStatus {
