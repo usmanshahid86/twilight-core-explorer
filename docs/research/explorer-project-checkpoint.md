@@ -1,6 +1,6 @@
 # Twilight Core Explorer Project Checkpoint
 
-Date: 2026-06-25
+Date: 2026-06-26
 
 Status: checkpoint after Phase A/B foundation, descriptor decoder work, chain-alignment
 cleanup, the full CoreSlot semantic projection set, temporal consensus map/boundary
@@ -14,11 +14,15 @@ set-difference); 8c-1 materializes the per-height expected-signer / missed evide
 live-validated on a clean 4-operator fixture (1440 rows, 41 slot-4 misses = 39 absent + 2 nil);
 8c-2 aggregates that evidence into per-(slot, window) liveness summaries (slot 4 lifetime uptime
 8861 bps, recent_100 5900 bps; slots 1-3 = 10000); 8c-3 derives health labels + a network halt-risk
-snapshot from those summaries (slots 1-3 healthy, slot 4 degraded, network = warning).
+snapshot from those summaries (slots 1-3 healthy, slot 4 degraded, network = warning). Finally, a
+**live behavioral validation (2026-06-26)** drove every CoreSlot tx category through the chain with
+real `twilightd` transactions and verified the indexer responded — closing the last live-coverage
+gaps. **The entire CoreSlot + liveness backend stack (6a/6b/7/8a–8c-3) is complete and
+live-proven; the next phase is the API (Phase 9).**
 
 This document summarizes what has already been decided and built, what is still only
 designed, and the recommended sequence from here. It is intended to keep implementation
-aligned before Phase 8a block-signature ingestion and later API/web work.
+aligned for Phase 9 (API) and later web work.
 
 ## 1. Product North Star
 
@@ -412,6 +416,9 @@ Established before building liveness:
 
 ## 4. Designed But Not Yet Implemented
 
+> **Note (2026-06-26):** this whole section is historical — the CoreSlot semantic design below is
+> fully implemented (Phases 6a/6b) and live-exercised. Retained for design rationale only.
+
 ### Phase A/B-6: CoreSlot Semantic Projection Design
 
 Designed:
@@ -436,10 +443,12 @@ Reviewed and accepted refinements:
 - Filter semantic projections to successful transactions only.
 - Enrich `Account.accountKind` where cheap and clear: operator, payout, authority, module.
 
-Hard fixture needs before full confidence:
+Hard fixture needs before full confidence (**all live-exercised 2026-06-26**):
 
-- delayed `key_rotation_requested` tx to later EndBlock `key_rotated`.
-- queued params to later `params_activated`.
+- ~~delayed `key_rotation_requested` tx to later EndBlock `key_rotated`~~ — done (slot 3 rotation,
+  applied at +1, window switch at +2).
+- ~~queued params to later `params_activated`~~ — `update-params` exercised live (applied immediately
+  with `activation_delay_blocks=0`; emitted `coreslot_params_updated`).
 
 ### Operator Experience Milestone
 
@@ -454,30 +463,25 @@ Designed:
 
 Important conclusion:
 
-- Most operator UX is pages/API over already-planned projections.
-- Per-operator liveness is the main missing data dependency.
+- Most operator UX is pages/API over already-built projections.
+- **The per-operator liveness data dependency is now fully satisfied** — `CoreSlotHealthSnapshot`
+  (per-operator health/uptime/streaks) + `NetworkLivenessRiskSnapshot` (network halt-risk) plus the
+  lifecycle/payout/metadata/key-rotation/rewards projections cover every operator-page need. Operator
+  UX is now purely API (Phase 9) + web (Phase 11) work over existing data.
 
 ## 5. Known Gaps
 
 ### Data Gaps
 
-1. Block commit signatures and CoreSlot attribution are stored, but liveness is not computed.
-   - Phase 8a stores raw commit-signature evidence in `BlockSignature`.
-   - Phase 8b attributes signatures to historical CoreSlot windows in
-     `OperatorSigningEvidence`.
-   - Phase 8c still needs expected signer-set enumeration and liveness/uptime summaries.
+1. ~~Block commit signatures and CoreSlot attribution are stored, but liveness is not computed.~~
+   **RESOLVED.** 8a `BlockSignature` → 8b `OperatorSigningEvidence` → 8c-1 per-height evidence →
+   8c-2 summaries → 8c-3 health + network halt-risk. Full stack live-validated.
 
-2. Temporal consensus-address map exists, but it is **not genesis-complete** — resolved by
-   Phase 8c-0 into a concrete prerequisite.
-   - `CoreSlotConsensusWindow` uses the Phase 6b-4 `validatorUpdateHeight + 2` membership
-     boundary.
-   - Phase 8b writes `no_consensus_window` for coverage gaps.
-   - **8c-0 finding:** genesis CoreSlots emit no indexable event, so the event-only map never opens
-     windows for the founding set. The fix is a **genesis-baseline seed** of the temporal map from
-     `/genesis` app_state (one ACTIVE window per genesis slot at `effectiveFromHeight = 1`, no `+2`
-     offset for the genesis set), then event replay on top. This is a temporal-map (6b) correctness
-     fix and a hard prerequisite for Phase 8c-1. Liveness scope is CoreSlots-only; the expected set
-     is the active-CoreSlot set, not the consensus commit set.
+2. ~~Temporal consensus-address map is not genesis-complete.~~ **RESOLVED** by Phase 8c-0b
+   (genesis-baseline seed of `CoreSlotConsensusWindow` from `/genesis` app_state, one ACTIVE window
+   per genesis slot at `effectiveFromHeight = 1`, then event replay). Genesis windows and the
+   `validatorUpdateHeight + 2` boundary are live-proven (see Open Question #1). Liveness is
+   CoreSlots-only.
 
 3. Snapshot tables must be categorized clearly.
    - Rebuildable derived projections are different from observed live samples.
@@ -497,13 +501,10 @@ Important conclusion:
    - This does not block Phase 8a block-signature ingestion, but it should be completed
      before rewards API/web/operator-economics pages rely on live claim behavior.
 
-6. Phase 8c must preserve the attribution taxonomy from Phase 8b.
-   - `no_consensus_window` means temporal coverage gap.
-   - `unmapped_validator` means coverage exists but this validator address did not map.
-   - `absent_no_validator` means last-commit evidence carried no validator address.
-   - None of these statuses means missed signature by itself.
-   - Phase 8c missed-count logic must use expected signers at committed height minus observed
-     commit signatures at committed height.
+6. ~~Phase 8c must preserve the attribution taxonomy from Phase 8b.~~ **RESOLVED in 8c-1.** Missed =
+   expected active CoreSlots minus flag-2 signed evidence (set-difference); `no_consensus_window` /
+   `unmapped_validator` / `absent_no_validator` are kept out of missed semantics. Both ABSENT and NIL
+   count as missed with the cause retained. Live-validated (41 slot-4 misses = 39 absent + 2 nil).
 
 ### Proposer and signature height semantics
 
@@ -572,14 +573,14 @@ deterministic `failureKey` upserts, and the combined CoreSlot semantic rebuild c
 the completed implementation section above. Not in scope here: key rotation, temporal
 consensus map, rewards, liveness, API/web.
 
-### Phase 6b: Key Rotation and Temporal Consensus Map
+### Phase 6b: Key Rotation and Temporal Consensus Map (completed)
 
-Goal:
+Done: `coreslot_key_rotation_v1` (`CoreSlotConsensusKeyRotation`) and the temporal consensus map
+(`CoreSlotConsensusWindow`, `coreslot_temporal_map_v1`) with the `validatorUpdateHeight + 2` boundary
+and the 8c-0b genesis seed. Key rotation + window close/reopen are **live-proven** (behavioral
+validation). The design notes below are historical.
 
-- Implement CoreSlot key rotation projection and the historical temporal consensus-address
-  map.
-
-Recommended split:
+Recommended split (delivered):
 
 1. Phase 6b-1: key rotation projection.
 2. Phase 6b-2: temporal consensus map / validator-set timeline.
@@ -795,6 +796,24 @@ summaries.
 
 API, web, per-operator grain, consensusPower weighting, historical network snapshots remain deferred.
 
+### Live Behavioral Validation (completed)
+
+Status: **PASS (all categories).** See `docs/research/phase-8c-live-behavioral-validation-report.md`
+and runbook Part G (`docs/research/localnet/fixture-reset-runbook.md`). Drove the live 4-CoreSlot
+localnet with REAL `twilightd coreslot` transactions (no DB manipulation) and verified the indexer's
+derived rows for every category: metadata, payout, params, lifecycle (inactivate→reactivate),
+suspend→reactivate, key rotation (with node restart), and add+remove operator. Results:
+
+- The `validatorUpdateHeight + 2` membership boundary is **empirically proven** for inactivate,
+  reactivate, suspend, and key rotation — every `/validators` transition matched `txHeight + 2`.
+- The genesis-window **close** path ran on live data for the first time (closes Open Question #1).
+- Inactive/suspended ≠ missed (window-closed slot produces no missed rows); attribution follows the
+  slotId across a key rotation; the anonymous-absent set-difference correctly attributes a
+  freshly-added operator's misses → `down`; health/halt-risk react correctly.
+- Zero unresolved `ProjectionFailure` across the entire run. Operational gotchas recorded
+  (`query tx` unreliable → verify via indexer; `update-params` needs numeric int64 fields; shared
+  advisory lock needs a gap between projection runs; swap only `priv_validator_key.json` on rotation).
+
 ### Sequencing note: rewards and liveness
 
 Rewards and liveness can proceed in parallel after the CoreSlot temporal map exists. Rewards
@@ -906,57 +925,40 @@ not be forgotten.
 
 ## 7. Updated Phase Count
 
-From this checkpoint:
+The entire backend/projection stack is complete: CoreSlot semantic (6a), key rotation + temporal map
+(6b), rewards (7/7.1), and the full liveness stack (8a → 8b → 8c-0b/0c → 8c-1/2/3), all live-proven.
 
-CoreSlot metadata/lifecycle/payout/params projection (Phase 6a) is complete.
+Remaining:
 
-- MVP usable explorer: roughly 5 phases remain.
-  1. CoreSlot key rotation + temporal map.
-  2. Rewards projection.
-  3. API foundation.
-  4. web foundation.
-  5. Twilight-specific pages.
+- MVP usable explorer: ~3 phases — **API foundation (9)**, web foundation (10), Twilight-specific
+  pages (11).
+- Production-grade operator explorer: ~5 phases — the above + operator education/onboarding (12) and
+  deployment/hardening (13).
 
-- Production-grade operator explorer: roughly 7 phases remain.
-  1. CoreSlot key rotation + temporal map.
-  2. Rewards projection.
-  3. Liveness ingestion/projection.
-  4. API foundation.
-  5. web and Twilight pages.
-  6. operator education/onboarding.
-  7. deployment/hardening.
+Open evidence tasks (not phase blockers): Phase 7.2 live rewards-claim fixture; and the optional
+broader liveness drills (multi-node halt → network `critical`; rotation-mid-outage).
 
-The phases can be batched differently, but the dependencies should not be blurred:
+Dependencies that must not be blurred:
 
-- liveness depends on CoreSlot temporal mapping.
-- operator economics depends on rewards projection.
-- authority audit depends on lifecycle/params projections.
+- operator economics depends on rewards projection (built; 7.2 for live claims).
+- authority audit depends on lifecycle/params projections (built).
+- per-operator liveness/health pages depend on 8c-3 (built).
 - onboarding/explainer can land early once the web/API shell exists.
 
 ## 8. Current Open Questions
 
-1. What is the exact validator-set effective boundary for activation/key rotation?
-   - Phase 6b-3 localnet evidence pinned inactivation, reactivation, and delayed key
-     rotation membership at `validatorUpdateHeight + 2`.
-   - Phase 6b-4 implemented `validatorUpdateHeight + 2` and the fix was live-confirmed:
-     a full reingest + combined reset/replay over the localnet fixture range reproduced the
-     reactivation (3567 -> 3569) and delayed key-rotation (3582 -> 3584) membership boundaries
-     exactly against `/validators?height`, with slot 4 `CoreSlotConsensusKeyRotation` reaching
-     `applied` once `finalize_block_events` were ingested.
-   - Suspension, removal, immediate-applied rotation, and lifecycle events with explicit
-     `effective_height` still need live fixture coverage (corrected by consistency, not yet
-     live-proven). The inactivation close boundary is unit-tested but was not exercisable in
-     the live range (no indexed genesis-activation window to close).
-   - Phase 8c-0 explains *why* there was no genesis-activation window to close: genesis CoreSlots
-     emit no indexable event. Once the genesis seed lands, slot 4's seeded genesis window closes at
-     its 3554/3556 inactivation, making that boundary live-exercisable.
+1. ~~What is the exact validator-set effective boundary for activation/key rotation?~~
+   **RESOLVED — live-proven (2026-06-26 behavioral validation).** `validatorUpdateHeight + 2` is the
+   confirmed boundary, now empirically matched against live `/validators` for inactivate (3010→drop
+   3012), reactivate (3017→return 3019), suspend (3187→drop 3189), reactivate (3190→return 3192), and
+   key rotation (applied 3049→window switch 3051). The genesis-window **close** path ran on live data
+   (slot 4 genesis window closed at 3012; slot 2/3 genesis windows closed on suspend/rotation), and
+   **remove** was exercised (slot 5 register→activate→inactivate→remove). Do not use `H+1`.
 
-2. Should `BlockSignature` be added as generic indexed data or projection data?
-   - Recommended: canonical-adjacent generic data because it comes directly from `/block`.
-   - `BlockSignature` should be treated as canonical-adjacent generic data, but still
-     rebuildable. It is parsed from stored raw CometBFT block JSON, assuming `Block.rawJson`
-     preserves the `/block` response including `last_commit.signatures`. No new RPC call is
-     required to rebuild `BlockSignature` if the raw block payload is already stored.
+2. ~~Should `BlockSignature` be added as generic indexed data or projection data?~~
+   **RESOLVED.** Implemented as the rebuildable projection `block_signatures_v1`, parsed from stored
+   `Block.rawJson` `last_commit.signatures` (no new RPC call to rebuild). Canonical-adjacent but
+   derived/rebuildable, consistent with the projection model.
 
 3. How much bech32 consensus-address decoding should live in `packages/chain-client`?
    - Recommended: low-level transport remains hex-only; API/search layer normalizes user
@@ -1015,15 +1017,11 @@ The operator-liveness data dependency that gated the operator UX milestone is no
 `CoreSlotHealthSnapshot` + `NetworkLivenessRiskSnapshot` give per-operator health and network
 halt-risk directly.
 
-Broader liveness fixtures still worth exercising before product surfaces (not blockers): multi-node
-simultaneous outage (network `critical`), and a consensus-key rotation mid-outage (to live-exercise
-the `observed_attributed_slot_not_expected` boundary guard). Phase 7.2 live rewards claim fixture
-also remains open before rewards economics pages rely on live claim behavior.
+The live behavioral validation (2026-06-26) closed the lifecycle/rotation/boundary live-coverage
+gaps. Still worth exercising before product surfaces (not blockers): multi-node simultaneous outage
+(network `critical`), and a consensus-key rotation *mid-outage* (the rotation guard ran clean on a
+healthy chain, not yet during a concurrent outage).
 
-Phase 7.2 can run in parallel later once a finalized claimable rewards epoch exists. It does
-not block this work, but should happen before rewards API/web/operator-economics claim
-surfaces are considered production-ready.
-
-Phase 7.2 can run in parallel later once a finalized claimable rewards epoch exists. It does
-not block Phase 8a, but should happen before rewards API/web/operator-economics claim
-surfaces are considered production-ready.
+Phase 7.2 (live rewards claim fixture) can run in parallel once a finalized claimable epoch exists.
+It does not block Phase 9, but should be completed before rewards API/web/operator-economics surfaces
+expose claim behavior as production-ready.
