@@ -30,6 +30,31 @@ export const CORESLOT_LIVENESS_MISS_CAUSE = {
   nil: 'nil',
 } as const;
 
+// Phase 8c-2: liveness summaries aggregated from CoreSlotLivenessEvidence.
+export const CORESLOT_LIVENESS_SUMMARY_PROJECTION = 'coreslot_liveness_summary_v1';
+
+// Fixed window set (no env-configured sizes; rebuildable). recent_N = trailing N committed
+// heights PRESENT in evidence for the slot.
+export const CORESLOT_LIVENESS_WINDOW_KIND = {
+  lifetime: 'lifetime',
+  recent100: 'recent_100',
+  recent500: 'recent_500',
+  recent1000: 'recent_1000',
+} as const;
+
+// recent_N window sizes, keyed by windowKind. lifetime has no size.
+export const CORESLOT_LIVENESS_RECENT_WINDOWS = [
+  { kind: CORESLOT_LIVENESS_WINDOW_KIND.recent100, size: 100 },
+  { kind: CORESLOT_LIVENESS_WINDOW_KIND.recent500, size: 500 },
+  { kind: CORESLOT_LIVENESS_WINDOW_KIND.recent1000, size: 1000 },
+] as const;
+
+// Coverage quality of a summary window (NOT a health label — health is 8c-3).
+export const CORESLOT_LIVENESS_SUMMARY_STATUS = {
+  complete: 'complete',
+  incomplete: 'incomplete',
+} as const;
+
 // Currently implemented CoreSlot semantic projections, in deterministic rebuild
 // order. The combined reset/rebuild command is scoped to exactly these.
 export const CORESLOT_SEMANTIC_PROJECTIONS = [
@@ -194,6 +219,7 @@ export type ProjectionFailureKind =
   | 'observed_attributed_slot_not_expected'
   | 'unknown_liveness_shape'
   | 'malformed_liveness_input'
+  | 'liveness_summary_invariant_violation'
   | 'unknown_semantic_type'
   | 'unknown_coreslot_message'
   | 'unknown_coreslot_event'
@@ -205,6 +231,7 @@ export interface ProjectionFailureInput {
   projectionName: string;
   module?: string | null | undefined;
   sourceHeight: bigint;
+  committedHeight?: bigint | null | undefined;
   sourceTxHash?: string | null | undefined;
   sourceMsgIndex?: number | null | undefined;
   sourceMessageId?: bigint | null | undefined;

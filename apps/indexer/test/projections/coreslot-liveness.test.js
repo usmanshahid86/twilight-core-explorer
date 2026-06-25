@@ -105,6 +105,21 @@ describe('CoreSlot liveness projection (8c-1)', () => {
     assert.equal(failureKinds(p).includes('duplicate_observed_signed_slot_at_height'), true);
   });
 
+  it('stamps the exact committed height on a height-level failure (8c-2 prerequisite)', async () => {
+    const p = new MockLivenessPrisma();
+    p.seedWindow({ id: 1n, slotId: 1n, consensusAddress: ADDR(1), from: 1n });
+    // committed height 10 carried by source block 12 (committed != source-1 on purpose).
+    p.seedEvidence(signedRow({ slot: 1, source: 12n, committed: 10n, index: 0 }));
+    p.seedEvidence(signedRow({ slot: 1, source: 12n, committed: 10n, index: 1 }));
+
+    await projectCoreSlotLivenessHeight({ prisma: p, chainId: CHAIN_ID, sourceBlockHeight: 12n });
+
+    const failure = p.failures.find((f) => f.failureKind === 'duplicate_observed_signed_slot_at_height');
+    assert.ok(failure);
+    assert.equal(failure.committedHeight, 10n); // exact committed height, not source-1 (=11)
+    assert.equal(failure.sourceHeight, 12n);
+  });
+
   it('nil and signed for the same slot/height -> ProjectionFailure', async () => {
     const p = new MockLivenessPrisma();
     p.seedWindow({ id: 1n, slotId: 1n, consensusAddress: ADDR(1), from: 1n });

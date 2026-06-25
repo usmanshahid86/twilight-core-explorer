@@ -11,7 +11,9 @@ liveness evidence. The 8c-0 check established that liveness is **CoreSlots-only*
 genesis CoreSlots emit no indexable event; 8c-0b implements the required height-1 temporal-map
 seed; 8c-0c proved an absent validator is anonymous in the commit (so misses are computed by
 set-difference); 8c-1 materializes the per-height expected-signer / missed evidence and was
-live-validated on a clean 4-operator fixture (1440 rows, 41 slot-4 misses = 39 absent + 2 nil).
+live-validated on a clean 4-operator fixture (1440 rows, 41 slot-4 misses = 39 absent + 2 nil);
+8c-2 aggregates that evidence into per-(slot, window) liveness summaries (slot 4 lifetime uptime
+8861 bps, recent_100 5900 bps; slots 1-3 = 10000).
 
 This document summarizes what has already been decided and built, what is still only
 designed, and the recommended sequence from here. It is intended to keep implementation
@@ -747,6 +749,28 @@ Status: **PASS.** See `docs/research/phase-8c-1-coreslot-liveness-report.md`. Im
 No staking validator APIs. Uptime %, rolling summaries, current health, proposer enrichment, API,
 and web remain deferred to Phase 8c-2+.
 
+### Phase 8c-2: Liveness Summaries (completed)
+
+Status: **PASS.** See `docs/research/phase-8c-2-coreslot-liveness-summaries-report.md`. Implemented
+`coreslot_liveness_summary_v1` / `CoreSlotLivenessSummary`: rebuildable aggregates over
+`CoreSlotLivenessEvidence`, one row per `(slotId, windowKind)` for
+`{lifetime, recent_100, recent_500, recent_1000}`. Numeric only (health labels → 8c-3).
+
+- consumes `CoreSlotLivenessEvidence` only (+ `ProjectionFailure` for coverage); no live RPC/genesis/
+  validator-set, no re-reading 8a/8b, no proposer/API/web.
+- prerequisite: added reusable `ProjectionFailure.committedHeight`; 8c-1 now stamps the exact
+  committed height on height-level failures, so summaries map invalidated heights precisely.
+- per-(slot,window): expected/signed/missed/absent/nil counts, `uptimeBps =
+  floor(signed*10000/expected)`, signed/missed streaks, latestMissedHeight, coverage
+  (first/last/span/evidence counts), and `invalidHeightCount`/`summaryStatus` (exact, coverage-only —
+  never changes counts). recent_N = trailing N present evidence heights (sparse-safe).
+- full recompute + delete-all/createMany; scoped reset; standalone CLI after `coreslot_liveness`.
+- live-validated (1440 evidence rows → 16 summaries): slots 1-3 lifetime uptime 10000; slot 4
+  lifetime 8861 bps (319/360), recent_100 5900 bps (59/100), recent_500/1000 = lifetime; 0
+  incomplete, 0 unresolved failures.
+
+Health labels/thresholds, network halt-risk, per-operator grain, API, and web remain deferred.
+
 ### Sequencing note: rewards and liveness
 
 Rewards and liveness can proceed in parallel after the CoreSlot temporal map exists. Rewards
@@ -957,17 +981,19 @@ The phases can be batched differently, but the dependencies should not be blurre
 
 Recommended next implementation step:
 
-**Phase 8c-2: uptime/liveness summaries** — now unblocked by the Phase 8c-1 per-height evidence.
-8c-1 is complete and live-validated on the clean 4-operator fixture (1440 rows, 41 slot-4 misses).
-8c-2 should aggregate `CoreSlotLivenessEvidence` into per-operator/rolling-window uptime and
-network halt-risk summaries (still derived/rebuildable, no live snapshots), then API/web can surface
-operator liveness.
+**Phase 8c-3: liveness health labels** — now unblocked by the Phase 8c-2 numeric summaries.
+8c-2 is complete and live-validated (`coreslot_liveness_summary_v1` / `CoreSlotLivenessSummary`,
+16 summary rows; slot 4 lifetime uptime 8861 bps / recent_100 5900 bps; slots 1-3 = 10000; 0
+unresolved failures). 8c-3 should derive health labels/thresholds (`healthy`/`degraded`/`down`/
+`unknown`/`incomplete`) from the summary `uptimeBps` / streaks / `summaryStatus`, plus optional
+network-level halt-risk margin vs BFT quorum — still derived/rebuildable, no live snapshots. Then
+API/web can surface operator liveness.
 
-Candidate 8c-2 scope:
+Candidate 8c-3 scope:
 
-- per-operator signed/missed counts and rolling-window uptime over committed-height ranges.
-- network-level liveness (active CoreSlot count, missed-this-window, halt-risk margin vs BFT quorum).
-- keep it rebuildable from `CoreSlotLivenessEvidence`; no current-snapshot-only health.
+- per-(slot, window) health label from uptimeBps thresholds + current streak + summaryStatus.
+- network-level liveness (active CoreSlot count, missed-this-window, halt-risk margin vs quorum).
+- a `down` slot driven by `currentMissedStreak`; `incomplete` propagated from summary coverage.
 
 Broader liveness fixtures still worth exercising before product surfaces: multi-node simultaneous
 outage, and a consensus-key rotation mid-outage (to live-exercise the

@@ -47,7 +47,10 @@
     "project:operator-signing-evidence:reset": "node dist/projections/reset-operator-signing-evidence-cli.js",
     "project:coreslot-liveness": "node dist/projections/coreslot-liveness-cli.js",
     "project:coreslot-liveness:dev": "npm run build && node dist/projections/coreslot-liveness-cli.js",
-    "project:coreslot-liveness:reset": "node dist/projections/reset-coreslot-liveness-cli.js"
+    "project:coreslot-liveness:reset": "node dist/projections/reset-coreslot-liveness-cli.js",
+    "project:coreslot-liveness-summary": "node dist/projections/coreslot-liveness-summary-cli.js",
+    "project:coreslot-liveness-summary:dev": "npm run build && node dist/projections/coreslot-liveness-summary-cli.js",
+    "project:coreslot-liveness-summary:reset": "node dist/projections/reset-coreslot-liveness-summary-cli.js"
   },
   "dependencies": {
     "@twilight-explorer/chain-client": "0.0.0",

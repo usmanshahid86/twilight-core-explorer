@@ -222,6 +222,44 @@ model CoreSlotLivenessEvidence {
   @@index([missCause])
 }
 
+// Phase 8c-2: liveness summaries aggregated from CoreSlotLivenessEvidence, per (slotId, windowKind).
+// Numeric only (no health labels). invalidHeightCount/summaryStatus are a coverage flag derived from
+// unresolved coreslot_liveness_v1 ProjectionFailure.committedHeight in the window span; they do not
+// change the counts. Rebuildable from CoreSlotLivenessEvidence.
+model CoreSlotLivenessSummary {
+  id                   BigInt   @id @default(autoincrement())
+  summaryKey           String   @unique
+  slotId               BigInt
+  windowKind           String
+  windowSize           Int?
+  operatorAddress      String?
+  consensusAddress     String?
+  consensusWindowId    BigInt?
+  firstCommittedHeight BigInt?
+  lastCommittedHeight  BigInt?
+  spanHeightCount      BigInt?
+  evidenceHeightCount  Int
+  expectedCount        Int
+  signedCount          Int
+  missedCount          Int
+  absentMissedCount    Int
+  nilMissedCount       Int
+  uptimeBps            Int?
+  currentSignedStreak  Int
+  currentMissedStreak  Int
+  latestMissedHeight   BigInt?
+  invalidHeightCount   Int
+  summaryStatus        String
+  createdAt            DateTime @default(now())
+  updatedAtDb          DateTime @updatedAt
+
+  @@index([slotId])
+  @@index([windowKind])
+  @@index([operatorAddress])
+  @@index([summaryStatus])
+  @@index([slotId, windowKind])
+}
+
 model ProjectionCursor {
   projectionName      String
   chainId             String
@@ -241,6 +279,7 @@ model ProjectionFailure {
   projectionName  String
   module          String?
   sourceHeight    BigInt
+  committedHeight BigInt?
   sourceTxHash    String?
   sourceMsgIndex  Int?
   sourceMessageId BigInt?
@@ -258,6 +297,7 @@ model ProjectionFailure {
   @@index([projectionName])
   @@index([module])
   @@index([sourceHeight])
+  @@index([committedHeight])
   @@index([sourceTxHash])
   @@index([failureKind])
   @@index([resolved])

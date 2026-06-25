@@ -171,7 +171,7 @@ async function projectCommittedHeight(
 
   const evaluation = evaluateHeight(committedHeight, expected, rows);
   if (evaluation.failure) {
-    await createFailure(tx, { sourceHeight: sourceBlockHeight, ...evaluation.failure });
+    await createFailure(tx, { sourceHeight: sourceBlockHeight, committedHeight, ...evaluation.failure });
     counters.failuresCreated += 1;
     // Hard failure INVALIDATES the committed height: delete any existing rows for H so stale
     // evidence from an earlier successful run can never persist, then write no new rows.
