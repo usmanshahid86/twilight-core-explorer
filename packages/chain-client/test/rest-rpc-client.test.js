@@ -50,6 +50,7 @@ function createRecordingFetch(responses = {}) {
         result: {
           begin_block_events: [{ type: 'begin' }],
           end_block_events: [{ type: 'end' }],
+          finalize_block_events: [{ type: 'finalize' }],
           txs_results: [{ code: 0 }],
         },
       });
@@ -87,7 +88,9 @@ describe('RestRpcChainClient', () => {
 
     assert.equal((await client.getStatus()).latestBlockHeight, '17');
     assert.equal((await client.getBlock(17n)).hash, 'ABC123');
-    assert.deepEqual((await client.getBlockResults(17n)).txResults, [{ code: 0 }]);
+    const blockResults = await client.getBlockResults(17n);
+    assert.deepEqual(blockResults.txResults, [{ code: 0 }]);
+    assert.deepEqual(blockResults.finalizeBlockEvents, [{ type: 'finalize' }]);
     assert.equal((await client.getTx('ABC123')).code, 0);
 
     assert.equal(calls[0], 'http://rpc.test/status');

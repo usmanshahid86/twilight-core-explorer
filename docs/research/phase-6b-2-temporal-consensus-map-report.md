@@ -156,6 +156,20 @@ Explorer-side rule for now:
 TODO: confirm activation and key-rotation validator-set effective boundaries with live
 localnet fixtures.
 
+Correction from Phase 6b-3 / Phase 6b-4:
+
+- The `H + 1` rule above is obsolete for block-height validator-set membership windows.
+- Live localnet evidence showed validator update at `H`, `next_validators_hash` changing at
+  `H + 1`, and `/validators?height` membership changing at `H + 2`.
+- Phase 6b-4 adds `CoreSlotConsensusWindow.validatorUpdateHeight` and updates
+  `effectiveFromHeight` / `effectiveToHeight` to use `validatorUpdateHeight + 2`.
+- The same `+2` membership rule is applied to suspension, removal, immediate-applied
+  rotation, and explicit lifecycle `effective_height` cases by consistency, but those cases
+  still need dedicated live fixture coverage.
+- A future robust design should derive validator-set entry/exit windows directly from
+  `coreslot_validator_update_emitted`; Phase 6b-4 keeps the lifecycle/key-rotation semantic
+  row approach and aligns it to the observed membership boundary.
+
 Height semantics retained for later consumers:
 
 - `block.header.proposer_address` belongs to block height `N`, so proposer enrichment should
@@ -372,7 +386,10 @@ Matches are docs-only guardrails / historical non-goals. No source dependency wa
 
 ## 16. Known Limitations
 
-- Effective-height boundary still needs a live localnet activation / delayed-rotation fixture.
+- The original effective-height boundary note is superseded by Phase 6b-3 / 6b-4 evidence
+  for inactivation, reactivation, and delayed key rotation. Suspension, removal,
+  immediate-applied rotation, and explicit lifecycle `effective_height` still need live
+  fixture coverage.
 - No database exclusion constraint enforces non-overlap; prevention is in projector logic and
   tests for now.
 - `coreslot_validator_update_emitted` is not projected.

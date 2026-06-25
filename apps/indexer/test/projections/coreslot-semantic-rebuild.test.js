@@ -854,6 +854,7 @@ class CombinedMockPrisma {
       slotId: 1n,
       consensusAddress: CONSENSUS,
       status: 'ACTIVE',
+      validatorUpdateHeight: 119n,
       effectiveFromHeight: 121n,
       effectiveToHeight: null,
       openedByKind: 'lifecycle',

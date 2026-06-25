@@ -85,6 +85,25 @@ describe('CoreSlot key rotation projection', () => {
     assert.equal(prisma.rotations[0].appliedHeight, 150n);
   });
 
+  it('5b. delayed slot 4 finalize apply event transitions requested rotation to applied', async () => {
+    const prisma = new MockKeyRotationPrisma();
+    prisma.seedRequested({ height: 3581n, slotId: 4n, effective: 3582n });
+    prisma.seedDelayedApplied({ height: 3582n, slotId: 4n, effective: 3582n });
+
+    await projectCoreSlotKeyRotationRange({
+      prisma,
+      chainId: CHAIN_ID,
+      startHeight: 3581n,
+      endHeight: 3582n,
+    });
+
+    assert.equal(prisma.rotations.length, 1);
+    assert.equal(prisma.rotations[0].slotId, 4n);
+    assert.equal(prisma.rotations[0].status, 'applied');
+    assert.equal(prisma.rotations[0].effectiveHeight, 3582n);
+    assert.equal(prisma.rotations[0].appliedHeight, 3582n);
+  });
+
   it('6. delayed applied rotation updates CoreSlotProjection.consensusAddress', async () => {
     const prisma = new MockKeyRotationPrisma();
     prisma.seedRequested({ height: 100n, slotId: 1n, effective: 150n });

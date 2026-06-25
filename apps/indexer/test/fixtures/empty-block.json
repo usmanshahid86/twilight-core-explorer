@@ -50,6 +50,7 @@
         ]
       }
     ],
+    "finalizeBlockEvents": [],
     "txResults": [],
     "raw": {
       "result": {

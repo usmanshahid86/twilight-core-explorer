@@ -50,6 +50,7 @@ export interface BlockResultsSource {
   height: string;
   beginBlockEvents: unknown[];
   endBlockEvents: unknown[];
+  finalizeBlockEvents: unknown[];
   txResults: unknown[];
   raw: unknown;
 }

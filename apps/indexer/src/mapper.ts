@@ -239,8 +239,16 @@ export function extractBlockResultEvents(source: BlockResultsSource): EventRow[]
     eventIndex,
     phase: 'end_block',
   }));
+  const finalizeEvents = source.finalizeBlockEvents.map((event, eventIndex) => mapEvent({
+    event,
+    height,
+    txHash: null,
+    txIndex: null,
+    eventIndex,
+    phase: 'finalize_block',
+  }));
 
-  return [...beginEvents, ...endEvents];
+  return [...beginEvents, ...endEvents, ...finalizeEvents];
 }
 
 export function inferModuleFromTypeUrl(typeUrl: string): string | undefined {

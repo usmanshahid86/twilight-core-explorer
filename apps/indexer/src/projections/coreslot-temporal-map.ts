@@ -13,6 +13,13 @@ import {
 
 const ACTIVE_STATUS = 'ACTIVE';
 
+/**
+ * Live Phase 6b-3 fixture showed:
+ * validator update at H -> next_validators_hash at H+1 -> /validators?height membership at H+2.
+ * CoreSlotConsensusWindow is for block-height membership attribution, so it uses H+2.
+ */
+export const VALIDATOR_SET_MEMBERSHIP_OFFSET = 2n;
+
 export interface ProjectCoreSlotTemporalMapRangeArgs {
   prisma: CoreSlotTemporalMapProjectionPrisma;
   chainId: string;
@@ -91,6 +98,7 @@ interface ConsensusWindowSource {
   consensusAddress: string;
   status: string;
   consensusPower: bigint | null;
+  validatorUpdateHeight: bigint | null;
   effectiveFromHeight: bigint;
   effectiveToHeight: bigint | null;
   openedByKind: string;
@@ -115,6 +123,7 @@ interface OpenWindowInput {
   operatorAddress: string | null;
   consensusAddress: string;
   consensusPower: bigint | null;
+  validatorUpdateHeight: bigint;
   effectiveFromHeight: bigint;
   openedByKind: string;
   openedByEventId: bigint | null;
@@ -259,12 +268,14 @@ async function projectLifecycleEvent(
       return;
     }
 
-    const effectiveFromHeight = deriveLifecycleEffectiveHeight(event);
+    const validatorUpdateHeight = deriveLifecycleValidatorUpdateHeight(event);
+    const effectiveFromHeight = membershipHeightFromValidatorUpdate(validatorUpdateHeight);
     const opened = await openActiveWindow(tx, {
       slotId: event.slotId,
       operatorAddress: event.operatorAddress,
       consensusAddress: consensusAddress.value,
       consensusPower: event.power,
+      validatorUpdateHeight,
       effectiveFromHeight,
       openedByKind: 'lifecycle',
       openedByEventId: event.sourceEventId,
@@ -285,7 +296,9 @@ async function projectLifecycleEvent(
   ) {
     const closed = await closeActiveWindows(tx, {
       slotId: event.slotId,
-      effectiveToHeight: deriveLifecycleEffectiveHeight(event),
+      effectiveToHeight: membershipHeightFromValidatorUpdate(
+        deriveLifecycleValidatorUpdateHeight(event),
+      ),
       closedByKind: 'lifecycle',
       closedByEventId: event.sourceEventId,
       closedByRotationId: null,
@@ -364,8 +377,8 @@ async function projectRotation(
     return;
   }
 
-  const effectiveFromHeight = deriveRotationEffectiveHeight(rotation);
-  if (effectiveFromHeight === null) {
+  const validatorUpdateHeight = deriveRotationValidatorUpdateHeight(rotation);
+  if (validatorUpdateHeight === null) {
     await createFailure(tx, {
       sourceHeight,
       sourceEventId: rotation.sourceAppliedEventId,
@@ -376,6 +389,7 @@ async function projectRotation(
     counters.failuresCreated += 1;
     return;
   }
+  const effectiveFromHeight = membershipHeightFromValidatorUpdate(validatorUpdateHeight);
 
   const existingNewWindow = await findSlotConsensusWindowAtHeight(
     tx,
@@ -409,6 +423,7 @@ async function projectRotation(
     operatorAddress: rotation.operatorAddress,
     consensusAddress: newConsensusAddress.value,
     consensusPower: rotation.power,
+    validatorUpdateHeight,
     effectiveFromHeight,
     openedByKind: 'key_rotation',
     openedByEventId: rotation.sourceAppliedEventId,
@@ -437,6 +452,7 @@ async function openActiveWindow(
       data: {
         operatorAddress: input.operatorAddress ?? existingSame.operatorAddress,
         consensusPower: input.consensusPower ?? existingSame.consensusPower,
+        validatorUpdateHeight: input.validatorUpdateHeight ?? existingSame.validatorUpdateHeight,
         rawOpenJson: input.rawOpenJson ?? existingSame.rawOpenJson,
       },
     });
@@ -490,6 +506,7 @@ async function openActiveWindow(
       consensusAddress: input.consensusAddress,
       status: ACTIVE_STATUS,
       consensusPower: input.consensusPower,
+      validatorUpdateHeight: input.validatorUpdateHeight,
       effectiveFromHeight: input.effectiveFromHeight,
       effectiveToHeight: null,
       openedByKind: input.openedByKind,
@@ -673,14 +690,18 @@ async function findOpenSlotWindows(
   });
 }
 
-function deriveLifecycleEffectiveHeight(event: LifecycleSource): bigint {
-  return readJsonHeight(event.rawEventJson, 'effective_height') ?? event.height + 1n;
+function deriveLifecycleValidatorUpdateHeight(event: LifecycleSource): bigint {
+  return readJsonHeight(event.rawEventJson, 'effective_height') ?? event.height;
 }
 
-function deriveRotationEffectiveHeight(rotation: RotationSource): bigint | null {
+function deriveRotationValidatorUpdateHeight(rotation: RotationSource): bigint | null {
   if (rotation.effectiveHeight !== null) return rotation.effectiveHeight;
-  if (rotation.appliedHeight !== null) return rotation.appliedHeight + 1n;
+  if (rotation.appliedHeight !== null) return rotation.appliedHeight;
   return null;
+}
+
+function membershipHeightFromValidatorUpdate(validatorUpdateHeight: bigint): bigint {
+  return validatorUpdateHeight + VALIDATOR_SET_MEMBERSHIP_OFFSET;
 }
 
 function readJsonHeight(value: unknown, key: string): bigint | null {

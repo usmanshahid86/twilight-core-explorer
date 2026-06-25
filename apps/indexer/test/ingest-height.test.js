@@ -261,6 +261,49 @@ describe('ingestHeight', () => {
     );
   });
 
+  it('stores finalize_block_events with distinct idempotent event keys', async () => {
+    const base = loadFixture('empty-block.json');
+    const blockResults3582 = JSON.parse(
+      readFileSync(
+        join(repoRoot, 'docs/research/artifacts/phase-6b-3/rotate-slot4/block-results-3582.json'),
+        'utf8',
+      ),
+    );
+    const fixture = structuredClone(base);
+    fixture.block.height = '3582';
+    fixture.block.hash = 'BLOCK3582';
+    fixture.block.raw.result.block.header.height = '3582';
+    fixture.block.raw.result.block_id.hash = 'BLOCK3582';
+    fixture.blockResults = {
+      height: '3582',
+      beginBlockEvents: [{ type: 'phase_collision', attributes: [] }],
+      endBlockEvents: [{ type: 'phase_collision', attributes: [] }],
+      finalizeBlockEvents: blockResults3582.result.finalize_block_events,
+      txResults: blockResults3582.result.txs_results ?? [],
+      raw: blockResults3582,
+    };
+
+    const client = createClient(fixture);
+    const prisma = new MockPrisma();
+
+    await ingestHeight({ chainId: 'twilight-test', height: 3582n, client, prisma });
+    await ingestHeight({ chainId: 'twilight-test', height: 3582n, client, prisma });
+
+    assert.equal(prisma.events.size, 5);
+    assert.ok(prisma.events.has('3582:begin_block:none:0'));
+    assert.ok(prisma.events.has('3582:end_block:none:0'));
+    assert.ok(prisma.events.has('3582:finalize_block:none:0'));
+    assert.equal(prisma.events.get('3582:finalize_block:none:0').type, 'coreslot_key_rotated');
+
+    const finalizeEvents = [...prisma.events.values()].filter(
+      (event) => event.phase === 'finalize_block',
+    );
+    assert.equal(
+      finalizeEvents.filter((event) => event.type === 'coreslot_validator_update_emitted').length,
+      2,
+    );
+  });
+
   it('decodes fallback raw tx bytes into Message rows', async () => {
     const fixture = loadFixture('empty-block.json');
     const rawTxFixture = JSON.parse(

@@ -620,8 +620,17 @@ The phases can be batched differently, but the dependencies should not be blurre
 ## 8. Current Open Questions
 
 1. What is the exact validator-set effective boundary for activation/key rotation?
-   - Likely EndBlock(H) applies to signing block H+1.
-   - Must be pinned with localnet fixtures.
+   - Phase 6b-3 localnet evidence pinned inactivation, reactivation, and delayed key
+     rotation membership at `validatorUpdateHeight + 2`.
+   - Phase 6b-4 implemented `validatorUpdateHeight + 2` and the fix was live-confirmed:
+     a full reingest + combined reset/replay over the localnet fixture range reproduced the
+     reactivation (3567 -> 3569) and delayed key-rotation (3582 -> 3584) membership boundaries
+     exactly against `/validators?height`, with slot 4 `CoreSlotConsensusKeyRotation` reaching
+     `applied` once `finalize_block_events` were ingested.
+   - Suspension, removal, immediate-applied rotation, and lifecycle events with explicit
+     `effective_height` still need live fixture coverage (corrected by consistency, not yet
+     live-proven). The inactivation close boundary is unit-tested but was not exercisable in
+     the live range (no indexed genesis-activation window to close).
 
 2. Should `BlockSignature` be added as generic indexed data or projection data?
    - Recommended: canonical-adjacent generic data because it comes directly from `/block`.
@@ -651,6 +660,10 @@ The phases can be batched differently, but the dependencies should not be blurre
 - Do not treat failed tx messages as successful semantic state changes.
 - Do not treat `EpochReward` as current claim truth.
 - Do not build liveness from current snapshots only; it must be historical and temporal.
+- For block-height validator-set membership, CoreSlot temporal windows use
+  `validatorUpdateHeight + 2`, based on Phase 6b-3 live localnet evidence and live-confirmed by
+  the Phase 6b-4 rerun (reactivation 3567->3569, rotation 3582->3584 matched
+  `/validators?height`). Do not use `H+1` for liveness/proposer block-height attribution.
 - Do not revive old zkOS/dark-pool/BTC bridge product pages.
 - Tolerate unknown future Msg and event types. Store raw payloads, record
   `unknown_semantic_type` or an equivalent `ProjectionFailure` where semantic interpretation

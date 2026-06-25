@@ -81,6 +81,7 @@ export class RestRpcChainClient implements ChainClient {
       height: height.toString(),
       beginBlockEvents: readArray(result.begin_block_events),
       endBlockEvents: readArray(result.end_block_events),
+      finalizeBlockEvents: readArray(result.finalize_block_events),
       txResults: readArray(result.txs_results),
       raw,
     };

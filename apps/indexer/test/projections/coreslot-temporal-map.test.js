@@ -5,6 +5,7 @@ import {
   CORESLOT_TEMPORAL_MAP_PROJECTION,
 } from '../../dist/projections/types.js';
 import {
+  VALIDATOR_SET_MEMBERSHIP_OFFSET,
   findConsensusWindowAtHeight,
   findSlotConsensusWindowAtHeight,
   projectCoreSlotTemporalMapHeight,
@@ -111,6 +112,7 @@ class TemporalMockPrisma {
       consensusAddress: OLD,
       status: 'ACTIVE',
       consensusPower: 1n,
+      validatorUpdateHeight: overrides.validatorUpdateHeight ?? 3n,
       effectiveFromHeight: 5n,
       effectiveToHeight: null,
       openedByKind: 'lifecycle',
@@ -156,6 +158,10 @@ class TemporalMockPrisma {
 }
 
 describe('CoreSlot temporal consensus map projection', () => {
+  it('uses the Phase 6b-3 validator-set membership offset', () => {
+    assert.equal(VALIDATOR_SET_MEMBERSHIP_OFFSET, 2n);
+  });
+
   it('activation opens ACTIVE consensus window', async () => {
     const prisma = new TemporalMockPrisma();
     prisma.seedActivation();
@@ -164,7 +170,8 @@ describe('CoreSlot temporal consensus map projection', () => {
 
     assert.equal(prisma.windows.length, 1);
     assert.equal(prisma.windows[0].status, 'ACTIVE');
-    assert.equal(prisma.windows[0].effectiveFromHeight, 11n);
+    assert.equal(prisma.windows[0].validatorUpdateHeight, 10n);
+    assert.equal(prisma.windows[0].effectiveFromHeight, 12n);
   });
 
   it('pending registration does not open ACTIVE consensus window', async () => {
@@ -183,7 +190,7 @@ describe('CoreSlot temporal consensus map projection', () => {
 
     await projectCoreSlotTemporalMapHeight({ prisma, chainId: CHAIN_ID, height: 10n });
 
-    assert.equal(prisma.windows[0].effectiveToHeight, 11n);
+    assert.equal(prisma.windows[0].effectiveToHeight, 12n);
     assert.equal(prisma.windows[0].closedByKind, 'lifecycle');
   });
 
@@ -194,7 +201,7 @@ describe('CoreSlot temporal consensus map projection', () => {
 
     await projectCoreSlotTemporalMapHeight({ prisma, chainId: CHAIN_ID, height: 10n });
 
-    assert.equal(prisma.windows[0].effectiveToHeight, 11n);
+    assert.equal(prisma.windows[0].effectiveToHeight, 12n);
   });
 
   it('removal closes open window at effective height', async () => {
@@ -204,7 +211,7 @@ describe('CoreSlot temporal consensus map projection', () => {
 
     await projectCoreSlotTemporalMapHeight({ prisma, chainId: CHAIN_ID, height: 10n });
 
-    assert.equal(prisma.windows[0].effectiveToHeight, 11n);
+    assert.equal(prisma.windows[0].effectiveToHeight, 12n);
   });
 
   it('applied key rotation closes old window and opens new window', async () => {
@@ -215,9 +222,10 @@ describe('CoreSlot temporal consensus map projection', () => {
     await projectCoreSlotTemporalMapHeight({ prisma, chainId: CHAIN_ID, height: 15n });
 
     assert.equal(prisma.windows.length, 2);
-    assert.equal(prisma.windows[0].effectiveToHeight, 15n);
+    assert.equal(prisma.windows[0].effectiveToHeight, 17n);
     assert.equal(prisma.windows[1].consensusAddress, NEW);
-    assert.equal(prisma.windows[1].effectiveFromHeight, 15n);
+    assert.equal(prisma.windows[1].validatorUpdateHeight, 15n);
+    assert.equal(prisma.windows[1].effectiveFromHeight, 17n);
   });
 
   it('immediate_applied key rotation closes old window and opens new window', async () => {
@@ -232,8 +240,9 @@ describe('CoreSlot temporal consensus map projection', () => {
     await projectCoreSlotTemporalMapHeight({ prisma, chainId: CHAIN_ID, height: 15n });
 
     assert.equal(prisma.windows.length, 2);
-    assert.equal(prisma.windows[0].effectiveToHeight, 16n);
-    assert.equal(prisma.windows[1].effectiveFromHeight, 16n);
+    assert.equal(prisma.windows[0].effectiveToHeight, 17n);
+    assert.equal(prisma.windows[1].validatorUpdateHeight, 15n);
+    assert.equal(prisma.windows[1].effectiveFromHeight, 17n);
   });
 
   it('requested rotation does not open or close windows', async () => {
@@ -266,7 +275,7 @@ describe('CoreSlot temporal consensus map projection', () => {
     await projectCoreSlotTemporalMapHeight({ prisma, chainId: CHAIN_ID, height: 15n });
 
     assert.equal(prisma.windows.length, 2);
-    assert.equal(prisma.windows[0].effectiveToHeight, 15n);
+    assert.equal(prisma.windows[0].effectiveToHeight, 17n);
   });
 
   it('applied rotation with missing old address and multiple open windows emits temporal_window_ambiguous', async () => {
@@ -326,7 +335,7 @@ describe('CoreSlot temporal consensus map projection', () => {
 
   it('same slot cannot have two active windows at same height', async () => {
     const prisma = new TemporalMockPrisma();
-    prisma.seedOpenWindow({ consensusAddress: OLD, effectiveFromHeight: 11n });
+    prisma.seedOpenWindow({ consensusAddress: OLD, effectiveFromHeight: 12n });
     prisma.seedActivation({ consensusAddress: NEW });
 
     await projectCoreSlotTemporalMapHeight({ prisma, chainId: CHAIN_ID, height: 10n });
@@ -337,13 +346,65 @@ describe('CoreSlot temporal consensus map projection', () => {
 
   it('effectiveToHeight must be greater than effectiveFromHeight', async () => {
     const prisma = new TemporalMockPrisma();
-    prisma.seedOpenWindow({ effectiveFromHeight: 11n });
+    prisma.seedOpenWindow({ effectiveFromHeight: 12n });
     prisma.lifecycleEvents.push(lifecycle('coreslot_inactivated', 10n));
 
     await projectCoreSlotTemporalMapHeight({ prisma, chainId: CHAIN_ID, height: 10n });
 
     assert.equal(prisma.windows[0].effectiveToHeight, null);
     assert.equal(prisma.projectionFailures[0].failureKind, 'effective_height_invalid');
+  });
+
+  it('encodes Phase 6b-3 fixture boundaries for slot 4 lifecycle and rotation', async () => {
+    const prisma = new TemporalMockPrisma();
+    const slot4Old = 'f060bf2347c76488a0390285e3b9ef3a44ec7d23';
+    const slot4New = 'fa90d27eb73b75fed0fc7587d95da6537dc76f23';
+
+    prisma.seedOpenWindow({
+      slotId: 4n,
+      consensusAddress: slot4Old,
+      operatorAddress: OPERATOR,
+      validatorUpdateHeight: 3550n,
+      effectiveFromHeight: 3552n,
+    });
+    prisma.lifecycleEvents.push(lifecycle('coreslot_inactivated', 3554n, {
+      id: 3554n,
+      sourceEventId: 3554n,
+      slotId: 4n,
+      consensusAddress: slot4Old,
+    }));
+    prisma.lifecycleEvents.push(lifecycle('coreslot_activated', 3567n, {
+      id: 3567n,
+      sourceEventId: 3567n,
+      slotId: 4n,
+      consensusAddress: slot4Old,
+    }));
+    prisma.rotations.push(rotation(CORESLOT_KEY_ROTATION_STATUS.applied, {
+      id: 3582n,
+      slotId: 4n,
+      oldConsensusAddress: slot4Old,
+      newConsensusAddress: slot4New,
+      effectiveHeight: 3582n,
+      appliedHeight: 3582n,
+      sourceAppliedEventId: 3582n,
+    }));
+
+    await projectCoreSlotTemporalMapRange({
+      prisma,
+      chainId: CHAIN_ID,
+      startHeight: 3554n,
+      endHeight: 3582n,
+    });
+
+    assert.equal(prisma.windows.length, 3);
+    assert.equal(prisma.windows[0].effectiveToHeight, 3556n);
+    assert.equal(prisma.windows[1].consensusAddress, slot4Old);
+    assert.equal(prisma.windows[1].validatorUpdateHeight, 3567n);
+    assert.equal(prisma.windows[1].effectiveFromHeight, 3569n);
+    assert.equal(prisma.windows[1].effectiveToHeight, 3584n);
+    assert.equal(prisma.windows[2].consensusAddress, slot4New);
+    assert.equal(prisma.windows[2].validatorUpdateHeight, 3582n);
+    assert.equal(prisma.windows[2].effectiveFromHeight, 3584n);
   });
 
   it('findConsensusWindowAtHeight uses half-open interval logic', async () => {
