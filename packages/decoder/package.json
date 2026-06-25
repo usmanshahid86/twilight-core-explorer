@@ -1,0 +1,25 @@
+{
+  "name": "@twilight-explorer/decoder",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "prebuild": "npm --prefix ../proto run build",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "pretest": "npm run build",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@twilight-explorer/proto": "0.0.0",
+    "protobufjs": "^7.4.0"
+  }
+}

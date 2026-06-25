@@ -1,0 +1,708 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Block {
+  height             BigInt   @id
+  hash               String?  @unique
+  time               DateTime?
+  chainId            String?
+  proposerAddress    String?
+  appHash            String?
+  validatorsHash     String?
+  nextValidatorsHash String?
+  lastBlockHash      String?
+  txCount            Int
+  rawJson            Json
+  createdAt          DateTime @default(now())
+
+  @@index([time])
+  @@index([proposerAddress])
+  @@index([chainId, height])
+}
+
+model ExplorerTransaction {
+  hash                String   @id
+  height              BigInt
+  index               Int
+  code                Int?
+  codespace           String?
+  status              String
+  gasWanted           BigInt?
+  gasUsed             BigInt?
+  memo                String?
+  feeJson             Json?
+  signerAddressesJson Json
+  messageTypesJson    Json
+  rawTx               Json?
+  rawResultJson       Json
+  createdAt           DateTime @default(now())
+
+  @@index([height, index])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Message {
+  id          BigInt   @id @default(autoincrement())
+  txHash      String
+  height      BigInt
+  msgIndex    Int
+  typeUrl     String
+  module      String?
+  typeName    String?
+  decodedJson Json?
+  rawJson     Json?
+  decodeError String?
+  createdAt   DateTime @default(now())
+
+  @@unique([txHash, msgIndex])
+  @@index([height])
+  @@index([typeUrl])
+  @@index([module])
+  @@index([decodeError])
+}
+
+model Event {
+  id             BigInt   @id @default(autoincrement())
+  eventKey       String   @unique
+  height         BigInt
+  txHash         String?
+  txIndex        Int?
+  msgIndex       Int?
+  eventIndex     Int
+  phase          String
+  type           String
+  attributesJson Json
+  module         String?
+  keyFieldsJson  Json?
+  createdAt      DateTime @default(now())
+
+  @@index([height])
+  @@index([txHash])
+  @@index([type])
+  @@index([module])
+}
+
+model Account {
+  address        String   @id
+  firstSeenHeight BigInt?
+  lastSeenHeight  BigInt?
+  txCount        Int      @default(0)
+  accountKind    String?
+  rawAccountJson Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([lastSeenHeight])
+  @@index([accountKind])
+}
+
+model IndexerCursor {
+  chainId           String   @id
+  lastIndexedHeight BigInt
+  lastIndexedHash   String?
+  latestChainHeight BigInt?
+  status            String
+  updatedAt         DateTime @updatedAt
+  error             String?
+
+  @@index([updatedAt])
+  @@index([status])
+}
+
+model DecodeFailure {
+  id          BigInt   @id @default(autoincrement())
+  height      BigInt
+  txHash      String?
+  msgIndex    Int?
+  eventIndex  Int?
+  typeUrl     String?
+  eventType   String?
+  failureKind String
+  rawJson     Json?
+  rawBase64   String?
+  decodeError String
+  resolved    Boolean  @default(false)
+  resolvedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([height])
+  @@index([txHash])
+  @@index([typeUrl])
+  @@index([eventType])
+  @@index([failureKind])
+  @@index([resolved])
+}
+
+model BlockSignature {
+  id                   BigInt    @id @default(autoincrement())
+  signatureKey         String    @unique
+  sourceBlockHeight    BigInt
+  committedBlockHeight BigInt
+  signatureIndex       Int
+  validatorAddress     String?
+  blockIdFlag          String?
+  blockIdFlagCode      Int?
+  timestamp            DateTime?
+  signature            String?
+  signed               Boolean
+  rawSignatureJson     Json
+  createdAt            DateTime  @default(now())
+  updatedAtDb          DateTime  @updatedAt
+
+  @@index([sourceBlockHeight])
+  @@index([committedBlockHeight])
+  @@index([validatorAddress])
+  @@index([signed])
+  @@index([blockIdFlagCode])
+}
+
+model OperatorSigningEvidence {
+  id                   BigInt   @id @default(autoincrement())
+  signatureKey         String   @unique
+  sourceBlockHeight    BigInt
+  committedBlockHeight BigInt
+  signatureIndex       Int
+  validatorAddress     String?
+  slotId               BigInt?
+  operatorAddress      String?
+  consensusPower       BigInt?
+  consensusWindowId    BigInt?
+  attributionStatus    String
+  blockIdFlag          String?
+  blockIdFlagCode      Int?
+  signed               Boolean
+  rawSignatureJson     Json
+  createdAt            DateTime @default(now())
+  updatedAtDb          DateTime @updatedAt
+
+  @@index([committedBlockHeight])
+  @@index([sourceBlockHeight])
+  @@index([validatorAddress])
+  @@index([slotId])
+  @@index([operatorAddress])
+  @@index([attributionStatus])
+}
+
+// Phase 8c-1: per-(committed height, expected active CoreSlot) liveness evidence. Stores BOTH
+// signed and missed rows. Misses are computed by set-difference (expected active CoreSlots minus
+// flag-2 signed observations); an absent operator is anonymous in the commit, so misses are never
+// read off a flag. Rebuildable from CoreSlotConsensusWindow + OperatorSigningEvidence.
+model CoreSlotLivenessEvidence {
+  id                      BigInt   @id @default(autoincrement())
+  evidenceKey             String   @unique
+  committedBlockHeight    BigInt
+  sourceBlockHeight       BigInt?
+  slotId                  BigInt
+  operatorAddress         String?
+  consensusAddress        String?
+  consensusPower          BigInt?
+  consensusWindowId       BigInt?
+  status                  String
+  missCause               String?
+  observedSignatureKey    String?
+  observedBlockIdFlag     String?
+  observedBlockIdFlagCode Int?
+  observedSigned          Boolean?
+  observedAttributionStatus String?
+  createdAt               DateTime @default(now())
+  updatedAtDb             DateTime @updatedAt
+
+  @@index([committedBlockHeight])
+  @@index([slotId])
+  @@index([operatorAddress])
+  @@index([consensusAddress])
+  @@index([status])
+  @@index([missCause])
+}
+
+// Phase 8c-2: liveness summaries aggregated from CoreSlotLivenessEvidence, per (slotId, windowKind).
+// Numeric only (no health labels). invalidHeightCount/summaryStatus are a coverage flag derived from
+// unresolved coreslot_liveness_v1 ProjectionFailure.committedHeight in the window span; they do not
+// change the counts. Rebuildable from CoreSlotLivenessEvidence.
+model CoreSlotLivenessSummary {
+  id                   BigInt   @id @default(autoincrement())
+  summaryKey           String   @unique
+  slotId               BigInt
+  windowKind           String
+  windowSize           Int?
+  operatorAddress      String?
+  consensusAddress     String?
+  consensusWindowId    BigInt?
+  firstCommittedHeight BigInt?
+  lastCommittedHeight  BigInt?
+  spanHeightCount      BigInt?
+  evidenceHeightCount  Int
+  expectedCount        Int
+  signedCount          Int
+  missedCount          Int
+  absentMissedCount    Int
+  nilMissedCount       Int
+  uptimeBps            Int?
+  currentSignedStreak  Int
+  currentMissedStreak  Int
+  latestMissedHeight   BigInt?
+  invalidHeightCount   Int
+  summaryStatus        String
+  createdAt            DateTime @default(now())
+  updatedAtDb          DateTime @updatedAt
+
+  @@index([slotId])
+  @@index([windowKind])
+  @@index([operatorAddress])
+  @@index([summaryStatus])
+  @@index([slotId, windowKind])
+}
+
+// Phase 8c-3: per-active-CoreSlot health label derived from the recent_100 CoreSlotLivenessSummary,
+// with lifetime/recent_500/recent_1000 as context. Numeric truth lives in 8c-2; this is the policy
+// layer (coreslot_health_policy_v1). Only slots active at the latest observed height are emitted.
+model CoreSlotHealthSnapshot {
+  id                   BigInt   @id @default(autoincrement())
+  healthKey            String   @unique
+  slotId               BigInt
+  operatorAddress      String?
+  consensusAddress     String?
+  consensusWindowId    BigInt?
+  primaryWindowKind    String
+  primarySummaryId     BigInt?
+  lifetimeSummaryId    BigInt?
+  recent500SummaryId   BigInt?
+  recent1000SummaryId  BigInt?
+  expectedCount        Int
+  signedCount          Int
+  missedCount          Int
+  absentMissedCount    Int
+  nilMissedCount       Int
+  uptimeBps            Int?
+  currentSignedStreak  Int
+  currentMissedStreak  Int
+  latestMissedHeight   BigInt?
+  summaryStatus        String?
+  invalidHeightCount   Int
+  firstCommittedHeight BigInt?
+  lastCommittedHeight  BigInt?
+  lifetimeUptimeBps    Int?
+  recent500UptimeBps   Int?
+  recent1000UptimeBps  Int?
+  isActiveAtLatest     Boolean
+  healthStatus         String
+  healthReason         String?
+  policyVersion        String
+  createdAt            DateTime @default(now())
+  updatedAtDb          DateTime @updatedAt
+
+  @@index([slotId])
+  @@index([healthStatus])
+  @@index([isActiveAtLatest])
+  @@index([operatorAddress])
+}
+
+// Phase 8c-3: single deterministic latest network halt-risk snapshot derived from the active
+// CoreSlotHealthSnapshot set (equal-power v1). Explorer/operator heuristic, NOT a consensus rule.
+model NetworkLivenessRiskSnapshot {
+  id                   BigInt   @id @default(autoincrement())
+  riskKey              String   @unique
+  policyVersion        String
+  latestCommittedHeight BigInt?
+  activeSlotCount      Int
+  healthySlotCount     Int
+  degradedSlotCount    Int
+  downSlotCount        Int
+  incompleteSlotCount  Int
+  unknownSlotCount     Int
+  availableSlotCount   Int
+  unavailableSlotCount Int
+  availablePowerBps    Int?
+  unavailablePowerBps  Int?
+  haltRiskLevel        String
+  haltRiskReason       String?
+  createdAt            DateTime @default(now())
+  updatedAtDb          DateTime @updatedAt
+
+  @@index([haltRiskLevel])
+}
+
+model ProjectionCursor {
+  projectionName      String
+  chainId             String
+  lastProjectedHeight BigInt
+  status              String
+  updatedAt           DateTime @updatedAt
+  error               String?
+
+  @@id([projectionName, chainId])
+  @@index([status])
+  @@index([updatedAt])
+}
+
+model ProjectionFailure {
+  id              BigInt   @id @default(autoincrement())
+  failureKey      String?  @unique
+  projectionName  String
+  module          String?
+  sourceHeight    BigInt
+  committedHeight BigInt?
+  sourceTxHash    String?
+  sourceMsgIndex  Int?
+  sourceMessageId BigInt?
+  sourceEventId   BigInt?
+  typeUrl         String?
+  eventType       String?
+  failureKind     String
+  rawMessageJson  Json?
+  rawEventJson    Json?
+  error           String
+  resolved        Boolean  @default(false)
+  resolvedAt      DateTime?
+  createdAt       DateTime @default(now())
+
+  @@index([projectionName])
+  @@index([module])
+  @@index([sourceHeight])
+  @@index([committedHeight])
+  @@index([sourceTxHash])
+  @@index([failureKind])
+  @@index([resolved])
+}
+
+model CoreSlotProjection {
+  slotId              BigInt   @id
+  status              String?
+  operatorAddress     String?
+  payoutAddress       String?
+  consensusAddress    String?
+  consensusPubkeyJson Json?
+  metadataJson        Json?
+  rewardWeight        String?
+  consensusPower      BigInt?
+  createdHeight       BigInt?
+  updatedHeight       BigInt
+  removedHeight       BigInt?
+  rawSnapshotJson     Json?
+  lastSourceHeight    BigInt
+  lastSourceTxHash    String?
+  lastSourceMsgIndex  Int?
+  lastSourceMessageId BigInt?
+  lastSourceEventId   BigInt?
+  createdAt           DateTime @default(now())
+  updatedAtDb         DateTime @updatedAt
+
+  @@index([status])
+  @@index([operatorAddress])
+  @@index([consensusAddress])
+  @@index([updatedHeight])
+}
+
+model CoreSlotMetadataChange {
+  id              BigInt   @id @default(autoincrement())
+  slotId          BigInt
+  operatorAddress String
+  height          BigInt
+  txHash          String
+  msgIndex        Int
+  metadataJson    Json
+  sourceMessageId BigInt   @unique
+  sourceEventId   BigInt?
+  rawMessageJson  Json
+  rawEventJson    Json?
+  createdAt       DateTime @default(now())
+
+  @@index([slotId, height])
+  @@index([operatorAddress])
+  @@index([txHash])
+  @@index([sourceEventId])
+}
+
+model CoreSlotLifecycleEvent {
+  id                BigInt   @id @default(autoincrement())
+  sourceEventId     BigInt   @unique
+  sourceMessageId   BigInt?
+  height            BigInt
+  txHash            String?
+  msgIndex          Int?
+  slotId            BigInt?
+  eventType         String
+  oldStatus         String?
+  newStatus         String?
+  operatorAddress   String?
+  consensusAddress  String?
+  power             BigInt?
+  reason            String?
+  evidenceReference String?
+  authority         String?
+  rawEventJson      Json
+  rawMessageJson    Json?
+  createdAt         DateTime @default(now())
+
+  @@index([slotId, height])
+  @@index([eventType])
+  @@index([operatorAddress])
+  @@index([consensusAddress])
+  @@index([txHash])
+}
+
+model CoreSlotPayoutChange {
+  id               BigInt   @id @default(autoincrement())
+  slotId           BigInt
+  operatorAddress  String
+  newPayoutAddress String
+  height           BigInt
+  txHash           String
+  msgIndex         Int
+  sourceMessageId  BigInt   @unique
+  sourceEventId    BigInt?
+  rawMessageJson   Json
+  rawEventJson     Json?
+  createdAt        DateTime @default(now())
+
+  @@index([slotId, height])
+  @@index([operatorAddress])
+  @@index([newPayoutAddress])
+  @@index([txHash])
+  @@index([sourceEventId])
+}
+
+model CoreSlotParameterChange {
+  id              BigInt   @id @default(autoincrement())
+  height          BigInt
+  txHash          String
+  msgIndex        Int
+  authority       String
+  paramsJson      Json
+  sourceMessageId BigInt   @unique
+  sourceEventId   BigInt?
+  rawMessageJson  Json
+  rawEventJson    Json?
+  createdAt       DateTime @default(now())
+
+  @@index([height])
+  @@index([authority])
+  @@index([txHash])
+  @@index([sourceEventId])
+}
+
+model CoreSlotConsensusWindow {
+  id                    BigInt   @id @default(autoincrement())
+  slotId                BigInt
+  operatorAddress       String?
+  consensusAddress      String
+  status                String // ACTIVE signing window
+  consensusPower        BigInt?
+  validatorUpdateHeight BigInt?
+  effectiveFromHeight   BigInt
+  effectiveToHeight     BigInt?
+  openedByKind          String // lifecycle | key_rotation | inferred
+  openedByEventId       BigInt?
+  openedByRotationId    BigInt?
+  openedByLifecycleId   BigInt?
+  closedByKind          String?
+  closedByEventId       BigInt?
+  closedByRotationId    BigInt?
+  closedByLifecycleId   BigInt?
+  rawOpenJson           Json?
+  rawCloseJson          Json?
+  createdAt             DateTime @default(now())
+  updatedAtDb           DateTime @updatedAt
+
+  @@index([slotId])
+  @@index([operatorAddress])
+  @@index([consensusAddress])
+  @@index([validatorUpdateHeight])
+  @@index([effectiveFromHeight])
+  @@index([effectiveToHeight])
+  @@index([status])
+  @@index([slotId, effectiveFromHeight])
+  @@index([consensusAddress, effectiveFromHeight])
+}
+
+model CoreSlotConsensusKeyRotation {
+  id                     BigInt   @id @default(autoincrement())
+  slotId                 BigInt
+  operatorAddress        String?
+  oldConsensusAddress    String?
+  newConsensusAddress    String?
+  status                 String // requested | applied | cancelled | immediate_applied
+  requestedHeight        BigInt?
+  effectiveHeight        BigInt?
+  appliedHeight          BigInt?
+  cancelledHeight        BigInt?
+  power                  BigInt?
+  reason                 String?
+  sourceMessageId        BigInt?
+  sourceRequestEventId   BigInt?  @unique
+  sourceAppliedEventId   BigInt?  @unique
+  sourceCancelledEventId BigInt?  @unique
+  requestTxHash          String?
+  requestMsgIndex        Int?
+  appliedTxHash          String?
+  appliedMsgIndex        Int?
+  cancelledTxHash        String?
+  cancelledMsgIndex      Int?
+  rawMessageJson         Json?
+  rawRequestEventJson    Json?
+  rawAppliedEventJson    Json?
+  rawCancelledEventJson  Json?
+  createdAt              DateTime @default(now())
+  updatedAtDb            DateTime @updatedAt
+
+  @@index([slotId])
+  @@index([operatorAddress])
+  @@index([oldConsensusAddress])
+  @@index([newConsensusAddress])
+  @@index([status])
+  @@index([effectiveHeight])
+  @@index([requestedHeight])
+  @@index([appliedHeight])
+  @@index([cancelledHeight])
+  @@index([sourceMessageId])
+}
+
+// ---------------------------------------------------------------------------
+// Rewards (x/rewards) semantic projection (Phase 7)
+//
+// Two categories, kept strictly separate:
+//   - Rebuildable semantic rows (projection rewards_semantic_v1) derived only from
+//     generic indexed Message/Event/Transaction rows: RewardEpochProjection,
+//     RewardClaimEvent, RewardsParamsChange, RewardsTreasuryPayment.
+//   - Observed-sample rows (projection rewards_snapshot_v1) captured from live
+//     ChainClient snapshots and tied to the height at which they were sampled:
+//     SlotRewardProjection (sampledAtHeight), RewardsBalanceSample.
+// ---------------------------------------------------------------------------
+
+// Aggregate/finalization context from epoch_finalized. NOT claim truth.
+model RewardEpochProjection {
+  id              BigInt    @id @default(autoincrement())
+  epochNumber     BigInt    @unique
+  height          BigInt
+  blockTime       DateTime?
+  totalReward     String?
+  denom           String?
+  activeSlotCount Int?
+  sourceEventId   BigInt?   @unique
+  rawEventJson    Json?
+  rawSnapshotJson Json?
+  createdAt       DateTime  @default(now())
+  updatedAtDb     DateTime  @updatedAt
+
+  @@index([height])
+}
+
+// Observed sample of a slot's per-epoch reward, tied to the height it was sampled at.
+// Claimed truth has two sources reconciled here: the snapshot's own claimed flag
+// (observed at sampledAtHeight) and claim provenance written by RewardClaimEvent.
+model SlotRewardProjection {
+  id              BigInt   @id @default(autoincrement())
+  slotId          BigInt
+  epochNumber     BigInt
+  amount          String
+  denom           String
+  claimed         Boolean  @default(false)
+  claimedAtHeight BigInt?
+  claimTxHash     String?
+  claimMsgIndex   Int?
+  claimEventId    BigInt?
+  sampledAtHeight BigInt?
+  rawSnapshotJson Json?
+  rawClaimJson    Json?
+  createdAt       DateTime @default(now())
+  updatedAtDb     DateTime @updatedAt
+
+  @@unique([slotId, epochNumber])
+  @@index([slotId])
+  @@index([epochNumber])
+  @@index([claimed])
+  @@index([claimTxHash])
+  @@index([sampledAtHeight])
+}
+
+// Rebuildable claim history from MsgClaimRewards + reward_claimed.
+model RewardClaimEvent {
+  id              BigInt   @id @default(autoincrement())
+  slotId          BigInt
+  claimant        String?
+  payoutAddress   String?
+  startEpoch      BigInt?
+  endEpoch        BigInt?
+  amount          String?
+  denom           String?
+  height          BigInt
+  txHash          String
+  msgIndex        Int?
+  sourceMessageId BigInt?
+  sourceEventId   BigInt?  @unique
+  rawMessageJson  Json?
+  rawEventJson    Json?
+  createdAt       DateTime @default(now())
+
+  @@index([slotId])
+  @@index([height])
+  @@index([txHash])
+  @@index([claimant])
+}
+
+// Rebuildable rewards params/pause/resume history.
+model RewardsParamsChange {
+  id              BigInt   @id @default(autoincrement())
+  height          BigInt
+  txHash          String?
+  msgIndex        Int?
+  authority       String?
+  changeType      String // queued | activated | pause | resume | direct_update
+  paramsJson      Json?
+  sourceMessageId BigInt?  @unique
+  sourceEventId   BigInt?  @unique
+  rawMessageJson  Json?
+  rawEventJson    Json?
+  createdAt       DateTime @default(now())
+
+  @@index([height])
+  @@index([changeType])
+  @@index([authority])
+  @@index([txHash])
+}
+
+// Rebuildable treasury_paid event history. Not slot reward claim truth.
+model RewardsTreasuryPayment {
+  id            BigInt   @id @default(autoincrement())
+  height        BigInt
+  recipient     String?
+  denom         String?
+  amount        String?
+  purpose       String?
+  sourceEventId BigInt?  @unique
+  rawEventJson  Json?
+  createdAt     DateTime @default(now())
+
+  @@index([height])
+  @@index([recipient])
+}
+
+// Observed live samples (module balances, cumulative emitted, supply schedule),
+// tied to the sampled height. Never treated as rebuildable semantic truth.
+model RewardsBalanceSample {
+  id         BigInt   @id @default(autoincrement())
+  height     BigInt
+  address    String?
+  moduleName String?
+  denom      String
+  amount     String
+  sampleKind String // module_balance | treasury | supply | cumulative_emitted
+  // Deterministic non-null idempotency key. A compound @@unique over nullable
+  // address/moduleName cannot be used as an upsert selector (Prisma) and Postgres
+  // does not dedupe NULLs in a unique index, so identity is carried by sampleKey:
+  // `${height}:${sampleKind}:${address ?? '-'}:${moduleName ?? '-'}:${denom}`.
+  sampleKey  String   @unique
+  rawJson    Json?
+  createdAt  DateTime @default(now())
+
+  @@index([height, sampleKind])
+  @@index([height])
+  @@index([sampleKind])
+}

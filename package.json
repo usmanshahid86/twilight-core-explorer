@@ -1,0 +1,33 @@
+{
+  "name": "twilight-core-explorer",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run db:generate && npm run build --workspaces --if-present",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio",
+    "proto:refresh": "node packages/proto/scripts/refresh-from-chain.js",
+    "db:reset:test": "node scripts/reset-test-db.js",
+    "indexer:dev": "npm --prefix apps/indexer run dev",
+    "indexer:start": "npm --prefix apps/indexer start",
+    "test:integration": "node --test apps/indexer/test/*.integration.test.js",
+    "typecheck": "npm run db:generate && npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "pg": "^8.13.1",
+    "prisma": "^6.18.0"
+  }
+}

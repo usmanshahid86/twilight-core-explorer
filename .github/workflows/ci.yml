@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: typecheck · lint · test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm install
+
+      - name: Prisma generate
+        run: npm run db:generate
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: chain-client tests
+        run: npm --prefix packages/chain-client test
+
+      - name: indexer tests
+        run: npm --prefix apps/indexer test
+
+  route-guards:
+    name: static route guards
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # These mirror the manual guards in CLAUDE.md. They fail only on real source
+      # *implementations* of unsupported/stale routes (TS source only; docs, tests, and
+      # compiled dist are excluded), so non-goal/guard references in docs do not trip them.
+      - name: No unsupported standard-module routes
+        run: |
+          if grep -RnE "/cosmos/(staking|gov|mint|distribution)" apps packages prisma \
+              --include="*.ts" --exclude-dir=node_modules --exclude-dir=dist; then
+            echo "::error::Unsupported standard-module route found in source"
+            exit 1
+          fi
+          echo "ok: no /cosmos/staking|gov|mint|distribution in source"
+
+      - name: No stale CoreSlot active-slots route
+        run: |
+          if grep -Rn "/twilight/coreslot/v1/slots/active" apps packages prisma \
+              --include="*.ts" --exclude-dir=node_modules --exclude-dir=dist; then
+            echo "::error::Stale /twilight/coreslot/v1/slots/active route found in source"
+            exit 1
+          fi
+          echo "ok: no stale /slots/active in source"
