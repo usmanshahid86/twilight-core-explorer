@@ -125,6 +125,9 @@ RESET_PROJECTION=true npm --prefix apps/indexer run project:coreslot-liveness-su
 
 # 6) Health + network halt-risk (8c-3)
 RESET_PROJECTION=true npm --prefix apps/indexer run project:coreslot-health
+
+# 7) Proposer attribution (block proposer -> CoreSlot; needs only the temporal map)
+RESET_PROJECTION=true npm --prefix apps/indexer run project:proposer-attribution
 ```
 
 Baseline (all 4 up, no drill yet) sanity — every active CoreSlot should be healthy:
@@ -133,6 +136,9 @@ Baseline (all 4 up, no drill yet) sanity — every active CoreSlot should be hea
 $PSQL "$PG" -tAc 'select count(*) from "CoreSlotConsensusWindow" where "openedByKind"='"'"'genesis'"'"' and "effectiveFromHeight"=1;'   # 4
 $PSQL "$PG" -tAc 'select "healthStatus", count(*) from "CoreSlotHealthSnapshot" group by 1;'                                              # healthy|4
 $PSQL "$PG" -tAc 'select "haltRiskLevel","haltRiskReason" from "NetworkLivenessRiskSnapshot";'                                           # normal|all_healthy
+# proposer attribution: every block attributes to a CoreSlot on a CoreSlots-only chain
+$PSQL "$PG" -tAc 'select "attributionStatus", count(*) from "BlockProposerAttribution" group by 1;'                                       # attributed|<all>
+$PSQL "$PG" -tAc 'select "slotId", count(*) from "BlockProposerAttribution" where "attributionStatus"='"'"'attributed'"'"' group by 1 order by 1;'  # blocks-proposed per slot
 ```
 
 ────────────────────────────────

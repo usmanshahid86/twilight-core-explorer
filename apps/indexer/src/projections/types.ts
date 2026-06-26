@@ -7,6 +7,17 @@ export const CORESLOT_TEMPORAL_MAP_PROJECTION = 'coreslot_temporal_map_v1';
 export const BLOCK_SIGNATURES_PROJECTION = 'block_signatures_v1';
 export const OPERATOR_SIGNING_EVIDENCE_PROJECTION = 'operator_signing_evidence_v1';
 export const CORESLOT_LIVENESS_PROJECTION = 'coreslot_liveness_v1';
+export const PROPOSER_ATTRIBUTION_PROJECTION = 'proposer_attribution_v1';
+
+// Per-block proposer attribution to historical CoreSlot ownership. The proposer of block N belongs
+// to height N (no -1 shift, unlike commit signatures).
+export const PROPOSER_ATTRIBUTION_STATUS = {
+  attributed: 'attributed',
+  unmappedValidator: 'unmapped_validator',
+  noConsensusWindow: 'no_consensus_window',
+  missingProposer: 'missing_proposer',
+  invalidProposerAddress: 'invalid_proposer_address',
+} as const;
 
 export const OPERATOR_SIGNING_ATTRIBUTION_STATUS = {
   attributed: 'attributed',
@@ -271,6 +282,8 @@ export type ProjectionFailureKind =
   | 'coreslot_health_invariant_violation'
   | 'network_liveness_risk_invariant_violation'
   | 'unknown_coreslot_health_shape'
+  | 'invalid_proposer_address'
+  | 'unknown_proposer_attribution_shape'
   | 'unknown_semantic_type'
   | 'unknown_coreslot_message'
   | 'unknown_coreslot_event'

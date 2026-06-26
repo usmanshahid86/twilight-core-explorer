@@ -53,7 +53,10 @@
     "project:coreslot-liveness-summary:reset": "node dist/projections/reset-coreslot-liveness-summary-cli.js",
     "project:coreslot-health": "node dist/projections/coreslot-health-cli.js",
     "project:coreslot-health:dev": "npm run build && node dist/projections/coreslot-health-cli.js",
-    "project:coreslot-health:reset": "node dist/projections/reset-coreslot-health-cli.js"
+    "project:coreslot-health:reset": "node dist/projections/reset-coreslot-health-cli.js",
+    "project:proposer-attribution": "node dist/projections/proposer-attribution-cli.js",
+    "project:proposer-attribution:dev": "npm run build && node dist/projections/proposer-attribution-cli.js",
+    "project:proposer-attribution:reset": "node dist/projections/reset-proposer-attribution-cli.js"
   },
   "dependencies": {
     "@twilight-explorer/chain-client": "0.0.0",
