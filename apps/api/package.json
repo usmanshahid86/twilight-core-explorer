@@ -1,0 +1,28 @@
+{
+  "name": "@twilight-explorer/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "prebuild": "npm --prefix ../.. run db:generate && npm --prefix ../../packages/db run build",
+    "build": "tsc -p tsconfig.json",
+    "pretypecheck": "npm run prebuild",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "pretest": "npm run build",
+    "test": "node --test",
+    "start": "node dist/index.js",
+    "dev": "npm run build && node dist/index.js",
+    "openapi:generate": "npm run build && node dist/scripts/generate-openapi.js",
+    "openapi:check": "npm run build && node dist/scripts/generate-openapi.js --check"
+  },
+  "dependencies": {
+    "@twilight-explorer/db": "0.0.0",
+    "@fastify/cors": "^10.0.1",
+    "@fastify/swagger": "^9.4.0",
+    "@fastify/swagger-ui": "^5.2.0",
+    "@fastify/type-provider-typebox": "^5.1.0",
+    "@sinclair/typebox": "^0.34.9",
+    "fastify": "^5.2.0"
+  }
+}
