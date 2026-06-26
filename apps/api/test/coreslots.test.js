@@ -78,6 +78,14 @@ describe('coreslots list/detail', () => {
     assert.equal(res.json().error.code, 'invalid_slot_id');
     await app.close();
   });
+
+  it('rejects a pathologically long digit slotId via the length cap', async () => {
+    const app = await build({ coreSlots: [] });
+    const res = await app.inject({ url: `/api/v1/coreslots/${'1'.repeat(40)}` });
+    assert.equal(res.statusCode, 400);
+    assert.equal(res.json().error.code, 'invalid_slot_id');
+    await app.close();
+  });
 });
 
 describe('coreslot events', () => {

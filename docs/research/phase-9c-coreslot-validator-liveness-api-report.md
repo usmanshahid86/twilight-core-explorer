@@ -99,7 +99,7 @@ lifetime = 9871 bps / 41 missed   recent_100 = 10000 / 0   recent_500 = 10000 / 
 
 ## 5. Tests added & validation
 
-`apps/api` suite: **83 tests / 83 pass / 0 fail** (was 56 in 9b; +27). New coverage: coreslots
+`apps/api` suite: **86 tests / 86 pass / 0 fail** (was 56 in 9b; +30). New coverage: coreslots
 list/keyset/filters; detail + health quick-fields + `include=raw`; `invalid_slot_id` 400 + missing 404;
 events 3-table merge ordering + `kind` filter + composite-cursor round-trip + slot-missing 404 +
 empty-200; windows/key-rotations/proposed-blocks ordering; liveness window kinds + filter + 404/empty;
@@ -110,6 +110,15 @@ verbatim + 404; search digit→block+coreslot, 40-hex→consensus ref, operator 
 Hardening added during review (carried from the 9b review): the tx composite cursor rejects an
 `index > Number.MAX_SAFE_INTEGER` (`invalid_cursor`), and search rejects a whitespace-only `q`
 (`invalid_query`).
+
+Copilot PR review fixes:
+- **search numeric int64 guard** — the numeric branch used `BigInt(q)` directly (the one int64 spot
+  missed in the sweep); an out-of-range digit `q` could 500. Now guarded with `parseUint64` → it
+  simply matches nothing (`200 []`).
+- **`parseUint64` length cap** — reject digit strings longer than 20 chars before `BigInt()` to avoid
+  CPU/memory work on pathologically long input (leading zeros still allowed).
+- **proposer leaderboard tie-break** — `blocksProposed DESC, slotId ASC` so tied rows are deterministic
+  (groupBy order is otherwise unspecified).
 
 Phase 9c Codex review fixes:
 - **Blocker — CoreSlot events deep-pagination skip.** `listSlotEvents` previously fetched `limit+1`
@@ -124,7 +133,7 @@ Phase 9c Codex review fixes:
   path/query param across blocks, txs, decode-failures, coreslots, and network. Live-verified 400s.
 
 Ritual (all green): `db:generate`, `typecheck` (all workspaces), `build`, `npm --prefix apps/api test`
-83/83, `openapi:check` "up to date" (23 paths), `npm run lint`, `indexer` 250 pass, `chain-client`
+86/86, `openapi:check` "up to date" (23 paths), `npm run lint`, `indexer` 250 pass, `chain-client`
 16/16, `git diff --check` clean. NUL scan over `apps/api` clean. No-chain guard covers the new files.
 
 ## 6. Known limitations & data observations

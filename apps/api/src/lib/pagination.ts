@@ -12,10 +12,15 @@ export const MAX_LIMIT = 100;
 // 4xx instead of a downstream Prisma/Postgres "out of range" 500.
 export const INT64_MAX = 9223372036854775807n;
 
-/** Parse a non-negative int64 from a digit string; null if non-digit or out of range. Use for
- *  height/slotId path & query params (the caller maps null to its own 4xx code). */
+// int64 max is 19 digits ("9223372036854775807"). A length cap above that (leading zeros still
+// allowed) rejects pathologically long digit strings BEFORE BigInt() does expensive parsing work —
+// any in-range value comfortably fits, anything longer is out of range or abusive.
+const MAX_UINT64_DIGITS = 20;
+
+/** Parse a non-negative int64 from a digit string; null if non-digit, too long, or out of range.
+ *  Use for height/slotId/cursor parsing (the caller maps null to its own 4xx code). */
 export function parseUint64(value: string): bigint | null {
-  if (!/^\d+$/.test(value)) return null;
+  if (!/^\d+$/.test(value) || value.length > MAX_UINT64_DIGITS) return null;
   const parsed = BigInt(value);
   return parsed > INT64_MAX ? null : parsed;
 }

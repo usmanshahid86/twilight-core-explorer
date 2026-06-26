@@ -16,7 +16,13 @@ export async function getProposerLeaderboard(prisma: PrismaClient) {
       operatorAddress: g.operatorAddress,
       blocksProposed: g._count._all,
     }))
-    .sort((a, b) => b.blocksProposed - a.blocksProposed);
+    // blocksProposed DESC, then slotId ASC as a deterministic tie-break (groupBy order is otherwise
+    // unspecified, which would make tied rows order non-deterministic).
+    .sort(
+      (a, b) =>
+        b.blocksProposed - a.blocksProposed ||
+        (a.slotId < b.slotId ? -1 : a.slotId > b.slotId ? 1 : 0),
+    );
 }
 
 /** Active CoreSlot windows at `height`: effectiveFrom <= height AND (effectiveTo IS NULL OR > height). */

@@ -51,6 +51,14 @@ describe('search', () => {
     await app.close();
   });
 
+  it('an out-of-int64-range numeric query matches nothing (no 500)', async () => {
+    const app = await build({ blocks: [], coreSlots: [] });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/search?q=9223372036854775808' });
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(res.json().data, []);
+    await app.close();
+  });
+
   it('rejects an empty q with 400 invalid_query', async () => {
     const app = await build({});
     const res = await app.inject({ method: 'GET', url: '/api/v1/search?q=' });

@@ -22,6 +22,19 @@ describe('network proposers', () => {
     ]);
     await app.close();
   });
+
+  it('breaks ties deterministically by slotId ASC', async () => {
+    // slot 3 inserted before slot 1, both with one attributed block -> tie-break must order 1 before 3
+    const app = await build({
+      attributions: [
+        { height: 1n, slotId: 3n, operatorAddress: 'op3', attributionStatus: 'attributed' },
+        { height: 2n, slotId: 1n, operatorAddress: 'op1', attributionStatus: 'attributed' },
+      ],
+    });
+    const res = await app.inject({ url: '/api/v1/network/proposers' });
+    assert.deepEqual(res.json().data.map((r) => r.slotId), ['1', '3']);
+    await app.close();
+  });
 });
 
 describe('network validator-set', () => {

@@ -4,6 +4,7 @@ import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import { SearchQuery, SearchResponse, SearchResult } from '../dto/search.js';
 import { ErrorResponse } from '../dto/common.js';
 import { invalidQuery } from '../lib/errors.js';
+import { parseUint64 } from '../lib/pagination.js';
 import {
   findAccountByAddress,
   findBlockByHash,
@@ -42,11 +43,13 @@ export async function searchRoutes(fastify: FastifyInstance): Promise<void> {
         throw invalidQuery('q must not be empty');
       }
 
-      // numeric: block height + (9c) CoreSlot by slotId
-      if (DIGITS.test(q)) {
-        const block = await findBlockByHeight(app.prisma, BigInt(q));
+      // numeric: block height + (9c) CoreSlot by slotId. parseUint64 guards the int64 bound so an
+      // out-of-range digit string simply matches nothing (no downstream Postgres 500).
+      const numeric = DIGITS.test(q) ? parseUint64(q) : null;
+      if (numeric !== null) {
+        const block = await findBlockByHeight(app.prisma, numeric);
         if (block) results.push({ type: 'block', height: block.height.toString(), hash: block.hash });
-        const slot = await findCoreSlotById(app.prisma, BigInt(q));
+        const slot = await findCoreSlotById(app.prisma, numeric);
         if (slot) results.push({ type: 'coreslot', slotId: slot.slotId.toString() });
       }
 
