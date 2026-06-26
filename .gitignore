@@ -45,6 +45,8 @@ junit.xml
 *.sqlite3
 *.dump
 *.sql
+# ...but Prisma migration files must always be tracked (the *.sql rule above is for local dumps).
+!prisma/migrations/**/migration.sql
 
 # IDEs
 .idea/
