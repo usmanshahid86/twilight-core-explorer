@@ -13,6 +13,11 @@ import { registerOpenapi } from './plugins/openapi.js';
 import { healthRoutes } from './routes/health.js';
 import { statusRoutes } from './routes/status.js';
 import { blocksRoutes } from './routes/blocks.js';
+import { transactionsRoutes } from './routes/transactions.js';
+import { accountsRoutes } from './routes/accounts.js';
+import { searchRoutes } from './routes/search.js';
+import { decodeFailuresRoutes } from './routes/decode-failures.js';
+import { projectionsRoutes } from './routes/projections.js';
 
 export interface BuildServerOptions {
   config: ApiConfig;
@@ -37,6 +42,11 @@ export async function buildServer(opts: BuildServerOptions): Promise<FastifyInst
   await app.register(healthRoutes);
   await app.register(statusRoutes, { prefix: '/api/v1' });
   await app.register(blocksRoutes, { prefix: '/api/v1' });
+  await app.register(transactionsRoutes, { prefix: '/api/v1' });
+  await app.register(accountsRoutes, { prefix: '/api/v1' });
+  await app.register(searchRoutes, { prefix: '/api/v1' });
+  await app.register(decodeFailuresRoutes, { prefix: '/api/v1' });
+  await app.register(projectionsRoutes, { prefix: '/api/v1' });
 
   return app;
 }
