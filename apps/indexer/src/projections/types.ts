@@ -176,6 +176,12 @@ export const REWARDS_PROJECTIONS = [
   REWARDS_SNAPSHOT_PROJECTION,
 ] as const;
 
+// Phase 9d-0: observed account-balance + bank-supply sampling. Supply rows reuse
+// RewardsBalanceSample with sampleKind = SUPPLY_SAMPLE_KIND; account balances go to
+// AccountBalanceCurrent. Both are live ChainClient samples tied to a height.
+export const BALANCE_SNAPSHOT_PROJECTION = 'balance_snapshot_v1';
+export const SUPPLY_SAMPLE_KIND = 'supply';
+
 export const REWARDS_CLAIM_TYPE_URL = '/twilight.rewards.v1.MsgClaimRewards';
 export const REWARDS_UPDATE_PARAMS_TYPE_URL =
   '/twilight.rewards.v1.MsgUpdateRewardsParams';
@@ -284,6 +290,7 @@ export type ProjectionFailureKind =
   | 'unknown_coreslot_health_shape'
   | 'invalid_proposer_address'
   | 'unknown_proposer_attribution_shape'
+  | 'balance_snapshot_chain_read_failed'
   | 'unknown_semantic_type'
   | 'unknown_coreslot_message'
   | 'unknown_coreslot_event'

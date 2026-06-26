@@ -728,3 +728,23 @@ model RewardsBalanceSample {
   @@index([height])
   @@index([sampleKind])
 }
+
+// Phase 9d-0: current (latest) observed account balance per address+denom, sampled live from
+// x/bank via ChainClient at `sampledAtHeight`. An OBSERVED SAMPLE, not rebuildable from generic
+// rows (a balance is bank current state). Bounded to CoreSlot operator/payout addresses by the
+// balance_snapshot_v1 projection. Latest sample wins (upsert by balanceKey = `${address}:${denom}`).
+model AccountBalanceCurrent {
+  id              BigInt   @id @default(autoincrement())
+  balanceKey      String   @unique
+  address         String
+  denom           String
+  amount          String
+  sampledAtHeight BigInt
+  source          String   @default("sampled")
+  rawJson         Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([address])
+  @@index([sampledAtHeight])
+}
