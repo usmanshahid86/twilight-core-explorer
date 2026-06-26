@@ -4,6 +4,7 @@ import { buildServer } from '../dist/server.js';
 import { MockPrisma, testConfig, tx, msg, evt, block } from './mock-prisma.js';
 
 const build = (data) => buildServer({ config: testConfig, prisma: new MockPrisma(data) });
+const cursor = (...parts) => Buffer.from(parts.map(String).join(':'), 'utf8').toString('base64url');
 
 describe('txs list', () => {
   it('lists newest-first (height desc, index desc) and paginates via a composite cursor', async () => {
@@ -59,6 +60,15 @@ describe('txs list', () => {
     const app = await build({ txs: [] });
     assert.equal((await app.inject({ url: '/api/v1/txs?limit=999' })).statusCode, 400);
     assert.equal((await app.inject({ url: '/api/v1/txs?cursor=@@@' })).statusCode, 400);
+    await app.close();
+  });
+
+  it('rejects a tx cursor with an unsafe index', async () => {
+    const app = await build({ txs: [] });
+    const unsafe = cursor(10, BigInt(Number.MAX_SAFE_INTEGER) + 1n);
+    const res = await app.inject({ url: `/api/v1/txs?cursor=${unsafe}` });
+    assert.equal(res.statusCode, 400);
+    assert.equal(res.json().error.code, 'invalid_cursor');
     await app.close();
   });
 

@@ -11,7 +11,7 @@ import {
 } from '../dto/transactions.js';
 import { ErrorResponse } from '../dto/common.js';
 import { DEFAULT_LIMIT, decodeBigIntPart, decodeKeyset, encodeKeyset } from '../lib/pagination.js';
-import { notFound } from '../lib/errors.js';
+import { invalidCursor, notFound } from '../lib/errors.js';
 import {
   getBlockTime,
   getEvents,
@@ -41,7 +41,11 @@ export async function transactionsRoutes(fastify: FastifyInstance): Promise<void
       if (request.query.cursor !== undefined) {
         const [h, i] = decodeKeyset(request.query.cursor, 2);
         beforeHeight = decodeBigIntPart(h as string);
-        beforeIndex = Number(decodeBigIntPart(i as string));
+        const index = decodeBigIntPart(i as string);
+        if (index > BigInt(Number.MAX_SAFE_INTEGER)) {
+          throw invalidCursor();
+        }
+        beforeIndex = Number(index);
       }
 
       const fetched = await listTxs(app.prisma, {

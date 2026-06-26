@@ -18,6 +18,8 @@ import { accountsRoutes } from './routes/accounts.js';
 import { searchRoutes } from './routes/search.js';
 import { decodeFailuresRoutes } from './routes/decode-failures.js';
 import { projectionsRoutes } from './routes/projections.js';
+import { coreslotsRoutes } from './routes/coreslots.js';
+import { networkRoutes } from './routes/network.js';
 
 export interface BuildServerOptions {
   config: ApiConfig;
@@ -47,6 +49,8 @@ export async function buildServer(opts: BuildServerOptions): Promise<FastifyInst
   await app.register(searchRoutes, { prefix: '/api/v1' });
   await app.register(decodeFailuresRoutes, { prefix: '/api/v1' });
   await app.register(projectionsRoutes, { prefix: '/api/v1' });
+  await app.register(coreslotsRoutes, { prefix: '/api/v1' });
+  await app.register(networkRoutes, { prefix: '/api/v1' });
 
   return app;
 }
