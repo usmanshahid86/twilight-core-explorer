@@ -19,15 +19,16 @@ snapshot from those summaries (slots 1-3 healthy, slot 4 degraded, network = war
 with real `twilightd` transactions and verified the indexer responded — closing the last live-coverage
 gaps. A **proposer attribution projection** (`proposer_attribution_v1`) was also added, completing the
 validator surface (blocks-proposed per operator). The entire CoreSlot + liveness + proposer backend
-stack (6a/6b/7/8a–8c-3) is complete and live-proven. On top of it the **public API is partly built: Phase 9a (foundation:
-health/status/blocks), 9b (generic explorer: txs/accounts/search/diagnostics), and 9c (CoreSlot/
-validator/liveness/health/network) are complete, tested, and live-validated** (a strictly DB-only
-Fastify + TypeBox `apps/api`; OpenAPI 23 paths). **The next phase is 9d (rewards API)**, preceded by
-the small pre-9d indexer snapshot phase. See §6 for the 9a–9d breakdown.
+stack (6a/6b/7/8a–8c-3) is complete and live-proven. On top of it the **public DB-only API is complete: Phase 9a (foundation:
+health/status/blocks), 9b (generic explorer: txs/accounts/search/diagnostics), 9c (CoreSlot/validator/
+liveness/health/network), and 9d (rewards/supply/account-balances) are all done, tested, and
+live-validated** (a strictly DB-only Fastify + TypeBox `apps/api`; OpenAPI **32 paths**), along with
+the **9d-0** indexer balance/supply snapshots. **The next phase is 10 (web foundation)**; Phase 7.2
+(live rewards-claim fixture) remains an open evidence task. See §6 for the 9a–9d breakdown.
 
 This document summarizes what has already been decided and built, what is still only
 designed, and the recommended sequence from here. It is intended to keep implementation
-aligned for the remaining API (9d), web (10/11), and hardening (13) work.
+aligned for the remaining web (10/11) and hardening (12/13) work.
 
 ## 1. Product North Star
 
@@ -897,38 +898,46 @@ Report: `docs/research/phase-9c-coreslot-validator-liveness-api-report.md`. Open
 - Hardening: `parseUint64` + `INT64_MAX` (+ length cap) across all cursor/digit inputs → out-of-range
   is a clean 400, not a Postgres 500. apps/api 86 tests.
 
-#### Phase 9d: Rewards API (NOT yet implemented)
+#### Phase 9d: Rewards / supply / account-balance API (completed)
 
-- `GET /api/v1/rewards/epochs`, `/epochs/:n`, `/coreslots/:slotId/rewards`, `/rewards/claims`
-  (indexed claim **history only** until Phase 7.2 passes), `/rewards/balances` (sampled).
-- `GET /api/v1/supply` and account balances depend on the **pre-9d snapshot** indexer phase below.
-- `EpochReward` is aggregate context, NOT current claim truth; sampled rows carry `source:"sampled"`.
+Report: `docs/research/phase-9d-rewards-supply-api-report.md`. OpenAPI now **32 paths**; apps/api 113 tests.
+
+- `GET /api/v1/rewards/epochs`, `/epochs/:epoch`, `/coreslots/:slotId/rewards`, `/rewards/claims`
+  (claim **history only**), `/rewards/balances` (excludes `sampleKind="supply"` by default),
+  `/rewards/params`, `/rewards/treasury-payments`.
+- `GET /api/v1/supply` (only `RewardsBalanceSample('supply')`, latest or `?height=` exact; never summed
+  from balances), `GET /api/v1/accounts/:address/balances` (only `AccountBalanceCurrent`; unsampled →
+  `200 { sampled:false, sampledAtHeight:null, balances:[] }`, never a fabricated zero).
+- `EpochReward` is aggregate context (`rewardSemantics:"aggregate_projection"`), NOT claim truth;
+  sampled rows carry `source:"sampled"` + `sampledAtHeight`. The Phase-7.2 gate is a **machine-readable
+  in-data field** (`productionClaimReadiness:"gated_by_phase_7_2"` + `claimSemantics` on claims/slot
+  rewards), not envelope drift. No live `ClaimableRewards`, no claimable production truth.
 
 Deferred from 9a–9c (candidate follow-ups): `twilightvalcons` bech32 search (needs a pure bech32
 dep), `/network/params` (network-scoped `CoreSlotParameterChange`), and the API hardening punted to
 Phase 13 (rate limiting, security headers, cache-control/ETag, a real linter — `npm run lint` is
 currently a no-op).
 
-### Pre-9d (indexer): Balance & Supply Observed Snapshots
+### Phase 9d-0 (indexer): Balance & Supply Observed Snapshots (completed)
 
-Small indexer phase that gates the API's account-balance and `/supply` surfaces. These are **observed
-samples**, not rebuildable projections — a balance is `x/bank` current state and cannot be
-reconstructed from indexed events (you would have to replay every transfer/fee/reward/genesis
-allocation). So the indexer must sample them via a chain read, height-tagged, exactly like the
-existing `RewardsBalanceSample`.
+Report: `docs/research/phase-9d-0-account-supply-snapshot-report.md`. Indexer-only; no API; no
+ChainClient changes (`getSupply()`/`getBalances()` already existed). These are **observed samples**,
+not rebuildable projections — a balance is `x/bank` current state and cannot be reconstructed from
+indexed events, so the indexer samples them via a chain read, height-tagged.
 
-Scope:
+What shipped (`balance_snapshot_v1` projection quartet):
 
-- `AccountBalance` observed sample (per address, `sampledAtHeight`), refreshed on a schedule / on
-  account activity / on demand.
-- `SupplySnapshot` observed sample (total `utwlt` supply, `sampledAtHeight`), pairs with rewards
-  cumulative-emitted context.
-- Both are observed-sample tables (`source: "sampled"`), never presented as rebuildable truth.
-- The DB-only API (Phase 9) then exposes them marked sampled; it must NOT fetch balances live.
+- **Supply reuses `RewardsBalanceSample(sampleKind="supply")`** (the schema already reserved it) — NO
+  dedicated `SupplySnapshot` model. `sampleKey = "{height}:supply:-:-:{denom}"`, all denoms.
+- **New `AccountBalanceCurrent`** model — current balance per `address`+`denom` (`balanceKey` unique),
+  bounded to distinct CoreSlot operator/payout addresses (not every account), `source:"sampled"`.
+- Reads all chain state first, writes atomically in one transaction; on chain-read failure halts the
+  cursor + records a `ProjectionFailure` and writes ZERO rows (no partial/guessed snapshot).
+- Live-validated: supply `utwlt=2000000000000 @3196` matched `/cosmos/bank/v1beta1/supply`; account
+  rows matched `/balances/{address}`; REST-down drill halted cleanly.
 
-Sequencing: does not block Phase 9a/9b/9c. Required before the API exposes account balances or
-`/supply` (9d). If truly live (not sampled) balances are ever wanted, that is a deliberate separate
-chain-reading service, explicitly outside the read-only API.
+If truly live (not sampled) balances are ever wanted, that is a deliberate separate chain-reading
+service, explicitly outside the read-only API.
 
 ### Phase 10: Web Foundation and Generic Explorer
 
@@ -1017,21 +1026,22 @@ not be forgotten.
 
 The entire backend/projection stack is complete: CoreSlot semantic (6a), key rotation + temporal map
 (6b), rewards (7/7.1), and the full liveness stack (8a → 8b → 8c-0b/0c → 8c-1/2/3), all live-proven.
-The public API is partly built: **9a (foundation), 9b (generic explorer), and 9c (CoreSlot/validator/
-liveness/health) are complete**; only **9d (rewards API)** remains of Phase 9.
+The public DB-only API is **complete (9a → 9b → 9c → 9d)**, and the **9d-0** indexer balance/supply
+snapshots are done — so the entire backend + API surface is built and live-validated.
 
 Remaining:
 
-- MVP usable explorer: **9d (rewards API)** + the small **pre-9d** indexer snapshot phase, then web
-  foundation (10) and Twilight-specific pages (11).
+- MVP usable explorer: web foundation (10) then Twilight-specific pages (11).
 - Production-grade operator explorer: the above + operator education/onboarding (12) and
-  deployment/hardening (13, which also absorbs the API hardening deferred from 9a–9c).
+  deployment/hardening (13, which also absorbs the API hardening deferred from 9a–9c — rate limiting,
+  security headers, cache-control/ETag, a real linter).
 
 Open evidence tasks (not phase blockers): Phase 7.2 live rewards-claim fixture; and the optional
 broader liveness drills (multi-node halt → network `critical`; rotation-mid-outage).
 
-Small pre-9d indexer phase: `AccountBalance` + `SupplySnapshot` observed samples — required before the
-API exposes account balances or `/supply` (does not block 9a/9b/9c). See the pre-9d section in §6.
+Phase 9d-0 indexer snapshot phase (DONE): `balance_snapshot_v1` materialized supply via
+`RewardsBalanceSample('supply')` + per-address `AccountBalanceCurrent` observed samples, which the 9d
+API exposes (marked sampled). See the Phase 9d-0 section in §6.
 
 Dependencies that must not be blurred:
 
@@ -1102,13 +1112,13 @@ Dependencies that must not be blurred:
 
 Recommended next implementation step:
 
-**Phase 9d: Rewards API** — Phase 9a (foundation), 9b (generic explorer), and 9c (CoreSlot/validator/
-liveness/health) are complete and live-validated, exposing health/status/blocks, txs/accounts/search/
-diagnostics, and the full CoreSlot/network surface. The remaining API slice is rewards: epochs, slot
-rewards, claim history (history-only until 7.2), and sampled balances. Two prerequisites/notes:
-the small **pre-9d** indexer phase (`AccountBalance` + `SupplySnapshot` observed samples) gates the
-API's balance/`/supply` surfaces, and **Phase 7.2** (live claim fixture) gates presenting claims as
-production-ready. After 9d, Web (Phase 10) and Twilight-specific pages (Phase 11) follow.
+**Phase 10: Web Foundation** — the entire **public DB-only API is complete (9a → 9b → 9c → 9d)** plus
+the **9d-0** indexer balance/supply snapshots, all live-validated (apps/api 113 tests, OpenAPI 32
+paths). The next implementation step is the web app shell + generic explorer pages (dashboard, blocks,
+txs, accounts, search, supply/network/API-status) consuming the API, then Twilight-specific pages
+(Phase 11). **Phase 7.2** (live rewards-claim fixture) remains an open evidence task — not a phase
+blocker, but required before claim/operator-economics surfaces are presented as production-ready
+(9d already gates this with the `productionClaimReadiness:"gated_by_phase_7_2"` in-data caveat).
 
 The operator-liveness data dependency that gated the operator UX milestone is now fully satisfied:
 `CoreSlotHealthSnapshot` + `NetworkLivenessRiskSnapshot` give per-operator health and network
