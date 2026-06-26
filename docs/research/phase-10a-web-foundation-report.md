@@ -122,4 +122,35 @@ API running.
 - Branding: reused reference logo/marks conceptually; final assets can be swapped later.
 - Full CSP / observability / rate limiting → Phase 13 (only `nosniff`/`DENY`/referrer headers now).
 
-**Phase 10a Web Foundation: COMPLETE — ready for Codex review.**
+## 11. Codex PARTIAL patch (2026-06-27)
+
+Addressed the two merge blockers + one hardening note from Codex's PARTIAL review; scope unchanged
+(no 10b pages, no charts).
+
+- **Blocker 1 — validator-set height (contract bug):** the generated schema marks
+  `/api/v1/network/validator-set` `query: { height: string }` as **required** (heightless call → 400).
+  `useValidatorSet(height)` now takes a required height, is `enabled` only when a non-empty height
+  string is present, includes height in the queryKey, and sends it via the typed wrapper. The Overview
+  derives the height from `/api/v1/status` (`indexer.lastIndexedHeight`, validated as digits — no
+  `Number()`, no hardcode, no synthesis). When status is unavailable or no height can be derived, the
+  validator-set metric renders an explicit "awaiting height…/unavailable" state and **issues no call**.
+- **Blocker 2 — incorrect "active" count:** the metric no longer equates `removedHeight === null`
+  with active. The Overview now shows **"Active validator set"** = the validator set at the latest
+  height (the canonical active set), and relabels the `/coreslots` count as **"Registered CoreSlots"**.
+  Pending/inactive/non-removed slots are no longer counted as active.
+- **Hardening — boundary guard:** `boundary.test.ts` now scans `src/**` **plus** `package.json` and
+  `next.config.js`/`tsconfig.json`, and adds forbidden checks for `DATABASE_URL`,
+  `@twilight-explorer/config`, `loadConfig`, `node:http`, `node:https`, `@twilight-explorer/db`, and
+  direct chain-client/RPC/REST host strings. The `fetch()` allowlist (typed API client only) is kept;
+  `fetch` is not banned globally.
+
+Tests added/updated: `src/lib/api/queries.test.tsx` (validator-set requires height; disabled + no call
+when absent; called with `{ height }` when present); `src/components/overview/NetworkPanels.test.tsx`
+(active = validator-set count not non-removed registry count; registry relabeled; unavailable + no
+validator-set call when height missing); expanded `src/lib/boundary.test.ts`.
+
+Validation (all green): `typecheck` (root, exit 0); `apps/web` build 13/13 routes; `apps/web` Vitest
+**39/39** (was 35; +4); root `test` exit 0 (api 114, indexer 258, web 39, chain-client 16);
+`openapi:check` up to date; `next lint` clean; `git diff --check` clean.
+
+**Phase 10a Web Foundation: COMPLETE (Codex PARTIAL patch applied) — ready for Codex re-review.**

@@ -57,10 +57,20 @@ export function useCoreSlots() {
   });
 }
 
-export function useValidatorSet() {
+// /api/v1/network/validator-set requires a `height` (the active set AT a height). The caller derives
+// it from /api/v1/status; the query stays disabled until a real height string is available, so we
+// never issue the invalid (400) heightless call.
+export function useValidatorSet(height: string | undefined) {
   return useQuery({
-    queryKey: ['validator-set'],
-    queryFn: () => apiGet('/api/v1/network/validator-set'),
+    queryKey: ['validator-set', height ?? null],
+    queryFn: () => {
+      if (height === undefined || height === '') {
+        // Unreachable: `enabled` gates this. Guards against ever calling validator-set without height.
+        throw new Error('validator-set requires a height');
+      }
+      return apiGet('/api/v1/network/validator-set', { height });
+    },
+    enabled: typeof height === 'string' && height.length > 0,
     refetchInterval: LIST_REFETCH_MS,
   });
 }
