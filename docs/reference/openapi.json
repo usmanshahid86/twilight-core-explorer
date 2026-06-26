@@ -848,6 +848,1301 @@
           }
         }
       }
+    },
+    "/api/v1/txs": {
+      "get": {
+        "summary": "List transactions (newest first)",
+        "tags": [
+          "transactions"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50,
+              "type": "integer"
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          },
+          {
+            "schema": {
+              "pattern": "^\\d+$",
+              "type": "string"
+            },
+            "in": "query",
+            "name": "height",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "status",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "page"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "hash",
+                          "height",
+                          "index",
+                          "status",
+                          "code",
+                          "gasUsed",
+                          "gasWanted",
+                          "memo",
+                          "messageTypes",
+                          "signerAddresses"
+                        ],
+                        "properties": {
+                          "hash": {
+                            "type": "string"
+                          },
+                          "height": {
+                            "pattern": "^\\d+$",
+                            "description": "Decimal height/id as string",
+                            "type": "string"
+                          },
+                          "index": {
+                            "type": "integer"
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "code": {
+                            "anyOf": [
+                              {
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "gasUsed": {
+                            "anyOf": [
+                              {
+                                "pattern": "^\\d+$",
+                                "description": "Decimal height/id as string",
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "gasWanted": {
+                            "anyOf": [
+                              {
+                                "pattern": "^\\d+$",
+                                "description": "Decimal height/id as string",
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "memo": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "messageTypes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "signerAddresses": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "title": "TxListItem"
+                      }
+                    },
+                    "page": {
+                      "type": "object",
+                      "required": [
+                        "limit",
+                        "nextCursor"
+                      ],
+                      "properties": {
+                        "limit": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "nextCursor": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/txs/{hash}": {
+      "get": {
+        "summary": "Get a transaction by hash",
+        "tags": [
+          "transactions"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "raw"
+              ]
+            },
+            "in": "query",
+            "name": "include",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "hash",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "required": [
+                        "hash",
+                        "height",
+                        "index",
+                        "status",
+                        "code",
+                        "gasUsed",
+                        "gasWanted",
+                        "memo",
+                        "messageTypes",
+                        "signerAddresses",
+                        "time",
+                        "fee",
+                        "messages",
+                        "events"
+                      ],
+                      "properties": {
+                        "hash": {
+                          "type": "string"
+                        },
+                        "height": {
+                          "pattern": "^\\d+$",
+                          "description": "Decimal height/id as string",
+                          "type": "string"
+                        },
+                        "index": {
+                          "type": "integer"
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "anyOf": [
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "gasUsed": {
+                          "anyOf": [
+                            {
+                              "pattern": "^\\d+$",
+                              "description": "Decimal height/id as string",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "gasWanted": {
+                          "anyOf": [
+                            {
+                              "pattern": "^\\d+$",
+                              "description": "Decimal height/id as string",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "memo": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "messageTypes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "signerAddresses": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "time": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "fee": {
+                          "anyOf": [
+                            {},
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "messages": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "msgIndex",
+                              "typeUrl",
+                              "module",
+                              "typeName",
+                              "decodedJson",
+                              "decodeError"
+                            ],
+                            "properties": {
+                              "msgIndex": {
+                                "type": "integer"
+                              },
+                              "typeUrl": {
+                                "type": "string"
+                              },
+                              "module": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "typeName": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "decodedJson": {
+                                "anyOf": [
+                                  {},
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "decodeError": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "raw": {}
+                            },
+                            "title": "Message"
+                          }
+                        },
+                        "events": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "phase",
+                              "type",
+                              "msgIndex",
+                              "eventIndex",
+                              "attributes"
+                            ],
+                            "properties": {
+                              "phase": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string"
+                              },
+                              "msgIndex": {
+                                "anyOf": [
+                                  {
+                                    "type": "integer"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "eventIndex": {
+                                "type": "integer"
+                              },
+                              "attributes": {}
+                            },
+                            "title": "Event"
+                          }
+                        },
+                        "raw": {
+                          "type": "object",
+                          "required": [
+                            "tx",
+                            "result"
+                          ],
+                          "properties": {
+                            "tx": {},
+                            "result": {}
+                          }
+                        }
+                      },
+                      "title": "TxDetail"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts": {
+      "get": {
+        "summary": "List accounts (address order)",
+        "tags": [
+          "accounts"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50,
+              "type": "integer"
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "accountKind",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "page"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "address",
+                          "accountKind",
+                          "firstSeenHeight",
+                          "lastSeenHeight",
+                          "txCount"
+                        ],
+                        "properties": {
+                          "address": {
+                            "type": "string"
+                          },
+                          "accountKind": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "firstSeenHeight": {
+                            "anyOf": [
+                              {
+                                "pattern": "^\\d+$",
+                                "description": "Decimal height/id as string",
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "lastSeenHeight": {
+                            "anyOf": [
+                              {
+                                "pattern": "^\\d+$",
+                                "description": "Decimal height/id as string",
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "txCount": {
+                            "type": "integer"
+                          }
+                        },
+                        "title": "AccountListItem"
+                      }
+                    },
+                    "page": {
+                      "type": "object",
+                      "required": [
+                        "limit",
+                        "nextCursor"
+                      ],
+                      "properties": {
+                        "limit": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "nextCursor": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/{address}": {
+      "get": {
+        "summary": "Get an account by address",
+        "tags": [
+          "accounts"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "raw"
+              ]
+            },
+            "in": "query",
+            "name": "include",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "address",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "required": [
+                        "address",
+                        "accountKind",
+                        "firstSeenHeight",
+                        "lastSeenHeight",
+                        "txCount"
+                      ],
+                      "properties": {
+                        "address": {
+                          "type": "string"
+                        },
+                        "accountKind": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "firstSeenHeight": {
+                          "anyOf": [
+                            {
+                              "pattern": "^\\d+$",
+                              "description": "Decimal height/id as string",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "lastSeenHeight": {
+                          "anyOf": [
+                            {
+                              "pattern": "^\\d+$",
+                              "description": "Decimal height/id as string",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "txCount": {
+                          "type": "integer"
+                        },
+                        "raw": {}
+                      },
+                      "title": "AccountDetail"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/search": {
+      "get": {
+        "summary": "Resolve a query to typed references",
+        "tags": [
+          "search"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "in": "query",
+            "name": "q",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "required": [
+                              "type",
+                              "height",
+                              "hash"
+                            ],
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "block"
+                                ]
+                              },
+                              "height": {
+                                "pattern": "^\\d+$",
+                                "description": "Decimal height/id as string",
+                                "type": "string"
+                              },
+                              "hash": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            }
+                          },
+                          {
+                            "type": "object",
+                            "required": [
+                              "type",
+                              "hash",
+                              "height"
+                            ],
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "transaction"
+                                ]
+                              },
+                              "hash": {
+                                "type": "string"
+                              },
+                              "height": {
+                                "pattern": "^\\d+$",
+                                "description": "Decimal height/id as string",
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "type": "object",
+                            "required": [
+                              "type",
+                              "address"
+                            ],
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "account"
+                                ]
+                              },
+                              "address": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        ],
+                        "title": "SearchResult"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/decode-failures": {
+      "get": {
+        "summary": "List decode failures (newest first)",
+        "tags": [
+          "diagnostics"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50,
+              "type": "integer"
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "resolved",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "failureKind",
+            "required": false
+          },
+          {
+            "schema": {
+              "pattern": "^\\d+$",
+              "type": "string"
+            },
+            "in": "query",
+            "name": "height",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "page"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "height",
+                          "txHash",
+                          "msgIndex",
+                          "eventIndex",
+                          "typeUrl",
+                          "eventType",
+                          "failureKind",
+                          "decodeError",
+                          "resolved",
+                          "resolvedAt",
+                          "createdAt"
+                        ],
+                        "properties": {
+                          "id": {
+                            "pattern": "^\\d+$",
+                            "description": "Decimal height/id as string",
+                            "type": "string"
+                          },
+                          "height": {
+                            "pattern": "^\\d+$",
+                            "description": "Decimal height/id as string",
+                            "type": "string"
+                          },
+                          "txHash": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "msgIndex": {
+                            "anyOf": [
+                              {
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "eventIndex": {
+                            "anyOf": [
+                              {
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "typeUrl": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "eventType": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "failureKind": {
+                            "type": "string"
+                          },
+                          "decodeError": {
+                            "type": "string"
+                          },
+                          "resolved": {
+                            "type": "boolean"
+                          },
+                          "resolvedAt": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          }
+                        },
+                        "title": "DecodeFailureItem"
+                      }
+                    },
+                    "page": {
+                      "type": "object",
+                      "required": [
+                        "limit",
+                        "nextCursor"
+                      ],
+                      "properties": {
+                        "limit": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "nextCursor": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projections": {
+      "get": {
+        "summary": "Per-projection cursor + unresolved-failure diagnostics",
+        "tags": [
+          "diagnostics"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "projectionName",
+                          "lastProjectedHeight",
+                          "status",
+                          "updatedAt",
+                          "error",
+                          "unresolvedFailures"
+                        ],
+                        "properties": {
+                          "projectionName": {
+                            "type": "string"
+                          },
+                          "lastProjectedHeight": {
+                            "pattern": "^\\d+$",
+                            "description": "Decimal height/id as string",
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "updatedAt": {
+                            "type": "string"
+                          },
+                          "error": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "unresolvedFailures": {
+                            "type": "object",
+                            "required": [
+                              "count",
+                              "byKind"
+                            ],
+                            "properties": {
+                              "count": {
+                                "type": "integer"
+                              },
+                              "byKind": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "required": [
+                                    "failureKind",
+                                    "count"
+                                  ],
+                                  "properties": {
+                                    "failureKind": {
+                                      "type": "string"
+                                    },
+                                    "count": {
+                                      "type": "integer"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "title": "ProjectionDiagnostic"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "tags": [
