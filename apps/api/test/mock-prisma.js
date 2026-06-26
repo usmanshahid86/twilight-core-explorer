@@ -33,6 +33,13 @@ export class MockPrisma {
     this._livenessSummaries = data.livenessSummaries ?? [];
     this._healthSnapshots = data.healthSnapshots ?? [];
     this._networkRisk = data.networkRisk ?? null;
+    this._epochs = data.epochs ?? [];
+    this._slotRewards = data.slotRewards ?? [];
+    this._claims = data.claims ?? [];
+    this._rewardsBalances = data.rewardsBalances ?? [];
+    this._paramsChanges = data.paramsChanges ?? [];
+    this._treasuryPayments = data.treasuryPayments ?? [];
+    this._accountBalances = data.accountBalances ?? [];
     this._dbDown = data.dbDown ?? false;
     this._failedMigrations = data.failedMigrations ?? 0;
 
@@ -288,6 +295,109 @@ export class MockPrisma {
 
     this.networkLivenessRiskSnapshot = {
       findFirst: async () => this._networkRisk,
+    };
+
+    this.rewardEpochProjection = {
+      findMany: async (args = {}) => {
+        let r = [...this._epochs];
+        const lt = args.where?.epochNumber?.lt;
+        if (lt !== undefined) r = r.filter((e) => e.epochNumber < lt);
+        r.sort((a, b) => descBig(a.epochNumber, b.epochNumber));
+        return args.take ? r.slice(0, args.take) : r;
+      },
+      findUnique: async (args) => this._epochs.find((e) => e.epochNumber === args.where.epochNumber) ?? null,
+    };
+
+    this.slotRewardProjection = {
+      findMany: async (args = {}) => {
+        let r = this._slotRewards.filter((s) => s.slotId === args.where.slotId);
+        const lt = args.where?.epochNumber?.lt;
+        if (lt !== undefined) r = r.filter((s) => s.epochNumber < lt);
+        r.sort((a, b) => descBig(a.epochNumber, b.epochNumber));
+        return args.take ? r.slice(0, args.take) : r;
+      },
+    };
+
+    this.rewardClaimEvent = {
+      findMany: async (args = {}) => {
+        let r = [...this._claims];
+        const w = args.where ?? {};
+        if (w.slotId !== undefined) r = r.filter((c) => c.slotId === w.slotId);
+        if (w.claimant !== undefined) r = r.filter((c) => c.claimant === w.claimant);
+        if (w.txHash !== undefined) r = r.filter((c) => c.txHash === w.txHash);
+        if (w.height?.gte !== undefined) r = r.filter((c) => c.height >= w.height.gte);
+        if (w.height?.lte !== undefined) r = r.filter((c) => c.height <= w.height.lte);
+        if (w.OR) {
+          r = r.filter((c) =>
+            w.OR.some((cl) => {
+              if (cl.height && typeof cl.height === 'object' && cl.height.lt !== undefined) return c.height < cl.height.lt;
+              if (cl.id?.lt !== undefined) return c.height === cl.height && c.id < cl.id.lt;
+              return false;
+            }),
+          );
+        }
+        r.sort((a, b) => (a.height !== b.height ? descBig(a.height, b.height) : descBig(a.id, b.id)));
+        return args.take ? r.slice(0, args.take) : r;
+      },
+    };
+
+    this.rewardsBalanceSample = {
+      findFirst: async (args = {}) => {
+        let r = [...this._rewardsBalances];
+        if (typeof args.where?.sampleKind === 'string') r = r.filter((b) => b.sampleKind === args.where.sampleKind);
+        r.sort((a, b) => descBig(a.height, b.height));
+        return r[0] ?? null;
+      },
+      findMany: async (args = {}) => {
+        let r = [...this._rewardsBalances];
+        const w = args.where ?? {};
+        if (typeof w.sampleKind === 'string') r = r.filter((b) => b.sampleKind === w.sampleKind);
+        else if (w.sampleKind?.not !== undefined) r = r.filter((b) => b.sampleKind !== w.sampleKind.not);
+        if (w.height !== undefined) r = r.filter((b) => b.height === w.height);
+        if (w.denom !== undefined) r = r.filter((b) => b.denom === w.denom);
+        if (w.id?.lt !== undefined) r = r.filter((b) => b.id < w.id.lt);
+        if (args.orderBy?.denom === 'asc') r.sort((a, b) => (a.denom < b.denom ? -1 : a.denom > b.denom ? 1 : 0));
+        else r.sort((a, b) => descBig(a.id, b.id));
+        return args.take ? r.slice(0, args.take) : r;
+      },
+    };
+
+    this.rewardsParamsChange = {
+      findMany: async (args = {}) => {
+        let r = [...this._paramsChanges];
+        const w = args.where ?? {};
+        if (w.changeType !== undefined) r = r.filter((p) => p.changeType === w.changeType);
+        if (w.id?.lt !== undefined) r = r.filter((p) => p.id < w.id.lt);
+        r.sort((a, b) => descBig(a.id, b.id));
+        return args.take ? r.slice(0, args.take) : r;
+      },
+    };
+
+    this.rewardsTreasuryPayment = {
+      findMany: async (args = {}) => {
+        let r = [...this._treasuryPayments];
+        if (args.where?.id?.lt !== undefined) r = r.filter((t) => t.id < args.where.id.lt);
+        r.sort((a, b) => descBig(a.id, b.id));
+        return args.take ? r.slice(0, args.take) : r;
+      },
+    };
+
+    this.accountBalanceCurrent = {
+      findFirst: async (args = {}) => {
+        const rows = this._accountBalances.filter((b) => b.address === args.where.address);
+        if (rows.length === 0) return null;
+        // only orderBy used by the repo is sampledAtHeight desc
+        return rows.reduce((m, r) => (r.sampledAtHeight > m.sampledAtHeight ? r : m), rows[0]);
+      },
+      findMany: async (args = {}) =>
+        this._accountBalances
+          .filter(
+            (b) =>
+              b.address === args.where.address &&
+              (args.where.sampledAtHeight === undefined ||
+                b.sampledAtHeight === args.where.sampledAtHeight),
+          )
+          .sort((a, b) => (a.denom < b.denom ? -1 : a.denom > b.denom ? 1 : 0)),
     };
   }
 
@@ -584,4 +694,100 @@ export function networkRisk(overrides = {}) {
     updatedAtDb: new Date('2026-06-26T00:00:00.000Z'),
     ...overrides,
   };
+}
+
+export function epoch(epochNumber, overrides = {}) {
+  return {
+    epochNumber: BigInt(epochNumber),
+    height: BigInt(epochNumber) * 10n,
+    blockTime: new Date('2026-06-26T00:00:00.000Z'),
+    totalReward: '1000',
+    denom: 'utwlt',
+    activeSlotCount: 4,
+    rawSnapshotJson: { epoch: epochNumber },
+    ...overrides,
+  };
+}
+
+export function slotReward(slotId, epochNumber, overrides = {}) {
+  return {
+    slotId: BigInt(slotId),
+    epochNumber: BigInt(epochNumber),
+    amount: '250',
+    denom: 'utwlt',
+    claimed: false,
+    claimedAtHeight: null,
+    claimTxHash: null,
+    sampledAtHeight: 3196n,
+    ...overrides,
+  };
+}
+
+export function claim(id, slotId, height, overrides = {}) {
+  return {
+    id: BigInt(id),
+    slotId: BigInt(slotId),
+    claimant: 'twilight1claimant',
+    payoutAddress: 'twilight1payout',
+    startEpoch: 1n,
+    endEpoch: 2n,
+    amount: '500',
+    denom: 'utwlt',
+    height: BigInt(height),
+    txHash: `CLAIMTX${id}`,
+    msgIndex: 0,
+    ...overrides,
+  };
+}
+
+export function rewardsBalance(id, sampleKind, overrides = {}) {
+  return {
+    id: BigInt(id),
+    sampleKind,
+    height: 3196n,
+    address: null,
+    moduleName: sampleKind === 'module_balance' ? 'rewards' : null,
+    denom: 'utwlt',
+    amount: '1000',
+    ...overrides,
+  };
+}
+
+export function paramsChange(id, overrides = {}) {
+  return {
+    id: BigInt(id),
+    height: BigInt(id) * 5n,
+    txHash: `PTX${id}`,
+    msgIndex: 0,
+    authority: 'twilight1authority',
+    changeType: 'direct_update',
+    paramsJson: { foo: 'bar' },
+    ...overrides,
+  };
+}
+
+export function treasuryPayment(id, overrides = {}) {
+  return {
+    id: BigInt(id),
+    height: BigInt(id) * 7n,
+    recipient: 'twilight1recipient',
+    denom: 'utwlt',
+    amount: '42',
+    purpose: 'grant',
+    ...overrides,
+  };
+}
+
+export function accountBalance(address, denom, amount, overrides = {}) {
+  return {
+    denom,
+    amount,
+    sampledAtHeight: 3196n,
+    address,
+    ...overrides,
+  };
+}
+
+export function supplySample(denom, amount, height = 3196n, overrides = {}) {
+  return { id: 1n, sampleKind: 'supply', height, address: null, moduleName: null, denom, amount, ...overrides };
 }
