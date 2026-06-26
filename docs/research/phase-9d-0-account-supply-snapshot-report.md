@@ -15,7 +15,7 @@ New (`apps/indexer/src/projections/`):
 - `balance-snapshot-cli.ts` — CLI (advisory lock + height resolution + `EXTRA_BALANCE_ADDRESSES`).
 - `reset-balance-snapshot.ts` — scoped reset fn.
 - `reset-balance-snapshot-cli.ts` — reset CLI.
-- `apps/indexer/test/projections/balance-snapshot.test.js` — 6 mock tests.
+- `apps/indexer/test/projections/balance-snapshot.test.js` — 7 mock tests.
 
 Changed:
 - `prisma/schema.prisma` — new `AccountBalanceCurrent` model.
