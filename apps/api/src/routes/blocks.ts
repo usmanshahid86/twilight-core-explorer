@@ -10,7 +10,7 @@ import {
   toBlockListItem,
 } from '../dto/blocks.js';
 import { ErrorResponse } from '../dto/common.js';
-import { DEFAULT_LIMIT, decodeCursor, encodeCursor } from '../lib/pagination.js';
+import { DEFAULT_LIMIT, decodeCursor, encodeCursor, parseUint64 } from '../lib/pagination.js';
 import { invalidHeight, notFound } from '../lib/errors.js';
 import {
   getBlock,
@@ -72,11 +72,10 @@ export async function blocksRoutes(fastify: FastifyInstance): Promise<void> {
       },
     },
     async (request) => {
-      const raw = request.params.height;
-      if (!/^\d+$/.test(raw)) {
+      const height = parseUint64(request.params.height);
+      if (height === null) {
         throw invalidHeight();
       }
-      const height = BigInt(raw);
 
       const block = await getBlock(app.prisma, height);
       if (!block) {

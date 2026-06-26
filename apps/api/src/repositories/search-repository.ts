@@ -21,3 +21,21 @@ export async function findTxByHash(prisma: PrismaClient, hash: string) {
 export async function findAccountByAddress(prisma: PrismaClient, address: string) {
   return prisma.account.findUnique({ where: { address }, select: { address: true } });
 }
+
+// ---- 9c CoreSlot reference lookups ----
+
+export async function findCoreSlotById(prisma: PrismaClient, slotId: bigint) {
+  return prisma.coreSlotProjection.findUnique({ where: { slotId }, select: { slotId: true } });
+}
+
+export async function findCoreSlotByConsensus(prisma: PrismaClient, consensusAddress: string) {
+  return prisma.coreSlotProjection.findFirst({ where: { consensusAddress }, select: { slotId: true } });
+}
+
+export async function findCoreSlotByOperator(prisma: PrismaClient, operatorAddress: string) {
+  return prisma.coreSlotProjection.findFirst({ where: { operatorAddress }, select: { slotId: true } });
+}
+
+export async function findCoreSlotByPayout(prisma: PrismaClient, payoutAddress: string) {
+  return prisma.coreSlotProjection.findFirst({ where: { payoutAddress }, select: { slotId: true } });
+}

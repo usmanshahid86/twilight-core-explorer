@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { buildServer } from '../dist/server.js';
-import { MockPrisma, testConfig, block, tx, account } from './mock-prisma.js';
+import { MockPrisma, testConfig, block, tx, account, coreSlot } from './mock-prisma.js';
 
 const build = (data) => buildServer({ config: testConfig, prisma: new MockPrisma(data) });
 const HEX_A = 'A'.repeat(64);
@@ -51,11 +51,57 @@ describe('search', () => {
     await app.close();
   });
 
+  it('an out-of-int64-range numeric query matches nothing (no 500)', async () => {
+    const app = await build({ blocks: [], coreSlots: [] });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/search?q=9223372036854775808' });
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(res.json().data, []);
+    await app.close();
+  });
+
   it('rejects an empty q with 400 invalid_query', async () => {
     const app = await build({});
     const res = await app.inject({ method: 'GET', url: '/api/v1/search?q=' });
     assert.equal(res.statusCode, 400);
     assert.equal(res.json().error.code, 'invalid_query');
+    await app.close();
+  });
+
+  it('rejects a whitespace-only q with 400 invalid_query', async () => {
+    const app = await build({});
+    const res = await app.inject({ method: 'GET', url: '/api/v1/search?q=%20%20' });
+    assert.equal(res.statusCode, 400);
+    assert.equal(res.json().error.code, 'invalid_query');
+    await app.close();
+  });
+
+  // ---- 9c CoreSlot reference extensions ----
+
+  it('a numeric query returns both block and coreslot references', async () => {
+    const app = await build({ blocks: [block(2, { hash: HEX_A })], coreSlots: [coreSlot(2)] });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/search?q=2' });
+    const types = res.json().data.map((r) => r.type).sort();
+    assert.deepEqual(types, ['block', 'coreslot']);
+    assert.ok(res.json().data.find((r) => r.type === 'coreslot' && r.slotId === '2'));
+    await app.close();
+  });
+
+  it('a 40-hex consensus address resolves to a coreslot reference (role consensus)', async () => {
+    const app = await build({ coreSlots: [coreSlot(3, { consensusAddress: 'a'.repeat(40) })] });
+    const res = await app.inject({ method: 'GET', url: `/api/v1/search?q=${'A'.repeat(40)}` });
+    assert.deepEqual(res.json().data, [{ type: 'coreslot', slotId: '3', role: 'consensus' }]);
+    await app.close();
+  });
+
+  it('an operator bech32 address returns account + coreslot operator-role references', async () => {
+    const app = await build({
+      accounts: [account('twilight1op7')],
+      coreSlots: [coreSlot(7, { operatorAddress: 'twilight1op7' })],
+    });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/search?q=twilight1op7' });
+    const types = res.json().data.map((r) => r.type).sort();
+    assert.deepEqual(types, ['account', 'coreslot']);
+    assert.ok(res.json().data.find((r) => r.type === 'coreslot' && r.role === 'operator' && r.slotId === '7'));
     await app.close();
   });
 });

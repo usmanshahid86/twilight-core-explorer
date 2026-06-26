@@ -22,7 +22,19 @@ const AccountRef = Type.Object({
   address: Type.String(),
 });
 
-export const SearchResult = Type.Union([BlockRef, TransactionRef, AccountRef], { $id: 'SearchResult' });
+// 9c: CoreSlot reference. role ∈ operator | payout | consensus when resolved via that address;
+// absent when resolved by numeric slotId.
+const CoreSlotRef = Type.Object({
+  type: Type.Literal('coreslot'),
+  slotId: HeightString,
+  role: Type.Optional(
+    Type.Union([Type.Literal('operator'), Type.Literal('payout'), Type.Literal('consensus')]),
+  ),
+});
+
+export const SearchResult = Type.Union([BlockRef, TransactionRef, AccountRef, CoreSlotRef], {
+  $id: 'SearchResult',
+});
 
 export const SearchResponse = Type.Object(
   { data: Type.Array(SearchResult) },
