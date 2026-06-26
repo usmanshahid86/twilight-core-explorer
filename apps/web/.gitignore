@@ -1,0 +1,15 @@
+# Next.js build output / caches
+/.next/
+/out/
+*.tsbuildinfo
+
+# Test / coverage
+/coverage/
+
+# Local env
+.env
+.env.local
+.env.*.local
+
+# Node
+node_modules/
