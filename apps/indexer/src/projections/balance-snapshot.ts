@@ -195,9 +195,8 @@ function extractCoins(raw: unknown): Coin[] {
     const record = asRecord(item);
     const denom = readString(record.denom);
     const amount = readString(record.amount);
-    if (!denom || amount === undefined) continue;
+    if (!denom || amount === undefined || amount === '') continue;
     out.push({ denom, amount, raw: item });
-  }
   return out;
 }
 
