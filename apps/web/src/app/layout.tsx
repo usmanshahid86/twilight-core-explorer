@@ -38,7 +38,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       className={`${inter.variable} ${instrumentSerif.variable} ${robotoMono.variable}`}
     >
       <body className="bg-background text-text">
-        <div className="min-h-screen bg-[#050505] flex flex-col">
+        <div className="min-h-screen bg-background flex flex-col">
           <Providers>
             <Header />
             <main className="flex-1 w-full lg:w-[1432px] lg:mx-auto px-4 sm:px-6 lg:px-[156px] pt-20 lg:pt-[57px] pb-6 lg:pb-12">

@@ -25,7 +25,7 @@ Key files:
 - Shell/UI: `src/app/{layout,globals.css,providers,page,not-found,error}.tsx`, `src/components/`
   (`Header`, `Footer`, `SearchBar`, `SearchResults`, `SearchResultsPicker`, `PlaceholderPage`,
   `QueryBoundary`, `ui/*`, `states/States`, `freshness/Freshness`, `overview/*Panels`).
-- Tests: 8 `*.test.ts(x)` files (35 tests).
+- Tests: 11 `*.test.ts(x)` files (40 tests, including the §11 Codex-patch and §12 Copilot-fix additions).
 
 ## 2. Packages added
 
@@ -79,7 +79,7 @@ not every field.
 
 ## 7. Tests and validation output
 
-`apps/web` Vitest: **35 tests / 8 files / all pass** — API client envelopes + `error.code` branching +
+`apps/web` Vitest: **40 tests / 11 files / all pass** (incl. §11 Codex-patch + §12 Copilot-fix tests) — API client envelopes + `error.code` branching +
 `network_unavailable`; formatters preserve strings & int64 precision; `utwlt→TWLT` preserves raw;
 freshness states (BigInt math); `sampled:false` renders "no sample" (never 0); Overview renders mock
 data; search ambiguity → picker and single-strong → navigation; generated-client present/covered; the
@@ -89,7 +89,7 @@ Full ritual (all green):
 - `npm install` — ok (web toolchain added).
 - `npm run typecheck` (root, all workspaces) — exit 0.
 - `npm run build` (web) — compiled; **13/13 routes prerendered**; first-load JS ~87–116 kB.
-- `npm test` (root) — exit 0: `apps/api` 114 pass, `apps/web` 35 pass, indexer/proto/etc pass.
+- `npm test` (root) — exit 0: `apps/api` 114 pass, `apps/web` 40 pass, indexer/proto/etc pass.
 - `npm --prefix apps/web run openapi:check` — "up to date".
 - `npm --prefix apps/web run lint` — no warnings/errors.
 - `git diff --check` — clean. `git status` — only `package-lock.json` modified + `apps/web/` new; no
@@ -153,4 +153,20 @@ Validation (all green): `typecheck` (root, exit 0); `apps/web` build 13/13 route
 **39/39** (was 35; +4); root `test` exit 0 (api 114, indexer 258, web 39, chain-client 16);
 `openapi:check` up to date; `next lint` clean; `git diff --check` clean.
 
-**Phase 10a Web Foundation: COMPLETE (Codex PARTIAL patch applied) — ready for Codex re-review.**
+## 12. Copilot PR #17 review fixes (2026-06-27)
+
+Three issues from Copilot's PR review; scope unchanged.
+
+- **Theme-override bug (`src/app/layout.tsx`):** the page wrapper `<div>` hardcoded `bg-[#050505]`,
+  pinning the background to the auction palette and preventing the `legacy` theme from switching it.
+  Replaced with the `bg-background` token (resolves to `var(--background)`), so each `data-theme`
+  controls its own background. Added a regression guard (`src/app/theme-tokens.test.ts`) that fails if
+  any component reintroduces a hardcoded `bg-[#…]` background. Web tests: 39 → **40**.
+- **Report test-count consistency (this report):** §2 and §7 reported "35 tests / 8 files" (the
+  initial-implementation count) while §11 reported 39/39 after the Codex patch. Updated §2/§7 to the
+  current totals and added this section so the counts are internally consistent.
+
+Validation (all green): `typecheck` exit 0; `apps/web` build 13/13; `apps/web` Vitest **40/40**;
+root `test` exit 0; `openapi:check` up to date; `next lint` clean; `git diff --check` clean.
+
+**Phase 10a Web Foundation: COMPLETE (Codex PASS; Copilot PR fixes applied) — ready to merge.**
