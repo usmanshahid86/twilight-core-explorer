@@ -123,6 +123,25 @@ describe('balance snapshot projection', () => {
     assert.equal(prisma.balanceSamples.has('100:supply:-:-:'), false); // no trailing-colon junk key
   });
 
+  it('skips malformed account-balance coins (empty denom OR empty-string amount)', async () => {
+    const prisma = new MockPrisma([{ operatorAddress: 'twilight1op', payoutAddress: null }]);
+    const client = new MockClient({
+      supply: [],
+      balances: {
+        twilight1op: [
+          { denom: 'utwlt', amount: '700' }, // kept
+          { denom: '', amount: '5' }, // empty denom -> skipped
+          { denom: 'uempty', amount: '' }, // empty-string amount -> skipped (not just undefined)
+        ],
+      },
+    });
+    const result = await projectBalanceSnapshot({ prisma, client, chainId: CHAIN_ID, height: 50n });
+    assert.equal(result.accountRows, 1);
+    assert.equal(prisma.accountBalances.size, 1);
+    assert.ok(prisma.accountBalances.has('twilight1op:utwlt'));
+    assert.equal(prisma.accountBalances.has('twilight1op:uempty'), false);
+  });
+
   it('supply rerun at the same height is idempotent (upsert by sampleKey, amount refreshed)', async () => {
     const prisma = new MockPrisma([]);
     await projectBalanceSnapshot({
