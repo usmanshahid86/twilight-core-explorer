@@ -47,6 +47,9 @@ New tests: `test/rewards.test.js`, `test/balances.test.js`.
   exact (404 if none); never summed from balances; `source`/`sampledAtHeight` included; amounts strings.
 - **Account balances:** only `AccountBalanceCurrent`; subresource; `/accounts/:address` untouched;
   unsampled → `200 { sampled:false, sampledAtHeight:null, balances:[] }` (never a fabricated zero).
+  Rows are **scoped to the latest `sampledAtHeight` for the address** so every returned coin shares one
+  snapshot — a denom that dropped out of a later snapshot keeps an older height and must not leak under
+  the single reported height (PR #15 review fix).
 - **Epochs:** `RewardEpochProjection`; epochNumber-DESC keyset; invalid → `400 invalid_epoch`; missing →
   `404`; `include=raw` detail-only; not presented as claimable truth.
 - **CoreSlot rewards:** 9c-consistent slot semantics (`400 invalid_slot_id` / `404` / `200 empty`);
@@ -83,16 +86,17 @@ Negatives (live): `/supply?height=1` → 404; `/rewards/epochs/abc` → 400 `inv
 
 ## 5. Tests added & validation
 
-`apps/api` suite: **113 tests / 113 pass / 0 fail** (was 86; +27). New coverage: epochs list/detail/
+`apps/api` suite: **114 tests / 114 pass / 0 fail** (was 86; +28). New coverage: epochs list/detail/
 raw/404/invalid_epoch/int64-overflow; coreslot rewards 400/404/200-empty + observed-claim caveats;
 claims height/id composite cursor + slotId filter + history caveat + int64-overflow filter; rewards
 balances supply-excluded-by-default + `?sampleKind=supply`; params changeType filter + treasury
 ordering; supply latest/`?height`/`?denom`/404/int64-overflow/amount-string/source; account balances
-sampled-true vs unsampled (no fabricated zero). All 9a/9b/9c tests preserved; OpenAPI drift green;
+sampled-true vs unsampled (no fabricated zero); mixed-height rows collapse to the latest snapshot
+height only. All 9a/9b/9c tests preserved; OpenAPI drift green;
 no-chain guard auto-covers the new files.
 
 Ritual (all green): `db:generate`, `typecheck` (all workspaces), `build`, `npm --prefix apps/api test`
-113/113, `openapi:check` "up to date" (32 paths), `npm run lint`, `apps/indexer` 258 pass,
+114/114, `openapi:check` "up to date" (32 paths), `npm run lint`, `apps/indexer` 258 pass,
 `chain-client` 16/16, `git diff --check` clean, NUL scan clean.
 
 ## 6. Live validation output
@@ -120,8 +124,8 @@ returned the expected 400/404.
 
 ## 8. Phase 7.2 claim caveat
 
-This phase exposes **no live claimable rewards**. `RewardClaimEvent` is historical; `SlotRewardProjection.
-claimed` is an observed/sampled flag, not "claimable now." Both surfaces carry
+This phase exposes **no live claimable rewards**. `RewardClaimEvent` is historical;
+`SlotRewardProjection.claimed` is an observed/sampled flag, not "claimable now." Both surfaces carry
 `productionClaimReadiness:"gated_by_phase_7_2"` (machine-readable, in-data), so clients can detect that
 claim/economics data is not production-ready until Phase 7.2 (live claim fixture) passes. No
 `/rewards/status` endpoint and no envelope change were introduced.

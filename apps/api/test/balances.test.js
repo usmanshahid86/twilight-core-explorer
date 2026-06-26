@@ -61,6 +61,24 @@ describe('account balances', () => {
     await app.close();
   });
 
+  it('mixed-height rows -> only the latest sampledAtHeight is returned (internally consistent)', async () => {
+    // 'ustale' kept its older height because it dropped out of the height-3196 snapshot; the response
+    // must report a single height (3196) and must NOT leak the stale height-3000 coin under it.
+    const app = await build({
+      accountBalances: [
+        accountBalance('twilight1a', 'utwlt', '700', { sampledAtHeight: 3196n }),
+        accountBalance('twilight1a', 'uother', '3', { sampledAtHeight: 3196n }),
+        accountBalance('twilight1a', 'ustale', '9', { sampledAtHeight: 3000n }),
+      ],
+    });
+    const d = (await app.inject({ url: '/api/v1/accounts/twilight1a/balances' })).json().data;
+    assert.equal(d.sampled, true);
+    assert.equal(d.sampledAtHeight, '3196');
+    assert.deepEqual(d.balances.map((b) => b.denom).sort(), ['uother', 'utwlt']);
+    assert.ok(!d.balances.some((b) => b.denom === 'ustale'));
+    await app.close();
+  });
+
   it('unsampled account -> sampled:false, sampledAtHeight:null, balances:[] (no fabricated zero)', async () => {
     const app = await build({ accountBalances: [] });
     const res = await app.inject({ url: '/api/v1/accounts/twilight1unknown/balances' });

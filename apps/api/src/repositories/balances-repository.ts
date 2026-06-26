@@ -32,8 +32,19 @@ export async function getSupplyAtHeight(
 }
 
 export async function getAccountBalances(prisma: PrismaClient, address: string) {
-  return prisma.accountBalanceCurrent.findMany({
+  // AccountBalanceCurrent is upserted per (address, denom), so denoms can carry DIFFERENT
+  // sampledAtHeight values: a denom that dropped out of a later snapshot keeps its older height
+  // (nothing updates it). Returning that mixed-height set under a single reported sampledAtHeight
+  // would misstate the height — and surface a stale balance — for the lagging denom. So scope to the
+  // latest sampledAtHeight observed for this address; every returned coin then shares one snapshot.
+  const latest = await prisma.accountBalanceCurrent.findFirst({
     where: { address },
+    orderBy: { sampledAtHeight: 'desc' },
+    select: { sampledAtHeight: true },
+  });
+  if (latest === null) return [];
+  return prisma.accountBalanceCurrent.findMany({
+    where: { address, sampledAtHeight: latest.sampledAtHeight },
     orderBy: { denom: 'asc' },
     select: { denom: true, amount: true, sampledAtHeight: true },
   });

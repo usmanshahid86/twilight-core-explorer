@@ -383,9 +383,20 @@ export class MockPrisma {
     };
 
     this.accountBalanceCurrent = {
+      findFirst: async (args = {}) => {
+        const rows = this._accountBalances.filter((b) => b.address === args.where.address);
+        if (rows.length === 0) return null;
+        // only orderBy used by the repo is sampledAtHeight desc
+        return rows.reduce((m, r) => (r.sampledAtHeight > m.sampledAtHeight ? r : m), rows[0]);
+      },
       findMany: async (args = {}) =>
         this._accountBalances
-          .filter((b) => b.address === args.where.address)
+          .filter(
+            (b) =>
+              b.address === args.where.address &&
+              (args.where.sampledAtHeight === undefined ||
+                b.sampledAtHeight === args.where.sampledAtHeight),
+          )
           .sort((a, b) => (a.denom < b.denom ? -1 : a.denom > b.denom ? 1 : 0)),
     };
   }
