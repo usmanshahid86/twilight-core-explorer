@@ -42,32 +42,23 @@ export interface EventCursor {
   id: bigint;
 }
 
-/** Merge lifecycle/metadata/payout into one newest-first feed (≤ limit+1 candidates returned). */
+/** Merge lifecycle/metadata/payout into one newest-first feed (≤ limit+1 candidates returned).
+ *  The cursor predicate is pushed into EACH per-kind query (not applied post-fetch), so deep pages
+ *  can't skip older rows that share a height with more than limit+1 newer rows of the same kind. */
 export async function listSlotEvents(
   prisma: PrismaClient,
   params: { slotId: bigint; cursor: EventCursor | undefined; kind: EventKind | undefined; limit: number },
 ): Promise<EventCandidate[]> {
   const want = params.limit + 1;
   const kinds: EventKind[] = params.kind ? [params.kind] : [...EVENT_KINDS];
-  const heightFilter = params.cursor ? { height: { lte: params.cursor.height } } : {};
 
   const perTable = await Promise.all(
-    kinds.map((kind) => fetchKind(prisma, kind, params.slotId, heightFilter, want)),
+    kinds.map((kind) => fetchKind(prisma, kind, params.slotId, params.cursor, want)),
   );
 
-  let candidates = perTable.flat();
-  if (params.cursor) {
-    const c = params.cursor;
-    candidates = candidates.filter((e) => isAfter(e, c));
-  }
+  const candidates = perTable.flat();
   candidates.sort(compareDesc);
   return candidates.slice(0, want);
-}
-
-function isAfter(e: EventCandidate, c: EventCursor): boolean {
-  if (e.height !== c.height) return e.height < c.height;
-  if (e.kind !== c.kind) return kindRank(e.kind) > kindRank(c.kind);
-  return e.id < c.id;
 }
 
 function compareDesc(a: EventCandidate, b: EventCandidate): number {
@@ -76,17 +67,31 @@ function compareDesc(a: EventCandidate, b: EventCandidate): number {
   return a.id > b.id ? -1 : a.id < b.id ? 1 : 0;
 }
 
+/** WHERE fragment selecting this kind's rows strictly AFTER the cursor in the global
+ *  (height desc, kindRank, id desc) ordering. Spread into the per-kind query. */
+function cursorFilter(kind: EventKind, cursor: EventCursor | undefined) {
+  if (!cursor) return {};
+  const sameHeightClause =
+    kind === cursor.kind
+      ? [{ height: cursor.height, id: { lt: cursor.id } }]
+      : kindRank(kind) > kindRank(cursor.kind)
+        ? [{ height: cursor.height }]
+        : [];
+  return { OR: [{ height: { lt: cursor.height } }, ...sameHeightClause] };
+}
+
 async function fetchKind(
   prisma: PrismaClient,
   kind: EventKind,
   slotId: bigint,
-  heightFilter: object,
+  cursor: EventCursor | undefined,
   take: number,
 ): Promise<EventCandidate[]> {
+  const orderBy = [{ height: 'desc' as const }, { id: 'desc' as const }];
   if (kind === 'lifecycle') {
     const rows = await prisma.coreSlotLifecycleEvent.findMany({
-      where: { slotId, ...heightFilter },
-      orderBy: [{ height: 'desc' }, { id: 'desc' }],
+      where: { slotId, ...cursorFilter(kind, cursor) },
+      orderBy,
       take,
     });
     return rows.map((r) => ({
@@ -109,8 +114,8 @@ async function fetchKind(
   }
   if (kind === 'metadata') {
     const rows = await prisma.coreSlotMetadataChange.findMany({
-      where: { slotId, ...heightFilter },
-      orderBy: [{ height: 'desc' }, { id: 'desc' }],
+      where: { slotId, ...cursorFilter(kind, cursor) },
+      orderBy,
       take,
     });
     return rows.map((r) => ({
@@ -123,8 +128,8 @@ async function fetchKind(
     }));
   }
   const rows = await prisma.coreSlotPayoutChange.findMany({
-    where: { slotId, ...heightFilter },
-    orderBy: [{ height: 'desc' }, { id: 'desc' }],
+    where: { slotId, ...cursorFilter(kind, cursor) },
+    orderBy,
     take,
   });
   return rows.map((r) => ({

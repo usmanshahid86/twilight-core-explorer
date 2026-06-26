@@ -7,6 +7,19 @@ import { invalidCursor } from './errors.js';
 export const DEFAULT_LIMIT = 50;
 export const MAX_LIMIT = 100;
 
+// Postgres/Prisma BigInt is signed int64. Heights, ids, and slotIds are non-negative, so the valid
+// range is [0, 2^63-1]. Values beyond this are rejected at the parse boundary so they become a clean
+// 4xx instead of a downstream Prisma/Postgres "out of range" 500.
+export const INT64_MAX = 9223372036854775807n;
+
+/** Parse a non-negative int64 from a digit string; null if non-digit or out of range. Use for
+ *  height/slotId path & query params (the caller maps null to its own 4xx code). */
+export function parseUint64(value: string): bigint | null {
+  if (!/^\d+$/.test(value)) return null;
+  const parsed = BigInt(value);
+  return parsed > INT64_MAX ? null : parsed;
+}
+
 /** Encode a height as an opaque cursor. */
 export function encodeCursor(height: bigint): string {
   return Buffer.from(height.toString(), 'utf8').toString('base64url');
@@ -47,14 +60,11 @@ export function decodeKeyset(raw: string, expectedParts: number): string[] {
   return parts;
 }
 
-/** Parse a single decimal-bigint cursor part, or throw invalid_cursor. */
+/** Parse a single decimal-bigint cursor part (non-negative, within int64), or throw invalid_cursor. */
 export function decodeBigIntPart(value: string): bigint {
-  if (!/^\d+$/.test(value)) {
+  const parsed = parseUint64(value);
+  if (parsed === null) {
     throw invalidCursor();
   }
-  try {
-    return BigInt(value);
-  } catch {
-    throw invalidCursor();
-  }
+  return parsed;
 }

@@ -181,9 +181,17 @@ export class MockPrisma {
 
     const eventTable = (source) => ({
       findMany: async (args = {}) => {
-        let r = source.filter((e) => e.slotId === args.where.slotId);
-        const lte = args.where?.height?.lte;
-        if (lte !== undefined) r = r.filter((e) => e.height <= lte);
+        const w = args.where ?? {};
+        let r = source.filter((e) => e.slotId === w.slotId);
+        if (w.OR) {
+          r = r.filter((e) =>
+            w.OR.some((c) => {
+              if (c.height && typeof c.height === 'object') return e.height < c.height.lt; // {height:{lt}}
+              if (c.id?.lt !== undefined) return e.height === c.height && e.id < c.id.lt; // {height:H,id:{lt}}
+              return e.height === c.height; // {height:H} (whole height for a later-ranked kind)
+            }),
+          );
+        }
         r.sort((a, b) => (a.height !== b.height ? descBig(a.height, b.height) : descBig(a.id, b.id)));
         return args.take ? r.slice(0, args.take) : r;
       },

@@ -36,6 +36,7 @@ import {
   decodeKeyset,
   encodeCursor,
   encodeKeyset,
+  parseUint64,
 } from '../lib/pagination.js';
 import { badRequest, invalidCursor, notFound } from '../lib/errors.js';
 import {
@@ -53,10 +54,11 @@ import {
 } from '../repositories/coreslot-liveness-repository.js';
 
 function parseSlotId(raw: string): bigint {
-  if (!/^\d+$/.test(raw)) {
+  const slotId = parseUint64(raw);
+  if (slotId === null) {
     throw badRequest('invalid_slot_id', 'invalid slot id');
   }
-  return BigInt(raw);
+  return slotId;
 }
 
 export async function coreslotsRoutes(fastify: FastifyInstance): Promise<void> {

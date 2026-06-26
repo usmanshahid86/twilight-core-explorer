@@ -50,10 +50,14 @@ describe('network validator-set', () => {
     await app.close();
   });
 
-  it('400 when height is missing or non-numeric', async () => {
+  it('400 when height is missing, non-numeric, or out of int64 range', async () => {
     const app = await build({});
     assert.equal((await app.inject({ url: '/api/v1/network/validator-set' })).statusCode, 400);
     assert.equal((await app.inject({ url: '/api/v1/network/validator-set?height=abc' })).statusCode, 400);
+    assert.equal(
+      (await app.inject({ url: '/api/v1/network/validator-set?height=9223372036854775808' })).statusCode,
+      400,
+    );
     await app.close();
   });
 });

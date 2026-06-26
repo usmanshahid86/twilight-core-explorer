@@ -10,7 +10,8 @@ import {
   toValidatorSetMember,
 } from '../dto/network.js';
 import { ErrorResponse } from '../dto/common.js';
-import { notFound } from '../lib/errors.js';
+import { invalidQuery, notFound } from '../lib/errors.js';
+import { parseUint64 } from '../lib/pagination.js';
 import {
   getNetworkRisk,
   getProposerLeaderboard,
@@ -46,7 +47,11 @@ export async function networkRoutes(fastify: FastifyInstance): Promise<void> {
       },
     },
     async (request) => {
-      const rows = await getValidatorSetAtHeight(app.prisma, BigInt(request.query.height));
+      const height = parseUint64(request.query.height);
+      if (height === null) {
+        throw invalidQuery('height out of range');
+      }
+      const rows = await getValidatorSetAtHeight(app.prisma, height);
       return { data: rows.map(toValidatorSetMember) };
     },
   );

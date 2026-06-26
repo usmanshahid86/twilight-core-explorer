@@ -70,6 +70,14 @@ describe('coreslots list/detail', () => {
     assert.equal(missing.statusCode, 404);
     await app.close();
   });
+
+  it('rejects an out-of-int64-range slotId with 400 invalid_slot_id', async () => {
+    const app = await build({ coreSlots: [] });
+    const res = await app.inject({ url: '/api/v1/coreslots/9223372036854775808' }); // int64 max + 1
+    assert.equal(res.statusCode, 400);
+    assert.equal(res.json().error.code, 'invalid_slot_id');
+    await app.close();
+  });
 });
 
 describe('coreslot events', () => {
@@ -101,6 +109,24 @@ describe('coreslot events', () => {
     });
     const res = await app.inject({ url: '/api/v1/coreslots/1/events?kind=payout' });
     assert.deepEqual(res.json().data.map((e) => e.kind), ['payout']);
+    await app.close();
+  });
+
+  it('does not skip rows when one kind has more than limit+1 events at the same height', async () => {
+    const app = await build({
+      coreSlots: [coreSlot(1)],
+      lifecycleEvents: [1, 2, 3, 4, 5].map((id) => lifecycleEvent(1, 10, id)), // 5 rows, all height 10
+    });
+    const seen = [];
+    let cursor;
+    for (let i = 0; i < 6; i++) {
+      const url = `/api/v1/coreslots/1/events?limit=2${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`;
+      const res = await app.inject({ url });
+      seen.push(...res.json().data.map((e) => e.eventId));
+      cursor = res.json().page.nextCursor;
+      if (!cursor) break;
+    }
+    assert.deepEqual(seen, ['5', '4', '3', '2', '1']); // every row, newest-first, none skipped
     await app.close();
   });
 

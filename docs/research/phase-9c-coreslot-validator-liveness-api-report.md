@@ -53,7 +53,9 @@ Tests: new `test/coreslots.test.js`, `test/network.test.js`; extended `test/sear
 - **Leaderboard (lock 5):** attributed-only; no meta envelope.
 - **Slot existence (lock 6):** non-digit slotId → `400 invalid_slot_id`; well-formed-but-missing slot
   → `404`; existing slot with no sub-resource rows → `200` empty.
-- **Events cursor (lock 7):** stable composite `[height, kind, eventId]` (over-fetch + in-memory merge).
+- **Events cursor (lock 7):** stable composite `[height, kind, eventId]`. The cursor predicate is
+  pushed into each per-kind query (not applied post-fetch), then the per-kind results are k-way
+  merged — so deep pages cannot skip older rows that share a height with many newer same-kind rows.
 - **Preserved (lock 8):** DB-only, no outbound network, no chain-client/config, no projection
   recompute, no raw `BlockSignature`/`OperatorSigningEvidence`/`CoreSlotLivenessEvidence`, query
   defaults applied in handler code, OpenAPI drift test, no-chain guard, stable envelopes, BigInt as
@@ -97,7 +99,7 @@ lifetime = 9871 bps / 41 missed   recent_100 = 10000 / 0   recent_500 = 10000 / 
 
 ## 5. Tests added & validation
 
-`apps/api` suite: **81 tests / 81 pass / 0 fail** (was 56 in 9b; +25). New coverage: coreslots
+`apps/api` suite: **83 tests / 83 pass / 0 fail** (was 56 in 9b; +27). New coverage: coreslots
 list/keyset/filters; detail + health quick-fields + `include=raw`; `invalid_slot_id` 400 + missing 404;
 events 3-table merge ordering + `kind` filter + composite-cursor round-trip + slot-missing 404 +
 empty-200; windows/key-rotations/proposed-blocks ordering; liveness window kinds + filter + 404/empty;
@@ -105,12 +107,24 @@ health verbatim status + 404; proposer leaderboard groupBy + attributed-only; va
 (`effectiveTo` null vs `> height` vs `== height` exclusion) + missing/invalid height 400; network-risk
 verbatim + 404; search digit→block+coreslot, 40-hex→consensus ref, operator bech32→account+coreslot.
 
-Hardening added during review: the tx composite cursor rejects an `index > Number.MAX_SAFE_INTEGER`
-(`invalid_cursor`, guarding `Number()` precision loss), and search rejects a whitespace-only `q`
-(`invalid_query`) — each with a regression test.
+Hardening added during review (carried from the 9b review): the tx composite cursor rejects an
+`index > Number.MAX_SAFE_INTEGER` (`invalid_cursor`), and search rejects a whitespace-only `q`
+(`invalid_query`).
+
+Phase 9c Codex review fixes:
+- **Blocker — CoreSlot events deep-pagination skip.** `listSlotEvents` previously fetched `limit+1`
+  per kind by `height <= cursor.height` then filtered in memory; if a kind had more than `limit+1`
+  rows at one height, deep pages dropped older same-height rows. Fixed by pushing the cursor
+  predicate into each per-kind query (`height < H` OR same-height/kind id-tiebreak OR whole-height for
+  a later-ranked kind). Regression test: 5 same-height same-kind events paginate at `limit=2` with no
+  skips. Live-verified the `OR` query runs against Postgres.
+- **Numeric int64 hardening.** Added `parseUint64` + an `INT64_MAX` bound so an out-of-range digit
+  string is a clean `400` (`invalid_slot_id`/`invalid_height`/`invalid_query`/`invalid_cursor`) instead
+  of a Postgres "out of range" 500. Applied to all cursor parts (`decodeBigIntPart`) and every digit
+  path/query param across blocks, txs, decode-failures, coreslots, and network. Live-verified 400s.
 
 Ritual (all green): `db:generate`, `typecheck` (all workspaces), `build`, `npm --prefix apps/api test`
-81/81, `openapi:check` "up to date" (23 paths), `npm run lint`, `indexer` 250 pass, `chain-client`
+83/83, `openapi:check` "up to date" (23 paths), `npm run lint`, `indexer` 250 pass, `chain-client`
 16/16, `git diff --check` clean. NUL scan over `apps/api` clean. No-chain guard covers the new files.
 
 ## 6. Known limitations & data observations
