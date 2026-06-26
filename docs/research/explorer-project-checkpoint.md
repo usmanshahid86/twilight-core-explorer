@@ -18,12 +18,16 @@ snapshot from those summaries (slots 1-3 healthy, slot 4 degraded, network = war
 **live behavioral validation (2026-06-26)** then drove every CoreSlot tx category through the chain
 with real `twilightd` transactions and verified the indexer responded — closing the last live-coverage
 gaps. A **proposer attribution projection** (`proposer_attribution_v1`) was also added, completing the
-validator surface (blocks-proposed per operator). **The entire CoreSlot + liveness + proposer backend
-stack (6a/6b/7/8a–8c-3) is complete and live-proven; the next phase is the API (Phase 9).**
+validator surface (blocks-proposed per operator). The entire CoreSlot + liveness + proposer backend
+stack (6a/6b/7/8a–8c-3) is complete and live-proven. On top of it the **public API is partly built: Phase 9a (foundation:
+health/status/blocks), 9b (generic explorer: txs/accounts/search/diagnostics), and 9c (CoreSlot/
+validator/liveness/health/network) are complete, tested, and live-validated** (a strictly DB-only
+Fastify + TypeBox `apps/api`; OpenAPI 23 paths). **The next phase is 9d (rewards API)**, preceded by
+the small pre-9d indexer snapshot phase. See §6 for the 9a–9d breakdown.
 
 This document summarizes what has already been decided and built, what is still only
 designed, and the recommended sequence from here. It is intended to keep implementation
-aligned for Phase 9 (API) and later web work.
+aligned for the remaining API (9d), web (10/11), and hardening (13) work.
 
 ## 1. Product North Star
 
@@ -843,23 +847,67 @@ signatures plus the temporal consensus map. They do not need to block each other
 liveness is a primary operator-facing gap, it may be pulled level with or ahead of rewards
 once the temporal map is ready.
 
-### Phase 9: API Foundation
+### Phase 9: Public API (split into 9a–9d)
 
-Goal:
+Goal: expose indexed data through a stable, strictly DB-only REST/OpenAPI API
+(Fastify + TypeScript + Prisma + TypeBox). The original single "Phase 9" block was split
+into four sub-phases as the DB-only-vs-sampled and generic-vs-Twilight-specific boundaries
+became clear. `apps/api` is its own workspace; no chain-client/config, no outbound network,
+no projection recompute; `{ data }` / `{ data, page }` / `{ error }` envelopes; BigInt/heights
+as strings; OpenAPI generated to `docs/reference/openapi.json` + drift test; static no-chain guard.
 
-- Expose indexed data through a stable explorer API.
+#### Phase 9a: Foundation + status + blocks (completed)
 
-Scope:
+Report: `docs/research/phase-9a-api-foundation-report.md` (contract:
+`phase-9a-api-contract-and-plan.md`; design: `phase-9-api-foundation-design.md`).
 
-- health/live/ready.
-- indexer status and lag.
-- blocks and block detail.
-- txs and tx detail.
-- accounts and balances.
-- search.
-- CoreSlot projections.
-- rewards projections.
-- operator liveness/economics.
+- `GET /health/live`, `/health/ready` (DB connectivity + clean Prisma migration ledger).
+- `GET /api/v1/status` — indexed height, last-observed chain tip, lag, freshness, projection
+  cursors, unresolved failure counts — from `IndexerCursor` (no indexer change).
+- `GET /api/v1/blocks`, `/blocks/:height` — keyset pagination (N+1 lookahead), attributed
+  proposer read only from materialized `BlockProposerAttribution`, `?include=raw` detail-only.
+- Cross-cutting: API config (`API_DATABASE_URL` + read-only role), `createPrismaClient(url?)`
+  extended to honor it, error/envelope/serializer/pagination, CORS. `db:generate/typecheck/build/
+  test/lint` green. 22→25 apps/api tests.
+
+#### Phase 9b: Generic explorer (completed)
+
+Report: `docs/research/phase-9b-generic-explorer-api-report.md`.
+
+- `GET /api/v1/txs`, `/txs/:hash` (composite keyset; detail joins materialized messages/events +
+  block time; raw detail-only).
+- `GET /api/v1/accounts`, `/accounts/:address` — identity/activity only, **no balances**.
+- `GET /api/v1/search?q=` — references only: block height, block hash, tx hash, account address.
+- `GET /api/v1/decode-failures` (list-only, no raw payload), `GET /api/v1/projections`
+  (cursor + unresolved-failure breakdown).
+- Review fixes (Copilot): whitespace-only `q` → 400; tx cursor `index > MAX_SAFE_INTEGER` → 400.
+
+#### Phase 9c: CoreSlot / validator / liveness / health (completed)
+
+Report: `docs/research/phase-9c-coreslot-validator-liveness-api-report.md`. OpenAPI now 23 paths.
+
+- `GET /api/v1/coreslots`, `/coreslots/:slotId` (+ quick health; `?include=raw`).
+- `GET /coreslots/:slotId/events` (lifecycle+metadata+payout; composite cursor
+  `[height,kind,eventId]`, predicate pushed per-kind), `/windows`, `/key-rotations`,
+  `/proposed-blocks`, `/liveness`, `/health`.
+- `GET /api/v1/network/proposers` (attributed leaderboard, slotId tie-break),
+  `/network/validator-set?height=` (half-open active windows), `/network/liveness-risk`.
+- Search extended with CoreSlot references (slotId / 40-hex consensus / operator+payout role).
+- Liveness surface = summaries/health/network-risk only; never raw evidence; status strings verbatim.
+- Hardening: `parseUint64` + `INT64_MAX` (+ length cap) across all cursor/digit inputs → out-of-range
+  is a clean 400, not a Postgres 500. apps/api 86 tests.
+
+#### Phase 9d: Rewards API (NOT yet implemented)
+
+- `GET /api/v1/rewards/epochs`, `/epochs/:n`, `/coreslots/:slotId/rewards`, `/rewards/claims`
+  (indexed claim **history only** until Phase 7.2 passes), `/rewards/balances` (sampled).
+- `GET /api/v1/supply` and account balances depend on the **pre-9d snapshot** indexer phase below.
+- `EpochReward` is aggregate context, NOT current claim truth; sampled rows carry `source:"sampled"`.
+
+Deferred from 9a–9c (candidate follow-ups): `twilightvalcons` bech32 search (needs a pure bech32
+dep), `/network/params` (network-scoped `CoreSlotParameterChange`), and the API hardening punted to
+Phase 13 (rate limiting, security headers, cache-control/ETag, a real linter — `npm run lint` is
+currently a no-op).
 
 ### Pre-9d (indexer): Balance & Supply Observed Snapshots
 
@@ -969,13 +1017,15 @@ not be forgotten.
 
 The entire backend/projection stack is complete: CoreSlot semantic (6a), key rotation + temporal map
 (6b), rewards (7/7.1), and the full liveness stack (8a → 8b → 8c-0b/0c → 8c-1/2/3), all live-proven.
+The public API is partly built: **9a (foundation), 9b (generic explorer), and 9c (CoreSlot/validator/
+liveness/health) are complete**; only **9d (rewards API)** remains of Phase 9.
 
 Remaining:
 
-- MVP usable explorer: ~3 phases — **API foundation (9)**, web foundation (10), Twilight-specific
-  pages (11).
-- Production-grade operator explorer: ~5 phases — the above + operator education/onboarding (12) and
-  deployment/hardening (13).
+- MVP usable explorer: **9d (rewards API)** + the small **pre-9d** indexer snapshot phase, then web
+  foundation (10) and Twilight-specific pages (11).
+- Production-grade operator explorer: the above + operator education/onboarding (12) and
+  deployment/hardening (13, which also absorbs the API hardening deferred from 9a–9c).
 
 Open evidence tasks (not phase blockers): Phase 7.2 live rewards-claim fixture; and the optional
 broader liveness drills (multi-node halt → network `critical`; rotation-mid-outage).
@@ -1052,11 +1102,13 @@ Dependencies that must not be blurred:
 
 Recommended next implementation step:
 
-**Phase 9: API foundation** — the full liveness backend stack (8a → 8b → 8c-0b/0c → 8c-1 → 8c-2 →
-8c-3) is complete and live-validated, so the next step is exposing indexed/derived data through a
-stable explorer API (health/live/ready, indexer status, blocks/txs/accounts/search, CoreSlot +
-rewards projections, operator liveness/health/economics). Web (Phase 10) and Twilight-specific pages
-(Phase 11) follow.
+**Phase 9d: Rewards API** — Phase 9a (foundation), 9b (generic explorer), and 9c (CoreSlot/validator/
+liveness/health) are complete and live-validated, exposing health/status/blocks, txs/accounts/search/
+diagnostics, and the full CoreSlot/network surface. The remaining API slice is rewards: epochs, slot
+rewards, claim history (history-only until 7.2), and sampled balances. Two prerequisites/notes:
+the small **pre-9d** indexer phase (`AccountBalance` + `SupplySnapshot` observed samples) gates the
+API's balance/`/supply` surfaces, and **Phase 7.2** (live claim fixture) gates presenting claims as
+production-ready. After 9d, Web (Phase 10) and Twilight-specific pages (Phase 11) follow.
 
 The operator-liveness data dependency that gated the operator UX milestone is now fully satisfied:
 `CoreSlotHealthSnapshot` + `NetworkLivenessRiskSnapshot` give per-operator health and network
