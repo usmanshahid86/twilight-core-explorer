@@ -861,6 +861,27 @@ Scope:
 - rewards projections.
 - operator liveness/economics.
 
+### Pre-9d (indexer): Balance & Supply Observed Snapshots
+
+Small indexer phase that gates the API's account-balance and `/supply` surfaces. These are **observed
+samples**, not rebuildable projections — a balance is `x/bank` current state and cannot be
+reconstructed from indexed events (you would have to replay every transfer/fee/reward/genesis
+allocation). So the indexer must sample them via a chain read, height-tagged, exactly like the
+existing `RewardsBalanceSample`.
+
+Scope:
+
+- `AccountBalance` observed sample (per address, `sampledAtHeight`), refreshed on a schedule / on
+  account activity / on demand.
+- `SupplySnapshot` observed sample (total `utwlt` supply, `sampledAtHeight`), pairs with rewards
+  cumulative-emitted context.
+- Both are observed-sample tables (`source: "sampled"`), never presented as rebuildable truth.
+- The DB-only API (Phase 9) then exposes them marked sampled; it must NOT fetch balances live.
+
+Sequencing: does not block Phase 9a/9b/9c. Required before the API exposes account balances or
+`/supply` (9d). If truly live (not sampled) balances are ever wanted, that is a deliberate separate
+chain-reading service, explicitly outside the read-only API.
+
 ### Phase 10: Web Foundation and Generic Explorer
 
 Goal:
@@ -958,6 +979,9 @@ Remaining:
 
 Open evidence tasks (not phase blockers): Phase 7.2 live rewards-claim fixture; and the optional
 broader liveness drills (multi-node halt → network `critical`; rotation-mid-outage).
+
+Small pre-9d indexer phase: `AccountBalance` + `SupplySnapshot` observed samples — required before the
+API exposes account balances or `/supply` (does not block 9a/9b/9c). See the pre-9d section in §6.
 
 Dependencies that must not be blurred:
 
