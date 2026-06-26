@@ -14,11 +14,12 @@ set-difference); 8c-1 materializes the per-height expected-signer / missed evide
 live-validated on a clean 4-operator fixture (1440 rows, 41 slot-4 misses = 39 absent + 2 nil);
 8c-2 aggregates that evidence into per-(slot, window) liveness summaries (slot 4 lifetime uptime
 8861 bps, recent_100 5900 bps; slots 1-3 = 10000); 8c-3 derives health labels + a network halt-risk
-snapshot from those summaries (slots 1-3 healthy, slot 4 degraded, network = warning). Finally, a
-**live behavioral validation (2026-06-26)** drove every CoreSlot tx category through the chain with
-real `twilightd` transactions and verified the indexer responded — closing the last live-coverage
-gaps. **The entire CoreSlot + liveness backend stack (6a/6b/7/8a–8c-3) is complete and
-live-proven; the next phase is the API (Phase 9).**
+snapshot from those summaries (slots 1-3 healthy, slot 4 degraded, network = warning). A
+**live behavioral validation (2026-06-26)** then drove every CoreSlot tx category through the chain
+with real `twilightd` transactions and verified the indexer responded — closing the last live-coverage
+gaps. A **proposer attribution projection** (`proposer_attribution_v1`) was also added, completing the
+validator surface (blocks-proposed per operator). **The entire CoreSlot + liveness + proposer backend
+stack (6a/6b/7/8a–8c-3) is complete and live-proven; the next phase is the API (Phase 9).**
 
 This document summarizes what has already been decided and built, what is still only
 designed, and the recommended sequence from here. It is intended to keep implementation
@@ -516,7 +517,9 @@ Block proposer and commit signatures have different height semantics:
 
 Liveness projection must attribute signatures from block `N` to height `N-1`, but proposer
 enrichment must not shift the proposer address. The proposer in block `N` remains the
-proposer for block `N`.
+proposer for block `N`. **Implemented** in `proposer_attribution_v1`: commit-signature attribution
+(8b) uses `committedBlockHeight` (≈ N-1), while proposer attribution joins at the block's own height
+N — the two height axes are kept distinct.
 
 ### UX Gaps
 
@@ -813,6 +816,24 @@ suspend→reactivate, key rotation (with node restart), and add+remove operator.
 - Zero unresolved `ProjectionFailure` across the entire run. Operational gotchas recorded
   (`query tx` unreliable → verify via indexer; `update-params` needs numeric int64 fields; shared
   advisory lock needs a gap between projection runs; swap only `priv_validator_key.json` on rotation).
+
+### Proposer Attribution (completed)
+
+Status: **PASS.** Implemented `proposer_attribution_v1` / `BlockProposerAttribution` — one row per
+block height attributing `Block.proposerAddress` to historical CoreSlot ownership via the temporal
+map. Completes the validator surface (the proposer side, complementing the commit-signature side).
+
+- the proposer of block N belongs to height **N** (no `-1` shift, unlike commit signatures) — the
+  join uses `findConsensusWindowAtHeight(proposerAddress, N)`.
+- `Block.proposerAddress` is CometBFT **uppercase** hex; window `consensusAddress` is lowercase — the
+  projector lowercases before the join (raw uppercase preserved in `rawProposerAddress`).
+- statuses mirror 8b: `attributed`, `unmapped_validator`, `no_consensus_window`, `missing_proposer`,
+  `invalid_proposer_address`. Rebuildable, idempotent, scoped reset, deterministic `ProjectionFailure`.
+- consumes `Block` + `CoreSlotConsensusWindow` only; no live reads. Standalone CLI, run after the
+  temporal map.
+- live-validated over the fixture: **3196/3196 attributed**, 0 unmapped/no-window/failures;
+  blocks-proposed per operator (slot 3's count continuous across its key rotation — both consensus
+  addresses attribute to the same slotId).
 
 ### Sequencing note: rewards and liveness
 

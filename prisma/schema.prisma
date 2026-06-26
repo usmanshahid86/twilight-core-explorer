@@ -190,6 +190,28 @@ model OperatorSigningEvidence {
   @@index([attributionStatus])
 }
 
+// Per-block proposer attribution to historical CoreSlot ownership (proposer of block N belongs to
+// height N). Derived from Block.proposerAddress + CoreSlotConsensusWindow; rebuildable.
+model BlockProposerAttribution {
+  id                 BigInt   @id @default(autoincrement())
+  attributionKey     String   @unique
+  height             BigInt
+  proposerAddress    String?
+  rawProposerAddress String?
+  slotId             BigInt?
+  operatorAddress    String?
+  consensusWindowId  BigInt?
+  attributionStatus  String
+  createdAt          DateTime @default(now())
+  updatedAtDb        DateTime @updatedAt
+
+  @@index([height])
+  @@index([proposerAddress])
+  @@index([slotId])
+  @@index([operatorAddress])
+  @@index([attributionStatus])
+}
+
 // Phase 8c-1: per-(committed height, expected active CoreSlot) liveness evidence. Stores BOTH
 // signed and missed rows. Misses are computed by set-difference (expected active CoreSlots minus
 // flag-2 signed observations); an absent operator is anonymous in the commit, so misses are never
