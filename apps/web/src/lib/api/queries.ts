@@ -5,6 +5,7 @@ import { apiGet, apiGetPath, type JsonOf } from './client';
 import { nextPageParam } from './pagination';
 import { resolveOperator } from '../operator-resolver';
 import { displayName, parseOperatorMetadata } from '../operator-metadata';
+import { mapWithConcurrency } from '../concurrency';
 
 const STATUS_REFETCH_MS = 15_000;
 const LIST_REFETCH_MS = 30_000;
@@ -339,6 +340,7 @@ export function useCoreSlotRewards(slotId: string) {
 // ---------- Phase 11b+c: operator resolution + bounded fan-outs ----------
 
 const FANOUT_CAP = 100;
+const FANOUT_CONCURRENCY = 12;
 
 /** Resolve an address -> CoreSlot(s) via the operator/consensus/payout fallback (pure resolver). */
 export function useOperatorResolution(address: string) {
@@ -358,16 +360,14 @@ export function useCoreSlotHealthFanout(slotIds: string[]) {
   return useQuery({
     queryKey: ['health-fanout', ids],
     queryFn: async (): Promise<SlotHealthResult[]> =>
-      Promise.all(
-        ids.map(async (slotId): Promise<SlotHealthResult> => {
-          try {
-            const r = await apiGetPath('/api/v1/coreslots/{slotId}/health', { slotId });
-            return { slotId, health: r.data };
-          } catch {
-            return { slotId, health: null };
-          }
-        }),
-      ),
+      mapWithConcurrency(ids, FANOUT_CONCURRENCY, async (slotId): Promise<SlotHealthResult> => {
+        try {
+          const r = await apiGetPath('/api/v1/coreslots/{slotId}/health', { slotId });
+          return { slotId, health: r.data };
+        } catch {
+          return { slotId, health: null };
+        }
+      }),
     enabled: ids.length > 0,
   });
 }
@@ -388,8 +388,10 @@ export function useOperatorDirectory(slotIds: string[]) {
   return useQuery({
     queryKey: ['operator-directory', ids],
     queryFn: async (): Promise<Record<string, OperatorDirectoryEntry>> => {
-      const entries = await Promise.all(
-        ids.map(async (slotId): Promise<OperatorDirectoryEntry | null> => {
+      const entries = await mapWithConcurrency(
+        ids,
+        FANOUT_CONCURRENCY,
+        async (slotId): Promise<OperatorDirectoryEntry | null> => {
           try {
             const r = await apiGetPath('/api/v1/coreslots/{slotId}', { slotId });
             const meta = parseOperatorMetadata(r.data.metadata);
@@ -403,7 +405,7 @@ export function useOperatorDirectory(slotIds: string[]) {
           } catch {
             return null;
           }
-        }),
+        },
       );
       const map: Record<string, OperatorDirectoryEntry> = {};
       for (const entry of entries) {

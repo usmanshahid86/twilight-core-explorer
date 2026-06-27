@@ -42,7 +42,7 @@ export function ProposerLeaderboard() {
                   <Tr key={p.slotId}>
                     <Td mono>{i + 1}</Td>
                     <Td>
-                      <OperatorLink operatorAddress={p.operatorAddress} name={directory.data?.[p.slotId]?.displayName} />
+                      <OperatorLink operatorAddress={p.operatorAddress} name={directory.data?.[p.slotId]?.moniker} />
                     </Td>
                     <Td mono>
                       <Link href={`/coreslots/${encodeURIComponent(p.slotId)}`} className="text-primary hover:text-primary-light">

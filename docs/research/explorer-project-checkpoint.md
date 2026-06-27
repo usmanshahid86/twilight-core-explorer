@@ -27,7 +27,9 @@ the **9d-0** indexer balance/supply snapshots. On top of that the **web explorer
 10-0 (plan), 10a (foundation — Next.js app-router + Tailwind `apps/web`, typed OpenAPI client, auction
 theme, Overview/home, search, freshness model, standard states), and 10b (generic pages — blocks,
 transactions, accounts + sampled balances) are complete, tested (apps/web 62 tests, 13 routes), and
-Codex-passed**. **The next phase is 11 (Twilight-specific pages + the operator page)**; Phase 7.2
+Codex-passed**, and **Phase 11 (Twilight surfaces — CoreSlot list/detail, liveness, network, and the
+first-class operator page; 11a + 11b+c) is complete and Codex-passed** (apps/web 94 tests;
+operator-forward, CoreSlot-backed). **The next phase is 12 (rewards economics)**; Phase 7.2
 (live rewards-claim fixture) remains an open evidence task. See §6 for the phase breakdown.
 
 This document summarizes what has already been decided and built, what is still only
@@ -967,25 +969,25 @@ fields rendered (no invented fields); reward/claim caveats kept visible; backgro
 tokens (no hardcoded hex). No old zkOS/dark-pool/BTC bridge IA carried forward. apps/web: 62 tests,
 13 routes; Codex PASS on 10a and 10b.
 
-### Phase 11: Twilight-Specific Pages
+### Phase 11: Twilight-Specific Pages + Operator (completed)
 
-Goal:
+Reports: `phase-11-twilight-surfaces-plan.md`, `phase-11a-coreslot-surfaces-report.md`,
+`phase-11bc-network-liveness-operator-report.md`. Delivered the **operator-forward**, CoreSlot-backed
+Twilight surfaces over the 9c/9d API:
 
-- Build CoreSlot, rewards, and operator-facing pages.
+- **11a — CoreSlot list/detail:** `/coreslots`, `/coreslots/[slotId]` with reusable
+  `slotId`-parameterized sections (health, liveness, proposed-blocks, authority history
+  [events/key-rotations/windows], a caveated rewards subsection, raw).
+- **11b+c — Liveness / Network / Operator:** `/liveness` (halt-risk + a bounded, non-blocking per-slot
+  health fan-out), `/network` (validator-set-at-height + proposer leaderboard), and the first-class
+  **`/operator/[address]`** — resolved via `/coreslots?operatorAddress=` (operator→consensus→payout
+  fallback; one operator = one CoreSlot, chain rule), reusing the CoreSlot detail. Operator-forward
+  identity: `displayName` (moniker ?? address) + an **extension-ready** `parseOperatorMetadata` adapter;
+  block proposers / validator-set / leaderboard all link to the operator.
 
-Scope:
-
-- CoreSlot list/detail.
-- lifecycle timeline.
-- key rotation/payout/metadata history.
-- rewards overview.
-- epoch detail.
-- claims.
-- operator self-service page.
-- operator economics.
-- authority-action audit log.
-- network liveness view.
-- tokenomics/halving view.
+apps/web: 94 tests; Codex PASS on 11a and 11b+c. **Deferred to Phase 12:** rewards economics (epoch
+detail, claims, balances, treasury/params) and tokenomics/halving — Phase 11 ships only a caveated
+per-slot rewards subsection.
 
 ### Phase 12: Operator Education and Onboarding
 
@@ -1041,8 +1043,8 @@ snapshots are done — so the entire backend + API surface is built and live-val
 
 Remaining:
 
-- MVP usable explorer: web foundation + generic pages (10) are **done**; next is Twilight-specific
-  pages (11) then rewards/operator economics (12).
+- MVP usable explorer: web foundation + generic pages (10) and the Twilight surfaces + operator page
+  (11) are **done**; next is rewards economics (12) then hardening (13).
 - Production-grade operator explorer: the above + operator education/onboarding (12) and
   deployment/hardening (13, which also absorbs the API hardening deferred from 9a–9c — rate limiting,
   security headers, cache-control/ETag, a real linter).
@@ -1123,15 +1125,13 @@ Dependencies that must not be blurred:
 
 Recommended next implementation step:
 
-**Phase 11: Twilight-Specific Pages + Operator page** — the backend/API (9a–9d, 9d-0) and the web
-foundation + generic explorer (Phase 10-0/10a/10b: `apps/web`, 62 tests, 13 routes, Codex PASS) are
-complete. The next implementation step is the Twilight-differentiating surfaces over the 9c/9d API:
-CoreSlot list/detail (lifecycle/authority/liveness/health/proposed-blocks/rewards), validator-set-at-
-height, proposer leaderboard, network liveness-risk, and the first-class **Operator page** (liveness +
-economics + authority history, reached via search). Phase 12 (rewards economics) and Phase 13
-(hardening) follow. **Phase 7.2** (live rewards-claim fixture) remains an open evidence task — not a
-phase blocker, but required before claim/operator-economics surfaces are presented as production-ready
-(9d/12 gate this with the `productionClaimReadiness:"gated_by_phase_7_2"` in-data caveat).
+**Phase 12: Rewards Economics** — the backend/API (9a–9d, 9d-0), the web foundation + generic explorer
+(Phase 10), and the Twilight surfaces + operator page (Phase 11: CoreSlot/liveness/network/operator;
+`apps/web` 94 tests, Codex PASS) are all complete. The next implementation step is the rewards-economics
+pages over `/rewards/*` + `/supply`: epochs + epoch detail, slot rewards, claims history, rewards
+balances, treasury/params history, and supply detail — each presented with the
+`productionClaimReadiness:"gated_by_phase_7_2"` claim caveat until **Phase 7.2** (live rewards-claim
+fixture) lands. Phase 13 (hardening) follows. Phase 7.2 is an open evidence task, not a phase blocker.
 
 The operator-liveness data dependency that gated the operator UX milestone is now fully satisfied:
 `CoreSlotHealthSnapshot` + `NetworkLivenessRiskSnapshot` give per-operator health and network

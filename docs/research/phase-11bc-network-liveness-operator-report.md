@@ -78,7 +78,7 @@ slotId/heights/amounts/addresses/cursors stay **strings (no `Number()`)**; bps v
 opaque cursors; `error.code` branching; only contract-exposed fields; `metadata` parsed defensively (no
 invented fields); the capped note states only `nextCursor`-backed truth (no fabricated "of N").
 
-## 9. Tests added (24; web 67 → 91)
+## 9. Tests added (27; web 67 → 94)
 
 `parseOperatorMetadata`/`displayName` (moniker present/absent/null/scalar/array; extras preserved);
 `resolveOperator` (operator/consensus/payout match, **stops after first non-empty**, zero=empty≠error,
@@ -93,7 +93,7 @@ per-slot failure**).
 - `npm run typecheck` (root) — exit 0
 - `npm --prefix apps/web run build` — ✓ 14 routes (`/liveness`,`/network` static; `/operator/[address]`
   dynamic)
-- `npm test` (root) — exit 0: `apps/api` 114, `apps/web` **91** (25 files)
+- `npm test` (root) — exit 0: `apps/api` 114, `apps/web` **94** (26 files)
 - `openapi:check` — up to date (no API change) · `lint` — clean · `git diff --check` — clean; no
   `.next`/`dist` tracked
 
@@ -113,4 +113,23 @@ Operator-forward and extension-ready; the resolver + metadata adapter are pure a
 invariants honored (string-safe, opaque cursors, `error.code`, contract-only fields, non-blocking
 enrichment, no invented totals, `/liveness` 404 soft). Do not merge yet.
 
-**Phase 11b+c Network/Liveness/Operator Surfaces: COMPLETE — ready for Codex review.**
+## 13. Codex PASS + Copilot PR #23 fixes (2026-06-27)
+
+Codex returned **PASS**. Copilot flagged four issues; all fixed (scope unchanged):
+
+- **Fan-out concurrency (1):** `useCoreSlotHealthFanout`/`useOperatorDirectory` used `Promise.all` over up
+  to 100 slots → up to 100 concurrent browser requests. Added a bounded worker-pool helper
+  (`lib/concurrency.ts` `mapWithConcurrency`, concurrency 12, order-preserving) and routed both fan-outs
+  through it — same cap + per-slot failure isolation, no connection saturation. Unit-tested (order,
+  bound ≤ limit, empty).
+- **`OperatorLink` name prop (2–4):** components passed `displayName` (which *always* returns a value) as
+  `name`, short-circuiting `OperatorLink`'s own fallback so a shortened address rendered as a "name"
+  (wrong, non-mono). Now pass **`moniker`** (which may be `undefined`) in `ValidatorSetSection`,
+  `ProposerLeaderboard`, and `CoreSlotDetail`; `OperatorLink` applies its address fallback + mono styling
+  when there is no moniker. Removed the now-unnecessary `operatorName`/`displayName` use in
+  `CoreSlotDetail`.
+
+Validation (all green): root typecheck/test exit 0 (`apps/api` 114, `apps/web` **94**, 26 files); web
+build 14 routes; `openapi:check` up to date; `lint` clean; `git diff --check` clean.
+
+**Phase 11b+c Network/Liveness/Operator Surfaces: COMPLETE (Codex PASS; Copilot PR fixes applied) — ready to merge.**

@@ -10,7 +10,7 @@ import { JsonView } from '@/components/detail/JsonView';
 import { OperatorLink } from '@/components/operator/OperatorLink';
 import { ErrorState, InvalidInput, LoadingState } from '@/components/states/States';
 import { useCoreSlot } from '@/lib/api/queries';
-import { displayName, parseOperatorMetadata } from '@/lib/operator-metadata';
+import { parseOperatorMetadata } from '@/lib/operator-metadata';
 import { formatHeight } from '@/lib/format/height';
 import { statusTone } from '@/lib/format/status';
 import { bpsToPercent } from '@/lib/format/bps';
@@ -51,7 +51,6 @@ export function CoreSlotDetail({ slotId }: { slotId: string }) {
 
   const c = query.data.data;
   const operatorMeta = parseOperatorMetadata(c.metadata);
-  const operatorName = displayName({ moniker: operatorMeta.moniker, operatorAddress: c.operatorAddress });
   return (
     <DetailShell title={`CoreSlot ${c.slotId}`}>
       <Card>
@@ -64,7 +63,7 @@ export function CoreSlotDetail({ slotId }: { slotId: string }) {
                 label: 'Operator',
                 value: c.operatorAddress ? (
                   <span className="inline-flex items-center gap-1.5">
-                    <OperatorLink operatorAddress={c.operatorAddress} name={operatorName} />
+                    <OperatorLink operatorAddress={c.operatorAddress} name={operatorMeta.moniker} />
                     <CopyButton value={c.operatorAddress} label="operator address" />
                   </span>
                 ) : (

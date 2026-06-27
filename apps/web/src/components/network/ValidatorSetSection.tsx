@@ -50,7 +50,7 @@ export function ValidatorSetSection() {
             {vset.data.data.map((v) => (
               <Tr key={v.slotId}>
                 <Td>
-                  <OperatorLink operatorAddress={v.operatorAddress} name={directory.data?.[v.slotId]?.displayName} />
+                  <OperatorLink operatorAddress={v.operatorAddress} name={directory.data?.[v.slotId]?.moniker} />
                 </Td>
                 <Td mono>
                   <Link href={`/coreslots/${encodeURIComponent(v.slotId)}`} className="text-primary hover:text-primary-light">
