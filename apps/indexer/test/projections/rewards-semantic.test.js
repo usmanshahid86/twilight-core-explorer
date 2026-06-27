@@ -299,6 +299,80 @@ describe('Rewards observed snapshot ingestion', () => {
     assert.ok(p.balanceSamples.some((b) => b.sampleKind === 'cumulative_emitted'));
   });
 
+  it('extracts module balances from the live nyks-core {denom, <module>_balance} object shape', async () => {
+    const p = new MockRewardsPrisma();
+    const client = mockClient({
+      moduleBalances: { denom: 'utwlt', rewards_balance: '17688075', fee_pool_balance: '0' },
+      cumulativeEmitted: { amount: '20809500', denom: 'utwlt' },
+    });
+    const result = await ingestRewardsSnapshot({ prisma: p, client, chainId: CHAIN_ID, height: 200n, slotIds: [] });
+    assert.equal(result.failed, false);
+    const mod = p.balanceSamples.filter((b) => b.sampleKind === 'module_balance');
+    assert.deepEqual(mod.map((b) => b.moduleName).sort(), ['fee_pool', 'rewards']);
+    const rewards = mod.find((b) => b.moduleName === 'rewards');
+    assert.equal(rewards.amount, '17688075');
+    assert.equal(rewards.denom, 'utwlt');
+    // the shape now parses, so the absence-justification failure must NOT fire
+    assert.ok(!p.failures.some((f) => f.failureKind === 'module_balance_sample_unavailable'));
+  });
+
+  it('maps claimed_at_height 0 / absent to null for unclaimed rewards (not a misleading 0)', async () => {
+    const p = new MockRewardsPrisma();
+    const client = mockClient({
+      slotRewards: { 4: { rewards: [
+        { epoch_number: '4', amount: '10', denom: 'utwlt', claimed: false, claimed_at_height: '0' },
+        { epoch_number: '5', amount: '10', denom: 'utwlt', claimed: false }, // claimed_at_height absent
+      ] } },
+    });
+    await ingestRewardsSnapshot({ prisma: p, client, chainId: CHAIN_ID, height: 200n, slotIds: [4n] });
+    assert.equal(p.slotRewards.length, 2);
+    for (const r of p.slotRewards) {
+      assert.equal(r.claimed, false);
+      assert.equal(r.claimedAtHeight, null); // not 0n
+    }
+  });
+
+  it('records a NON-BLOCKING module_balance_sample_unavailable when no module balances extract', async () => {
+    const p = new MockRewardsPrisma();
+    const client = mockClient({
+      moduleBalances: { balances: [] }, // empty / unrecognized shape
+      cumulativeEmitted: { amount: '5000', denom: 'utwlt' },
+    });
+    const result = await ingestRewardsSnapshot({ prisma: p, client, chainId: CHAIN_ID, height: 200n, slotIds: [] });
+    assert.equal(result.failed, false); // non-blocking: the rest of the snapshot still succeeds
+    assert.ok(p.failures.some((f) => f.failureKind === 'module_balance_sample_unavailable'));
+    assert.ok(!p.balanceSamples.some((b) => b.sampleKind === 'module_balance')); // absence is now justified, not silent
+    assert.ok(p.balanceSamples.some((b) => b.sampleKind === 'cumulative_emitted'));
+  });
+
+  it('halts + records rewards_snapshot_chain_read_failed when a chain read throws', async () => {
+    const p = new MockRewardsPrisma();
+    const client = {
+      getSlotRewards: async () => { throw new Error('REST 503'); },
+      getModuleBalances: async () => ({ raw: { balances: [] } }),
+      getCumulativeEmitted: async () => ({ raw: {} }),
+    };
+    const result = await ingestRewardsSnapshot({ prisma: p, client, chainId: CHAIN_ID, height: 200n, slotIds: [4n] });
+    assert.equal(result.failed, true);
+    assert.ok(p.failures.some((f) => f.failureKind === 'rewards_snapshot_chain_read_failed'));
+  });
+
+  it('writes NO rows when a LATER read fails (true read-before-write, no partial sample)', async () => {
+    const p = new MockRewardsPrisma();
+    const client = {
+      // slot rewards read SUCCEEDS (would have been written under the old incremental code)...
+      getSlotRewards: async () => ({ raw: { rewards: [{ epoch_number: '1', amount: '10', denom: 'utwlt' }] } }),
+      // ...but a subsequent read fails, so nothing must be written for this height.
+      getModuleBalances: async () => { throw new Error('REST 503'); },
+      getCumulativeEmitted: async () => ({ raw: {} }),
+    };
+    const result = await ingestRewardsSnapshot({ prisma: p, client, chainId: CHAIN_ID, height: 200n, slotIds: [4n] });
+    assert.equal(result.failed, true);
+    assert.equal(p.slotRewards.length, 0); // NO partial slot-reward write despite a successful slot read
+    assert.equal(p.balanceSamples.length, 0);
+    assert.ok(p.failures.some((f) => f.failureKind === 'rewards_snapshot_chain_read_failed'));
+  });
+
   it('paginates getSlotRewards until next_key is exhausted', async () => {
     const p = new MockRewardsPrisma();
     let calls = 0;

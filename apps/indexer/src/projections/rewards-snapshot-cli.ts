@@ -41,10 +41,17 @@ async function main(): Promise<void> {
         height,
         ...(slotIds ? { slotIds } : {}),
       });
-      console.log(
-        `[rewards-snapshot] sampled at height ${result.height}: `
-          + `${result.slotRewardRows} slot reward rows, ${result.balanceSamples} balance samples`,
-      );
+      if (result.failed) {
+        console.error(
+          `[rewards-snapshot] chain read failed at height ${result.height}; cursor halted, failure recorded`,
+        );
+        process.exitCode = 1;
+      } else {
+        console.log(
+          `[rewards-snapshot] sampled at height ${result.height}: `
+            + `${result.slotRewardRows} slot reward rows, ${result.balanceSamples} balance samples`,
+        );
+      }
     });
   } finally {
     await prisma.$disconnect();

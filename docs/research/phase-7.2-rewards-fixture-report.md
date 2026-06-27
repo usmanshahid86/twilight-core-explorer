@@ -132,6 +132,77 @@ residuals tracked as follow-ups:
   row while `failuresCreated` counts N. Equally true before this change. Fix: add a per-slot discriminator
   (e.g. array index) to the genesis-failure key.
 
+## 7c. Codex review + fixes (2026-06-27)
+
+A parallel Codex review returned **PARTIAL** (code/tests/contract strong; fixture acceptance
+incomplete). All findings independently reproduced from the persisted DB and addressed:
+
+- **Blocker — CHAIN_ID mislabel (valid; runbook/ops gap).** `CHAIN_ID` was never exported, so
+  `config.chainId` defaulted to `twilight-localnet-1` and **both `Block.chainId` and
+  `ProjectionCursor.chainId`** (and `/status`) were stamped with the wrong chain (the real chain is
+  `twilight-rewards-fixture-1`). Internally consistent → projections were correct, but the label lies.
+  **Fix:** runbook Step 1 now exports `CHAIN_ID`; the indexer hard-fails on a mismatch with the node's
+  reported `node_info.network` via a pure, unit-tested `assertChainIdMatches` (`apps/indexer/src/
+  chain-id-guard.ts`) — so this can't silently recur.
+- **Blocker — `/rewards/balances` missing `module_balance`, silent, no failure (valid).** `rewards-
+  snapshot` wrote no `module_balance` row and recorded nothing. **Fix:** when `getModuleBalances`
+  yields no extractable `{denom,amount}` entries, it now records a **non-blocking**
+  `module_balance_sample_unavailable` ProjectionFailure **carrying the raw payload** — converting a
+  silent gap into a diagnosable signal. The captured raw will reveal on the next live run whether the
+  module set is genuinely empty or the response shape needs an `extractBalances` extension (the same
+  class as the F2/F3 key mismatches).
+- **Data-safety — rewards-snapshot lacked failure recording/atomicity vs balance-snapshot (valid).**
+  **Fix:** chain reads are now wrapped read-before-write — on a REST read error it halts the cursor,
+  records `rewards_snapshot_chain_read_failed`, and returns `failed: true` (CLI exits non-zero), matching
+  balance-snapshot. Written rows are idempotent upserts, so a re-run completes the sample.
+- **Non-blocker — unclaimed `claimedAtHeight:"0"` (valid).** The chain returns `claimed_at_height "0"`
+  for unclaimed rewards; `extractSlotRewards` stored `0n`, which reads like a real block. **Fix:**
+  `claimedAtHeightOrNull` maps `0`/unparseable → `null`.
+- **Note — `createdHeight=0`:** confirmed **expected** (genesis `created_height` is literally `"0"`); not
+  a defect.
+
+Tests added: `chain-id-guard.test.js` (match/mismatch/undefined); rewards-snapshot cases for
+`claimedAtHeight 0→null`, non-blocking `module_balance_sample_unavailable`, and
+`rewards_snapshot_chain_read_failed` + `failed`. Validation re-run green: typecheck/lint OK, indexer
+**272** pass / 0 fail (+4), api 114, web 94, chain-client 17, both openapi checks in sync.
+
+### Live re-validation — PASS (2026-06-27)
+
+The fixture was rebuilt (`twilight-rewards-fixture-1`) and a fresh `twilight_explorer_rewards` DB was
+re-ingested **with `CHAIN_ID` set** → projections → snapshots → API. Results:
+
+- **CHAIN_ID guard proven live:** ingesting WITHOUT `CHAIN_ID` hard-failed (`twilight-localnet-1` ≠ node
+  `twilight-rewards-fixture-1`) and wrote **0 blocks**. With `CHAIN_ID` set, all 50 `Block` rows + cursors
+  are labeled `twilight-rewards-fixture-1`, and `/status.data.chainId = twilight-rewards-fixture-1`.
+- **`claimedAtHeight` fix in data:** `/coreslots/1/rewards` epochs 4–5 now return `claimedAtHeight: null`
+  (was `"0"`); epochs 1–3 `claimed:true` with heights 11/31/31 + txHash.
+- **Module-balance — parse mismatch found AND fixed (not just justified).** The captured raw revealed the
+  route returns an OBJECT, not an array: `{denom:"utwlt", rewards_balance:"17688075", fee_pool_balance:"0"}`
+  — the same class as the F2/F3 key mismatches. `extractBalances` was extended to read the
+  `{denom, <module>_balance}` shape, so `/rewards/balances` now returns real `module_balance` rows
+  (`rewards = 17,688,075` = cumulative 20,809,500 − claimed 3,121,425; `fee_pool = 0`). The
+  non-blocking justification failure remains a safety net for any future unrecognized shape, and the
+  snapshot now clears its same-height failures on re-run (idempotent). **0 unresolved ProjectionFailures.**
+- Acceptance otherwise green: 5 epochs (`totalReward 4,161,900`, `cumulativeEmitted → 20,809,500`),
+  supply `2,000,020,809,500 @ sampledAtHeight 50`, 2 claims (`claimant = signer`).
+
+Added test: `extractBalances` object-shape case. Final validation: indexer **273** pass / 0 fail (+5 over
+the base), api 114, web 94, chain-client 17, typecheck/lint/openapi all green. **Codex PARTIAL → PASS.**
+
+### Second Codex re-review + fix (2026-06-27)
+
+A re-review accepted live acceptance but flagged that `rewards-snapshot` **claimed** read-before-write
+while actually writing slot rewards incrementally *before* the module-balance / cumulative reads — so a
+later read failure could leave partial rows visible (the test only threw on the first read, not proving
+the no-partial-write guarantee). **Fix:** `rewards-snapshot` is now genuinely read-before-write — it
+reads ALL chain state into memory first and, only if every read succeeds, writes slot rewards + balance
+samples in a **single `$transaction`**; any read failure halts + records and leaves the height untouched
+(matching balance-snapshot). Added a test where the slot-rewards read **succeeds** but a later read
+**throws**, asserting **0 rows written**. Re-validated live: identical correct data (module_balance
+rewards 17,688,075 / fee_pool 0, 20 slot rewards / 3 claimed, 0 failures). indexer **274** pass / 0 fail.
+(Also: the new `chain-id-guard.{ts,test.js}` files are untracked in the working tree and must be `git
+add`ed in the commit — they are listed in the commit's add set.)
+
 ## 8. Final recommendation
 
 **Ready for review** (local adversarial-reviewer, then Codex/Copilot on the PR). All locked decisions

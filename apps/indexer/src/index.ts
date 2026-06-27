@@ -2,6 +2,7 @@ import { RestRpcChainClient } from '@twilight-explorer/chain-client';
 import { loadConfig } from '@twilight-explorer/config';
 import { createPrismaClient } from '@twilight-explorer/db';
 import { withIndexerAdvisoryLock } from './advisory-lock.js';
+import { assertChainIdMatches } from './chain-id-guard.js';
 import { getOrCreateCursor } from './cursor.js';
 import { ingestHeight, type IngestPrisma } from './ingest-height.js';
 
@@ -26,6 +27,9 @@ async function main(): Promise<void> {
   try {
     await withIndexerAdvisoryLock(prisma, async () => {
       const status = await client.getStatus();
+      // Refuse to ingest under a chain-id the node disagrees with (e.g. CHAIN_ID unset -> the
+      // config default mislabels every Block/cursor row and the API /status). See chain-id-guard.
+      assertChainIdMatches(config.chainId, status.chainId);
       const latestChainHeight = parseHeight(status.latestBlockHeight);
       const cursor = await getOrCreateCursor(prisma as unknown as IngestPrisma, config.chainId);
       const cursorRecord = asRecord(cursor);

@@ -35,6 +35,10 @@ cd ~/Github/twilight-core-explorer
 export COMET_RPC_URL=http://127.0.0.1:26657
 export REST_URL=http://127.0.0.1:1317
 export DATABASE_URL='postgresql://twilight:twilight@localhost:5432/twilight_explorer_rewards?schema=public'
+# REQUIRED — else config.chainId defaults to twilight-localnet-1 and every Block/cursor row (and
+# the API /status) is stamped with the WRONG chain. The indexer now hard-fails on a mismatch with
+# the node's reported chain-id, so this must match the fixture chain.
+export CHAIN_ID=twilight-rewards-fixture-1
 ```
 
 ## Step 2 — Create + migrate the separate rewards DB
