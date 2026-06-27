@@ -3,11 +3,14 @@
 import { Card, CardBody } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { MonoCopy } from '@/components/ui/MonoCopy';
+import { CopyButton } from '@/components/ui/CopyButton';
 import { DataList } from '@/components/detail/DataList';
 import { DetailShell } from '@/components/detail/DetailShell';
 import { JsonView } from '@/components/detail/JsonView';
+import { OperatorLink } from '@/components/operator/OperatorLink';
 import { ErrorState, InvalidInput, LoadingState } from '@/components/states/States';
 import { useCoreSlot } from '@/lib/api/queries';
+import { parseOperatorMetadata } from '@/lib/operator-metadata';
 import { formatHeight } from '@/lib/format/height';
 import { statusTone } from '@/lib/format/status';
 import { bpsToPercent } from '@/lib/format/bps';
@@ -47,6 +50,7 @@ export function CoreSlotDetail({ slotId }: { slotId: string }) {
   }
 
   const c = query.data.data;
+  const operatorMeta = parseOperatorMetadata(c.metadata);
   return (
     <DetailShell title={`CoreSlot ${c.slotId}`}>
       <Card>
@@ -55,7 +59,17 @@ export function CoreSlotDetail({ slotId }: { slotId: string }) {
             items={[
               { label: 'Slot id', value: <span className="font-mono">{c.slotId}</span> },
               { label: 'Status', value: c.status ? <Badge tone={statusTone(c.status)}>{c.status}</Badge> : '—' },
-              { label: 'Operator', value: <MonoCopy value={c.operatorAddress} label="operator" /> },
+              {
+                label: 'Operator',
+                value: c.operatorAddress ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <OperatorLink operatorAddress={c.operatorAddress} name={operatorMeta.moniker} />
+                    <CopyButton value={c.operatorAddress} label="operator address" />
+                  </span>
+                ) : (
+                  '—'
+                ),
+              },
               { label: 'Payout', value: <MonoCopy value={c.payoutAddress} label="payout" /> },
               { label: 'Consensus', value: <MonoCopy value={c.consensusAddress} label="consensus" /> },
               { label: 'Consensus power', value: <span className="font-mono">{c.consensusPower ?? '—'}</span> },

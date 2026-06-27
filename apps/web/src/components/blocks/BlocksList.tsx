@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { PaginatedTable, type Column } from '@/components/list/PaginatedTable';
 import { MonoCopy } from '@/components/ui/MonoCopy';
+import { OperatorLink } from '@/components/operator/OperatorLink';
 import { useBlocksList, type BlocksResponse } from '@/lib/api/queries';
 import { formatHeight } from '@/lib/format/height';
 import { formatRelativeTime } from '@/lib/format/time';
@@ -25,12 +26,12 @@ export function BlocksList() {
     { header: 'Txs', mono: true, cell: (b) => b.txCount },
     {
       header: 'Proposer',
-      cell: (b) => (
-        <MonoCopy
-          value={b.proposer.operatorAddress ?? b.proposer.address ?? b.proposer.rawAddress}
-          label="proposer"
-        />
-      ),
+      cell: (b) =>
+        b.proposer.operatorAddress ? (
+          <OperatorLink operatorAddress={b.proposer.operatorAddress} />
+        ) : (
+          <MonoCopy value={b.proposer.address ?? b.proposer.rawAddress} label="proposer" />
+        ),
     },
   ];
   return (

@@ -98,9 +98,10 @@ Implemented:
 
 Not yet implemented:
 
-- Twilight-specific web pages: CoreSlot, liveness, rewards, and the operator page (Phase 11/12). The
-  public API (Phase 9, 32 paths) and the web foundation + generic explorer pages — Overview, blocks,
-  transactions, accounts, search (Phase 10a/10b) — are done.
+- Rewards economics web pages — epochs, claims, balances, treasury/params, and supply detail
+  (Phase 12). The public API (Phase 9, 32 paths), the web foundation + generic explorer (Overview,
+  blocks, transactions, accounts, search — Phase 10), and the Twilight surfaces (CoreSlots, liveness,
+  network, and the operator page — Phase 11) are done.
 - Production deployment packaging and operating runbooks.
 - Generated gRPC/proto client transport behind `ChainClient`.
 
