@@ -15,9 +15,9 @@ export function RewardAmount({
 }) {
   if (raw === null || raw === undefined) return <span className="text-text-muted">—</span>;
   const a = formatAmount(raw, denom ?? '');
-  return (
-    <span title={`${a.raw} ${a.rawDenom}`}>
-      {a.display} {a.symbol}
-    </span>
-  );
+  // An unknown/empty denom yields an empty symbol+rawDenom; render the bare value without a
+  // trailing space in either the visible text or the title.
+  const display = a.symbol ? `${a.display} ${a.symbol}` : a.display;
+  const title = a.rawDenom ? `${a.raw} ${a.rawDenom}` : a.raw;
+  return <span title={title}>{display}</span>;
 }
