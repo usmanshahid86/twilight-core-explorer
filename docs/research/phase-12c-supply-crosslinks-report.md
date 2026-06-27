@@ -1,8 +1,8 @@
 # Phase 12c — Supply + Cross-links — Implementation Report
 
-**Status: PASS** (implemented, typechecked, linted, tested, built; 3-lens adversarial review PASS).
-Date: 2026-06-28. Plan: `phase-12-rewards-supply-plan.md` (§7/§8/§13/§17). **Web-only — no API contract
-change.** Not committed/merged.
+**Status: PASS** (implemented, typechecked, linted, tested, built; 3-lens adversarial review PASS +
+Codex review PASS). Date: 2026-06-28. Plan: `phase-12-rewards-supply-plan.md` (§7/§8/§13/§17).
+**Web-only — no API contract change.** Committed `81125d0` on `feat/12c-supply-crosslinks`.
 
 ## 1. Executive summary
 
@@ -50,14 +50,19 @@ BigInt `deriveSampleAge` with nullable-guarded `indexer.lastIndexedHeight`; `err
 root `typecheck` · `lint` · `apps/web test` **113** (+6) · `apps/api test` **114** (unchanged) · web
 `build` ✓ (`/supply` static; `/rewards/claims` dynamic) · `openapi:check` api + web up to date.
 
-## 7. Adversarial review (3 lenses, PASS)
+## 7. Reviews (local 3-lens + Codex, both PASS)
 
-`/supply` faithfulness, cross-link correctness/contract-safety, and boundary/scope/test-quality — each
-re-ran the suite. **All 3 PASS** (0 blocker/major). Folded in: (a) the no-sample handling modeled a
-contract-forbidden 200-with-null shape → realigned to the real **404 → NotFound** path and dropped the
-dead empty-supply branch; (b) added a **multi-denom** supply render test; (c) added the **account →
-`/supply` href guard** (the one cross-link without coverage) + an assertion that **no `?claimant=`
-relation** is invented.
+**Local 3-lens adversarial review** — `/supply` faithfulness, cross-link correctness/contract-safety,
+and boundary/scope/test-quality — each re-ran the suite. **All 3 PASS** (0 blocker/major). Folded in:
+(a) the no-sample handling modeled a contract-forbidden 200-with-null shape → realigned to the real
+**404 → NotFound** path and dropped the dead empty-supply branch; (b) added a **multi-denom** supply
+render test; (c) added the **account → `/supply` href guard** (the one cross-link without coverage) +
+an assertion that **no `?claimant=` relation** is invented.
+
+**Codex review — PASS** (no blockers, no required patch). Independently re-ran the full ritual
+(typecheck, lint, api 114, indexer 274, web 113, both `openapi:check`, build, `git diff --check`) and
+verified the 12c claims against the working tree vs `origin/main`. The only item was a stale
+`SupplyView` docstring (still said "renders NoSample") — corrected to "404 → ErrorState/NotFound".
 
 ## 8. Known limitations / accepted nits
 
@@ -68,6 +73,7 @@ relation** is invented.
 
 ## 9. Final recommendation
 
-Ready for review/merge. Phase 12c is read-only, contract-faithful, makes no API change, and reuses proven
-primitives + the 12b claims filter. **Phase 12 (rewards/supply economic surfaces) is complete** across
-12a (plan/audit) + 12b (rewards hub) + 12c (supply + cross-links).
+Merged-ready and committed (`81125d0`); both reviews PASS. Phase 12c is read-only, contract-faithful,
+makes no API change, and reuses proven primitives + the 12b claims filter. **Phase 12 (rewards/supply
+economic surfaces) is complete** across 12a (plan/audit) + 12b (rewards hub) + 12c (supply +
+cross-links), tagged `explorer-phase-12-rewards-economics`.

@@ -1,6 +1,6 @@
 # Twilight Core Explorer Project Checkpoint
 
-Date: 2026-06-26
+Date: 2026-06-28
 
 Status: checkpoint after Phase A/B foundation, descriptor decoder work, chain-alignment
 cleanup, the full CoreSlot semantic projection set, temporal consensus map/boundary
@@ -29,8 +29,14 @@ theme, Overview/home, search, freshness model, standard states), and 10b (generi
 transactions, accounts + sampled balances) are complete, tested (apps/web 62 tests, 13 routes), and
 Codex-passed**, and **Phase 11 (Twilight surfaces — CoreSlot list/detail, liveness, network, and the
 first-class operator page; 11a + 11b+c) is complete and Codex-passed** (apps/web 94 tests;
-operator-forward, CoreSlot-backed). **The next phase is 12 (rewards economics)**; Phase 7.2
-(live rewards-claim fixture) remains an open evidence task. See §6 for the phase breakdown.
+operator-forward, CoreSlot-backed), and **Phase 12 (rewards economics — 12a plan/contract-delta
+audit, 12b `/rewards` hub + epoch detail, 12c `/supply` + `?slotId=` cross-links) is complete and
+dual-reviewed** (apps/web 113 tests; read-only — no claim actions, claiming is CLI-only). **Phase 7.2
+(live rewards-claim fixture) is also done** (merged #32): it discharged the claim gate, so the rewards
+posture is now read-only (`productionClaimReadiness:"read_only_no_claim_action"`, replacing the old
+`gated_by_phase_7_2`). **The next phase is 13 (deployment/hardening)**; the originally-planned operator
+education/onboarding scope is the remaining product surface (renumbered to a later phase). See §6 for
+the phase breakdown.
 
 This document summarizes what has already been decided and built, what is still only
 designed, and the recommended sequence from here. It is intended to keep implementation
@@ -514,14 +520,10 @@ Important conclusion:
    - Low-level transport can reject bech32.
    - Search/self-service should eventually decode `twilightvalcons...` to lowercase hex.
 
-5. Phase 7.2 live rewards claim fixture is still open.
-   - Phase 7 / 7.1 is merge-ready, and live rewards snapshot smoke passed.
-   - A real `MsgClaimRewards` / `reward_claimed` fixture has not been exercised because the
-     localnet had no finalized claimable rewards.
-   - Implement once at least one epoch has finalized and
-     `getClaimableRewards(slotId, startEpoch, endEpoch)` returns a non-empty range.
-   - This does not block Phase 8a block-signature ingestion, but it should be completed
-     before rewards API/web/operator-economics pages rely on live claim behavior.
+5. ~~Phase 7.2 live rewards claim fixture is still open.~~ **RESOLVED (2026-06-28, merged #32.)** A
+   finalized claimable epoch was produced and a real `MsgClaimRewards` / `reward_claimed` indexed
+   end-to-end; the projector event-schema mismatches it exposed are fixed (see the §6 Phase 7.2
+   section). Rewards web/operator-economics surfaces (Phase 12) ship read-only over this evidence.
 
 6. ~~Phase 8c must preserve the attribution taxonomy from Phase 8b.~~ **RESOLVED in 8c-1.** Missed =
    expected active CoreSlots minus flag-2 signed evidence (set-difference); `no_consensus_window` /
@@ -649,7 +651,15 @@ Do not treat `EpochReward` as claim truth.
 Completed in Phase 7 / 7.1. Remaining evidence task is Phase 7.2 live rewards claim
 fixture, which is not a merge blocker for Phase 7 / 7.1.
 
-### Phase 7.2: Live Rewards Claim Fixture
+### Phase 7.2: Live Rewards Claim Fixture (completed)
+
+> **Status (2026-06-28): DONE, merged #32.** A finalized claimable epoch was produced on the live
+> fixture and a real `MsgClaimRewards` was indexed end-to-end. The fixture exposed that the
+> rewards/identity projectors had been written against an assumed event schema; the live nyks-core
+> emits different keys — fixed: `epoch_finalized` (`allocated`/`eligible_slots`/`cumulative_emitted`/
+> `distribution_method`), `reward_claimed` (`signer`), object-shaped module balances, and a genesis
+> CoreSlot-identity seed (genesis slots emit no on-chain events). See the Phase 7.2 report + the F1–F4
+> fixes. This unblocked Phase 12 (rewards economics) as a read-only surface. Original goal/scope below.
 
 Goal:
 
@@ -926,8 +936,12 @@ Report: `docs/research/phase-9d-rewards-supply-api-report.md`. OpenAPI now **32 
   `200 { sampled:false, sampledAtHeight:null, balances:[] }`, never a fabricated zero).
 - `EpochReward` is aggregate context (`rewardSemantics:"aggregate_projection"`), NOT claim truth;
   sampled rows carry `source:"sampled"` + `sampledAtHeight`. The Phase-7.2 gate is a **machine-readable
-  in-data field** (`productionClaimReadiness:"gated_by_phase_7_2"` + `claimSemantics` on claims/slot
-  rewards), not envelope drift. No live `ClaimableRewards`, no claimable production truth.
+  in-data field** (`productionClaimReadiness` + `claimSemantics` on claims/slot rewards), not envelope
+  drift. No live `ClaimableRewards`, no claimable production truth.
+  - **Correction (2026-06-28, Phase 7.2 + 12a):** the gate value was flipped from
+    `"gated_by_phase_7_2"` to `"read_only_no_claim_action"` once 7.2 landed. The explorer is
+    deliberately read-only: it displays observed rewards + historical claim events; claiming is
+    CLI-only (`twilightd`), documented externally, never an in-app action.
 
 Deferred from 9a–9c (candidate follow-ups): `twilightvalcons` bech32 search (needs a pure bech32
 dep), `/network/params` (network-scoped `CoreSlotParameterChange`), and the API hardening punted to
@@ -999,7 +1013,41 @@ apps/web: 94 tests; Codex PASS on 11a and 11b+c. **Deferred to Phase 12:** rewar
 detail, claims, balances, treasury/params) and tokenomics/halving — Phase 11 ships only a caveated
 per-slot rewards subsection.
 
-### Phase 12: Operator Education and Onboarding
+### Phase 12: Rewards Economics (completed)
+
+> **Note (2026-06-28):** Phase 12 was scoped as the rewards/supply economic surfaces (NOT the
+> originally-listed "Operator Education and Onboarding", which is renumbered to a later phase — see
+> below). Posture (locked): *make economic state understandable without implying live financial
+> action* — **read-only**, no claim actions; claiming is CLI-only (`twilightd`), documented externally.
+
+Reports: `phase-12-rewards-supply-plan.md` (plan + §17 caveat audit + §18 contract-delta audit),
+`phase-12b-rewards-hub-report.md`, `phase-12c-supply-crosslinks-report.md`. Delivered the read-only
+`/rewards/*` + `/supply` economic surfaces over the 9d API:
+
+- **12a — plan + post-7.2 audit:** locked the read-only posture; promoted the rewards contract fields
+  surfaced by the live 7.2 fixture (`cumulativeEmitted`/`distributionMethod`); flipped
+  `productionClaimReadiness` `gated_by_phase_7_2` → `read_only_no_claim_action`; audited which caveat
+  literals are contract fields (rendered verbatim) vs hardcoded.
+- **12b — `/rewards` hub + epoch detail:** `/rewards` (epochs, claims, balances, treasury, params
+  sections) + `/rewards/epochs/[epoch]`; a non-actionable **Claiming card** (locked copy + CLI as
+  doc-only `<pre>`, no button/wallet/link); `RewardCaveat` banner + string-safe `RewardAmount`. 7
+  rewards query hooks. Caveats rendered from API rows, never hardcoded.
+- **12c — `/supply` + cross-links:** the read-only `/supply` page (sampled denom→amount + `source` +
+  freshness; no invented economics; no-sample = 404→NotFound, never 0); the `/rewards/claims?slotId=`
+  route (searchParams → the 12b claims filter); claim-history cross-link riding along on CoreSlot +
+  operator pages; operator→`/rewards`; and the only contract-safe account→`/supply` link (no invented
+  `?claimant=` relation).
+
+Invariants honored: read-only (no mutations/wallet/claim), string-safe (BigInt `formatAmount`, raw
+preserved, no `Number()`), caveat-as-data (caveat literals are contract fields), `error.code` branching,
+boundary + theme guards. **No API contract change** in 12b/12c (both `openapi:check` green).
+apps/web: **113 tests**; both 12b and 12c **Codex PASS** (12c also 3-lens adversarial PASS).
+Tagged `explorer-phase-12-rewards-economics`.
+
+### Operator Education and Onboarding (deferred — future phase)
+
+> Originally numbered "Phase 12"; renumbered after Phase 12 became Rewards Economics. Lands after
+> Phase 13 hardening (or in parallel — it is mostly static + live params).
 
 Goal:
 
@@ -1053,14 +1101,16 @@ snapshots are done — so the entire backend + API surface is built and live-val
 
 Remaining:
 
-- MVP usable explorer: web foundation + generic pages (10) and the Twilight surfaces + operator page
-  (11) are **done**; next is rewards economics (12) then hardening (13).
-- Production-grade operator explorer: the above + operator education/onboarding (12) and
-  deployment/hardening (13, which also absorbs the API hardening deferred from 9a–9c — rate limiting,
-  security headers, cache-control/ETag, a real linter).
+- MVP usable explorer: web foundation + generic pages (10), the Twilight surfaces + operator page
+  (11), and rewards economics (12: 12a/12b/12c) are **done**; next is hardening (13).
+- Production-grade operator explorer: the above + deployment/hardening (13, which also absorbs the API
+  hardening deferred from 9a–9c — rate limiting, security headers, cache-control/ETag, a real linter)
+  and the renumbered operator education/onboarding surface.
 
-Open evidence tasks (not phase blockers): Phase 7.2 live rewards-claim fixture; and the optional
-broader liveness drills (multi-node halt → network `critical`; rotation-mid-outage).
+Open evidence tasks (not phase blockers): the optional broader liveness drills (multi-node halt →
+network `critical`; rotation-mid-outage). **Phase 7.2 (live rewards-claim fixture) is now done**
+(merged #32) — the live `MsgClaimRewards`/`reward_claimed` path is exercised and the rewards/identity
+projector event-schema mismatches it exposed are fixed; the rewards posture is read-only.
 
 Phase 9d-0 indexer snapshot phase (DONE): `balance_snapshot_v1` materialized supply via
 `RewardsBalanceSample('supply')` + per-address `AccountBalanceCurrent` observed samples, which the 9d
@@ -1135,23 +1185,21 @@ Dependencies that must not be blurred:
 
 Recommended next implementation step:
 
-**Phase 12: Rewards Economics** — the backend/API (9a–9d, 9d-0), the web foundation + generic explorer
-(Phase 10), and the Twilight surfaces + operator page (Phase 11: CoreSlot/liveness/network/operator;
-`apps/web` 94 tests, Codex PASS) are all complete. The next implementation step is the rewards-economics
-pages over `/rewards/*` + `/supply`: epochs + epoch detail, slot rewards, claims history, rewards
-balances, treasury/params history, and supply detail — each presented with the
-`productionClaimReadiness:"gated_by_phase_7_2"` claim caveat until **Phase 7.2** (live rewards-claim
-fixture) lands. Phase 13 (hardening) follows. Phase 7.2 is an open evidence task, not a phase blocker.
+**Phase 13: Deployment and Production Hardening** — the backend/API (9a–9d, 9d-0), the web foundation +
+generic explorer (Phase 10), the Twilight surfaces + operator page (Phase 11), and the rewards economics
+surfaces (**Phase 12: 12a/12b/12c**, `apps/web` 113 tests, Codex PASS, tagged `phase-12-complete`) are
+all complete. **Phase 7.2 (live rewards-claim fixture) is done** (merged #32) — it discharged the claim
+gate, so the rewards posture is read-only (`read_only_no_claim_action`; claiming is CLI-only). Phase 13
+should also absorb the API hardening deferred from 9a–9c (rate limiting, security headers,
+cache-control/ETag, a real linter — `npm run lint` is currently a no-op). The remaining product surface
+is the renumbered **Operator Education & Onboarding** phase (mostly static + live params; can land in
+parallel with hardening).
 
-The operator-liveness data dependency that gated the operator UX milestone is now fully satisfied:
+The operator-liveness data dependency that gated the operator UX milestone is fully satisfied:
 `CoreSlotHealthSnapshot` + `NetworkLivenessRiskSnapshot` give per-operator health and network
 halt-risk directly.
 
-The live behavioral validation (2026-06-26) closed the lifecycle/rotation/boundary live-coverage
-gaps. Still worth exercising before product surfaces (not blockers): multi-node simultaneous outage
+Still worth exercising before/around production (not phase blockers): multi-node simultaneous outage
 (network `critical`), and a consensus-key rotation *mid-outage* (the rotation guard ran clean on a
-healthy chain, not yet during a concurrent outage).
-
-Phase 7.2 (live rewards claim fixture) can run in parallel once a finalized claimable epoch exists.
-It does not block Phase 9, but should be completed before rewards API/web/operator-economics surfaces
-expose claim behavior as production-ready.
+healthy chain, not yet during a concurrent outage). The live behavioral validation (2026-06-26) already
+closed the lifecycle/rotation/boundary live-coverage gaps.
