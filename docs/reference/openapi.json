@@ -5114,7 +5114,7 @@
                           "productionClaimReadiness": {
                             "type": "string",
                             "enum": [
-                              "gated_by_phase_7_2"
+                              "read_only_no_claim_action"
                             ]
                           },
                           "claimSemantics": {
@@ -5423,7 +5423,7 @@
                           "productionClaimReadiness": {
                             "type": "string",
                             "enum": [
-                              "gated_by_phase_7_2"
+                              "read_only_no_claim_action"
                             ]
                           },
                           "claimSemantics": {
