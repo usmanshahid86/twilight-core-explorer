@@ -2,6 +2,21 @@
 
 Date: 2026-06-23
 
+> **⚠ Superseded as a status doc (2026-06-28).** This is the original pre-build *roadmap* (lettered
+> phases A–G). **Phases A–E are fully shipped and live-proven** under a renumbered scheme — do NOT
+> read the phase headers below as open work. Live status:
+> [`explorer-project-checkpoint.md`](explorer-project-checkpoint.md) §6. Letter → executed-number map:
+> - **A/B** = foundation (scaffold, ChainClient/RestRpcChainClient, indexer, descriptor decoder) — done
+> - **C** = Phase 9 API + Phase 10 web (generic explorer) — done
+> - **D** = Phase 6a/6b CoreSlot semantic + temporal map + Phase 9c API + Phase 11 pages — done
+> - **E** = Phase 7/7.1/7.2 rewards + Phase 9d API + Phase 12 rewards-economics pages — done
+> - **F/G** = deployment/hardening = checkpoint **Phase 13** (the only remaining work)
+>
+> Other drift: there is no `packages/ui` (never built); `packages/proto` was added (not in Phase A's
+> list); the Claims page shipped folded under rewards as **`/rewards/claims`** (no top-level
+> `/claims`); the "Acceptance Gate for Starting Build" is fully discharged. A root
+> `docker-compose.yml` exists as a dev-only single-Postgres service — no app Dockerfiles yet (Phase 13).
+
 ## MVP Definition
 
 Generic explorer MVP:

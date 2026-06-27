@@ -2,6 +2,18 @@
 
 Date: 2026-06-23
 
+> **⚠ Superseded for status/sequencing (2026-06-28).** Point-in-time research note. Its technical body
+> (chain REST surface, source-of-truth table, claim-truth semantics) is still accurate and matches the
+> built code, but its forward-looking framing is done: the transport plan is **built** (`ChainClient` +
+> `RestRpcChainClient` + route-contract tests, Phase A/B), and everything through **Phase 12** is
+> complete (next is Phase 13). Scoping note: this doc describes the **chain's** custom-module REST
+> surface consumed by `ChainClient` (now in `packages/chain-client/src/routes.ts`), **NOT** the
+> explorer's own API — the explorer's public contract is
+> [`../reference/openapi.json`](../reference/openapi.json) (**32 paths**), and the "61 paths" figure
+> below refers to the upstream twilight-core swagger, not the explorer. The route contract is now
+> checked in (`docs/reference/rest-routes.md` + `app/openapi/twilight.swagger.json`). Status index:
+> [`explorer-project-checkpoint.md`](explorer-project-checkpoint.md).
+
 ## 1. What Changed
 
 The base Twilight Core API surface has improved since the original explorer research pass:

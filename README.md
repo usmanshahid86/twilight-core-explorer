@@ -22,7 +22,7 @@ TypeScript monorepo (npm workspaces):
 | `packages/proto` | Twilight descriptor artifacts |
 | `apps/indexer` | ingestion + semantic projections |
 | `apps/api` | DB-only public REST/OpenAPI service (Phase 9; 32 paths) |
-| `apps/web` | Next.js app-router explorer UI consuming the API (Phase 10) |
+| `apps/web` | Next.js app-router explorer UI consuming the API (Phases 10–12) |
 | `prisma/` | schema + migrations |
 | `docs/research/` | one design/report doc per phase; the project checkpoint is the status index |
 
@@ -63,6 +63,17 @@ RESET_PROJECTION=true npm --prefix apps/indexer run project:coreslot-liveness-su
 RESET_PROJECTION=true npm --prefix apps/indexer run project:coreslot-health
 ```
 
+Then serve the read-only API and the web UI:
+
+```sh
+# DB-only public API (defaults to :8080; reuses DATABASE_URL locally, API_DATABASE_URL in prod)
+npm --prefix apps/api run dev
+
+# web explorer (Next.js on :3000) pointed at the API
+export NEXT_PUBLIC_API_BASE_URL=http://localhost:8080
+npm --prefix apps/web run dev
+```
+
 ## Development
 
 ```sh
@@ -80,10 +91,13 @@ for current status and the phase history.
 
 ## Status
 
-CoreSlot semantic layer (metadata, lifecycle, payout/params, key rotation, temporal consensus
-map), rewards semantic projection, rewards snapshots, block-signature ingestion, operator
-signature attribution, CoreSlot liveness evidence, liveness summaries, and health/risk snapshots
-are implemented.
+The full stack is built and live-validated: the indexer + all semantic projections (CoreSlot
+metadata/lifecycle/payout/params, key rotation, temporal consensus map; rewards semantic + snapshots;
+block-signature ingestion → operator signature attribution → CoreSlot liveness evidence/summaries →
+health & network halt-risk; proposer attribution), the DB-only public **API** (Phase 9; 32 OpenAPI
+paths), and the **web** explorer (Phases 10–12: generic pages, CoreSlot/liveness/network/operator
+surfaces, and the read-only rewards/supply economic pages). Next up is deployment/production hardening
+(Phase 13).
 
 ## Current Scope
 
@@ -94,15 +108,16 @@ Implemented:
 - CoreSlot semantic projections and deterministic rebuild/reset tooling.
 - Rewards semantic and observed-snapshot projections.
 - Block-signature ingestion, signature-to-CoreSlot attribution, liveness evidence, liveness
-  summaries, and CoreSlot/network health snapshots.
+  summaries, CoreSlot/network health snapshots, and proposer attribution.
+- The DB-only public REST/OpenAPI **API** (Phase 9; 32 paths).
+- The **web** explorer (Phase 10 foundation + generic pages; Phase 11 CoreSlot/liveness/network +
+  the first-class operator page; Phase 12 read-only rewards/supply economic pages). The rewards
+  surface is intentionally read-only — claiming is CLI-only, not an in-app action.
 
 Not yet implemented:
 
-- Rewards economics web pages — epochs, claims, balances, treasury/params, and supply detail
-  (Phase 12). The public API (Phase 9, 32 paths), the web foundation + generic explorer (Overview,
-  blocks, transactions, accounts, search — Phase 10), and the Twilight surfaces (CoreSlots, liveness,
-  network, and the operator page — Phase 11) are done.
-- Production deployment packaging and operating runbooks.
+- Production deployment packaging, operating runbooks, and API hardening (rate limiting, security
+  headers, cache-control/ETag) — Phase 13.
 - Generated gRPC/proto client transport behind `ChainClient`.
 
 Status is tracked in the project checkpoint.

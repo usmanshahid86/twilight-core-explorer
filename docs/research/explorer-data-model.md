@@ -2,6 +2,26 @@
 
 Date: 2026-06-23
 
+> **⚠ Superseded as the live schema reference (2026-06-28).** This is the original pre-implementation
+> data-model *draft* (it self-describes as "a model-level draft, not final Prisma syntax"). The schema
+> has since been implemented and **diverged substantially**. Source of truth:
+> [`../../prisma/schema.prisma`](../../prisma/schema.prisma); status index:
+> [`explorer-project-checkpoint.md`](explorer-project-checkpoint.md). Implemented-name map (this draft → real schema):
+> - `Transaction` → **`ExplorerTransaction`**
+> - `CoreSlot` → **`CoreSlotProjection`**; `CoreSlotEvent` → **`CoreSlotLifecycleEvent`** +
+>   `CoreSlotMetadataChange`/`CoreSlotPayoutChange`/`CoreSlotParameterChange`/`CoreSlotConsensusKeyRotation`/`CoreSlotConsensusWindow`
+> - `RewardEpoch` → **`RewardEpochProjection`**; `RewardClaim` → **`SlotRewardProjection`** (observed
+>   sample) + **`RewardClaimEvent`** (rebuildable); `RewardEvent` → `RewardClaimEvent` +
+>   `RewardsParamsChange` + `RewardsTreasuryPayment`
+> - `ModuleBalanceSnapshot` + `SupplySnapshot` → **one `RewardsBalanceSample`** (`sampleKind ∈
+>   {module_balance, treasury, supply, cumulative_emitted}`); `AccountBalance` → **`AccountBalanceCurrent`**
+> - `Block.proposerCoreSlotId` was **not** built — proposer→slot attribution is the separate
+>   rebuildable `BlockProposerAttribution` (joined via the temporal map at height N).
+> - **Omitted entirely** (built later in Phases 6b/8): `BlockSignature`, `OperatorSigningEvidence`,
+>   `BlockProposerAttribution`, `CoreSlotConsensusWindow`, `CoreSlotConsensusKeyRotation`,
+>   `CoreSlotLivenessEvidence`/`CoreSlotLivenessSummary`, `CoreSlotHealthSnapshot`,
+>   `NetworkLivenessRiskSnapshot`, plus `ProjectionCursor`/`ProjectionFailure`.
+
 ## Data Model Verdict
 
 Use a generic block/tx/event foundation plus Twilight-native CoreSlot and rewards models. Avoid staking-centric compatibility tables. Store raw JSON for auditability and forward compatibility, then layer semantic projections for known CoreSlot/rewards events and messages.

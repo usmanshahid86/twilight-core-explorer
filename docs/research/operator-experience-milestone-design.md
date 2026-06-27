@@ -4,6 +4,17 @@ Date: 2026-06-24
 Scope: DESIGN-ONLY (this is the only file written). No chain change, no schema migration,
 no projection/page/API code is implemented here.
 
+> **⚠ Superseded as a design (2026-06-28).** This DESIGN-ONLY milestone is now **built and
+> live-proven**. Gap #1 (per-operator liveness/uptime — the only one needing new ingestion) shipped as
+> the liveness stack: `block_signatures_v1` → `operator_signing_evidence_v1` → `coreslot_liveness_v1`
+> (per-height evidence) → `coreslot_liveness_summary_v1` → `coreslot_health_v1`
+> (`CoreSlotHealthSnapshot` + `NetworkLivenessRiskSnapshot`), Phases 8a–8c-3. The remaining five gaps
+> shipped as the Phase 9c/9d API + the Phase 11 first-class **`/operator/[address]`** page
+> (operator-forward identity reusing the CoreSlot detail). The `validatorUpdateHeight + 2` boundary
+> this design **(inferred)** in §0 is now **live-proven** (Phase 6b-4 rerun + the 2026-06-26 behavioral
+> validation). §0 "confirmed chain ground truth" remains accurate and is still a useful reference. Live
+> status: [`explorer-project-checkpoint.md`](explorer-project-checkpoint.md).
+
 This milestone closes the six highest-impact operator/monitor gaps identified in
 `explorer-coverage-and-fix-validation.md` (the "Top gaps ranked by operator-friendliness
 impact" list, lines 237–257). It defines DEPTH for gap #1 (per-operator liveness/uptime,

@@ -2,6 +2,23 @@
 
 Date: 2026-06-23
 
+> **⚠ Superseded as a build plan (2026-06-28).** This is the original architecture *proposal* (future
+> tense). The proposed system is now **fully built and live-proven through Phase 12** — for current
+> truth see [`explorer-project-checkpoint.md`](explorer-project-checkpoint.md) (status index),
+> [`../../prisma/schema.prisma`](../../prisma/schema.prisma) (data model), and
+> [`../reference/openapi.json`](../reference/openapi.json) (the API contract, 32 paths). The sections
+> below are retained for design rationale. Known drift to read past:
+> - **No `packages/ui`** — proposed, never built. Packages are `chain-client`, `config`, `db`,
+>   `decoder`, `proto`; the web app is `apps/web` (Next.js 14 app-router) with inline components.
+> - **Model names changed.** There is no `CoreSlot`/`CoreSlotEvent`/`RewardEpoch`/`RewardClaim`/
+>   `RewardEvent`/`SupplySnapshot`/`ModuleBalanceSnapshot`. Actual: `CoreSlotProjection` +
+>   `CoreSlotLifecycleEvent`/`CoreSlot*Change`, `RewardEpochProjection`, `RewardClaimEvent`,
+>   `RewardsBalanceSample` (supply reuses `sampleKind="supply"`), `AccountBalanceCurrent`.
+> - **Semantic projections are separate rebuildable projector quartets** (each with its own
+>   `ProjectionCursor`/`ProjectionFailure`), not the inline indexer steps sketched in §Indexer Worker.
+> - **API is versioned `/api/v1/*`** with `{data}` / `{data,page}` / `{error}` envelopes — not the
+>   `/api/...` paths or `data`/`pagination`/`meta` envelope sketched in §API Design.
+
 ## Architecture Verdict
 
 Build a Twilight-native TypeScript monorepo with a clean schema and selected reuse from the reference TypeScript explorer/indexer. Do not fork the old product wholesale. Do not design around standard staking validators. The explorer must model CoreSlot PoA, `x/rewards`, and `utwlt`.
