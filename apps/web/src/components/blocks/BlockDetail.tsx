@@ -15,9 +15,10 @@ import { formatAbsoluteTime } from '@/lib/format/time';
 import { statusTone } from '@/lib/format/status';
 
 export function BlockDetail({ height }: { height: string }) {
-  // Client-side, string-safe malformed-height check (no Number()). The API still validates
-  // (invalid_height / not_found) and ErrorState branches on error.code.
-  const valid = /^\d+$/.test(height);
+  // Client-side, string-safe malformed-height check (no Number()): a canonical positive integer
+  // (rejects "0", leading zeros, and empty). The API still validates (invalid_height / not_found)
+  // and ErrorState branches on error.code.
+  const valid = /^[1-9]\d*$/.test(height);
   const query = useBlock(valid ? height : '');
   const [rawOpen, setRawOpen] = useState(false);
   const raw = useBlockRaw(valid ? height : '', rawOpen);

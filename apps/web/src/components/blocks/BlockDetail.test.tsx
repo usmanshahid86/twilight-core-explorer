@@ -68,6 +68,15 @@ describe('BlockDetail', () => {
     expect(apiGetPath).not.toHaveBeenCalled();
   });
 
+  it('rejects "0" and leading-zero heights as invalid input (no API call)', () => {
+    for (const bad of ['0', '007']) {
+      const { unmount } = renderWithClient(<BlockDetail height={bad} />);
+      expect(screen.getByText(/must be a positive integer/i)).toBeInTheDocument();
+      unmount();
+    }
+    expect(apiGetPath).not.toHaveBeenCalled();
+  });
+
   it('not_found -> NotFound state', async () => {
     apiGetPath.mockImplementation(async () => {
       throw new ApiError('not_found', 'no such block', 404);

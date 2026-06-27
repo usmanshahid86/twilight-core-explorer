@@ -90,7 +90,7 @@ mapping. Existing boundary + theme guards still pass.
 
 - `npm run typecheck` (root) — exit 0
 - `npm run build` (web) — ✓ 13 routes (lists static, details dynamic-on-demand)
-- `npm test` (root) — exit 0: `apps/api` 114, `apps/web` **61** (17 files)
+- `npm test` (root) — exit 0: `apps/api` 114, `apps/web` **62** (17 files)
 - `npm --prefix apps/web run openapi:check` — up to date (no API change)
 - `npm --prefix apps/web run lint` — clean
 - `git diff --check` — clean; no `.next`/`dist` tracked
@@ -108,4 +108,15 @@ mapping. Existing boundary + theme guards still pass.
 CoreSlot list/detail, liveness, network (validator-set/proposers), the operator page (Phase 11);
 rewards epochs/claims/balances/params/treasury, supply detail (Phase 12); list-filter UIs; charts.
 
-**Phase 10b Generic Explorer Pages: COMPLETE — ready for Codex review.**
+## 12. Codex PASS + Copilot PR #19 fix (2026-06-27)
+
+Codex reviewed the committed diff and returned **PASS, no blockers** (one non-blocking note:
+`apiGetPath` ignores extra params — safe, since all callers are type-checked; deferred).
+
+Copilot flagged one issue: BlockDetail's client-side height check used `^\d+$`, which accepts `"0"`
+and leading-zero forms (e.g. `"007"`) despite the "positive integer" message. Fixed to `^[1-9]\d*$`
+(rejects `0`, leading zeros, empty); legit heights from the API/search are always canonical, so
+nothing real breaks. Added a regression test (`"0"` and `"007"` → InvalidInput, no API call). Web
+tests: 61 → **62**.
+
+**Phase 10b Generic Explorer Pages: COMPLETE (Codex PASS; Copilot PR fix applied) — ready to merge.**
