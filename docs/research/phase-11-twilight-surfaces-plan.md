@@ -7,7 +7,15 @@ Depends on: Phase 9 API + Phase 10a/10b (`apps/web`, merged). Plan is contract-g
 ## 1. Phase 11 Plan: **READY**
 
 The four §20 design questions are **locked** (operatorAddress+fallbacks; search slot-link primary;
-separate `/network` route+nav; bounded liveness fan-out). 11a is fully specified.
+separate `/network` route+nav; bounded liveness fan-out).
+
+**Implementation status (2026-06-27):**
+- **11a — CoreSlot list + detail + reusable sections: ✅ DONE** (PASS; report
+  `docs/research/phase-11a-coreslot-surfaces-report.md`; branch `feat/11a-coreslot-surfaces`).
+  Delivered `/coreslots` + `/coreslots/[slotId]` with the six reusable `slotId`-parameterized sections;
+  web tests 62→67; no new client capability needed.
+- **11b — Liveness + Network pages: pending.**
+- **11c — Operator page: pending** (composes 11a's sections via operator→slot resolution).
 
 ## 2. Executive summary
 
@@ -185,13 +193,16 @@ operator page 0/1/N states + reuses sections; rewards caveat badge present; sear
 `/coreslots/[slotId]` navigation; no `Number()` on slotId/heights/amounts; boundary + theme guards;
 `openapi:check`. Vitest + RTL + jsdom.
 
-## 17. Implementation sequencing — **recommended split: 11a → 11b → 11c**
+## 17. Implementation sequencing — **split: 11a → 11b → 11c**
 
-- **11a — CoreSlot list + detail + reusable sections** (the bulk; 8 sub-resources). Foundation for 11c.
-- **11b — Liveness + Network pages** (light; reuses existing hooks + per-slot health). Independent of
-  the operator page; can follow or parallel 11a.
-- **11c — Operator page** (reuses 11a's sections via operator→slot resolution; the riskiest/novel
-  resolution logic gets focused review after the sections exist).
+- **11a — CoreSlot list + detail + reusable sections — ✅ DONE.** `/coreslots`, `/coreslots/[slotId]`,
+  and `coreslots/sections/{Health,Liveness,ProposedBlocks,AuthorityHistory,Rewards,Raw}.tsx` (each takes
+  `slotId`). 10 new hooks via existing `apiGet`/`apiGetPath`. `/liveness`+`/health` correctly use
+  `useQuery` (non-paginated). Codex review pending.
+- **11b — Liveness + Network pages** (pending; light — `/liveness` reuses `useCoreSlotHealth` bounded
+  fan-out, `/network` reuses `useValidatorSet(height)` + `useProposers`). Independent of 11c.
+- **11c — Operator page** (pending; reuses 11a's `coreslots/sections/*` after resolving operator→slot
+  via `/coreslots?operatorAddress=` + consensus/payout fallback; cardinality 0/1/N).
 
 Three reviewable PRs beat one very large PR: 11a is large, 11c depends on 11a's components, and the
 operator-resolution risk is best isolated in 11c. Each PR: typecheck/build/test/openapi:check/lint
