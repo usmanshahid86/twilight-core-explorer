@@ -21,6 +21,9 @@ describe('rewards epochs', () => {
     const res = await app.inject({ url: '/api/v1/rewards/epochs?limit=2' });
     assert.deepEqual(res.json().data.map((e) => e.epochNumber), ['3', '2']);
     assert.equal(res.json().data[0].rewardSemantics, 'aggregate_projection');
+    // Phase 7.2: emission context promoted to first-class contract fields.
+    assert.equal(res.json().data[0].cumulativeEmitted, '1000');
+    assert.equal(res.json().data[0].distributionMethod, 'DISTRIBUTION_METHOD_UNIFORM_ACTIVE_BLOCKS');
     assert.ok(res.json().page.nextCursor);
     const res2 = await app.inject({
       url: `/api/v1/rewards/epochs?limit=2&cursor=${encodeURIComponent(res.json().page.nextCursor)}`,

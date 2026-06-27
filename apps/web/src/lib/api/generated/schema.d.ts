@@ -1826,6 +1826,8 @@ export interface paths {
                                 totalReward: string | null;
                                 denom: string | null;
                                 activeSlotCount: number | null;
+                                cumulativeEmitted: string | null;
+                                distributionMethod: string | null;
                                 /** @enum {string} */
                                 rewardSemantics: "aggregate_projection";
                             }[];
@@ -1901,6 +1903,8 @@ export interface paths {
                                 totalReward: string | null;
                                 denom: string | null;
                                 activeSlotCount: number | null;
+                                cumulativeEmitted: string | null;
+                                distributionMethod: string | null;
                                 /** @enum {string} */
                                 rewardSemantics: "aggregate_projection";
                                 raw?: unknown;

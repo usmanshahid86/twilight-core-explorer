@@ -1,8 +1,10 @@
+import type { ChainClient } from '@twilight-explorer/chain-client';
 import {
   haltProjectionCursorError,
   updateProjectionCursorSuccess,
   type ProjectionCursorPrisma,
 } from './cursor.js';
+import { seedCoreSlotGenesisIdentity } from './coreslot-genesis-identity.js';
 import {
   CORESLOT_METADATA_EVENT_TYPE,
   CORESLOT_METADATA_PROJECTION,
@@ -17,6 +19,11 @@ export interface ProjectCoreSlotMetadataRangeArgs {
   chainId: string;
   startHeight: bigint;
   endHeight: bigint;
+  // When rebuilding from genesis (reset / startHeight<=1) a ChainClient is provided so the
+  // genesis CoreSlot identity baseline (F1) can be seeded before event replay. Optional so
+  // incremental runs and DB-only tests need no client.
+  client?: Pick<ChainClient, 'getGenesis'> | undefined;
+  seedGenesis?: boolean | undefined;
 }
 
 export interface ProjectCoreSlotMetadataHeightArgs {
@@ -91,6 +98,17 @@ interface MetadataPayload {
 export async function projectCoreSlotMetadataRange(
   args: ProjectCoreSlotMetadataRangeArgs,
 ): Promise<ProjectCoreSlotMetadataResult[]> {
+  const shouldSeedGenesis = args.seedGenesis === true || args.startHeight <= 1n;
+  if (shouldSeedGenesis && args.client) {
+    // Identity analogue of the temporal-map genesis seed; writes the CoreSlotProjection
+    // baseline for genesis-created slots before the event replay below upserts onto it.
+    await seedCoreSlotGenesisIdentity({
+      prisma: args.prisma,
+      chainId: args.chainId,
+      client: args.client,
+    });
+  }
+
   const results: ProjectCoreSlotMetadataResult[] = [];
   for (let height = args.startHeight; height <= args.endHeight; height += 1n) {
     results.push(await projectCoreSlotMetadataHeight({

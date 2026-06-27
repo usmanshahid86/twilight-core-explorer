@@ -19,6 +19,8 @@ export const RewardEpochListItem = Type.Object(
     totalReward: Nullable(Type.String()),
     denom: Nullable(Type.String()),
     activeSlotCount: Nullable(Type.Integer()),
+    cumulativeEmitted: Nullable(Type.String()),
+    distributionMethod: Nullable(Type.String()),
     rewardSemantics: Type.Literal(REWARD_SEMANTICS_AGGREGATE),
   },
   { $id: 'RewardEpochListItem' },
@@ -32,6 +34,8 @@ export const RewardEpochDetail = Type.Object(
     totalReward: Nullable(Type.String()),
     denom: Nullable(Type.String()),
     activeSlotCount: Nullable(Type.Integer()),
+    cumulativeEmitted: Nullable(Type.String()),
+    distributionMethod: Nullable(Type.String()),
     rewardSemantics: Type.Literal(REWARD_SEMANTICS_AGGREGATE),
     raw: Type.Optional(Type.Unknown()),
   },
@@ -198,6 +202,8 @@ export interface EpochRow {
   totalReward: string | null;
   denom: string | null;
   activeSlotCount: number | null;
+  cumulativeEmitted: string | null;
+  distributionMethod: string | null;
   rawSnapshotJson: unknown;
 }
 
@@ -209,6 +215,8 @@ export function toEpochListItem(r: EpochRow): Static<typeof RewardEpochListItem>
     totalReward: r.totalReward,
     denom: r.denom,
     activeSlotCount: r.activeSlotCount,
+    cumulativeEmitted: r.cumulativeEmitted,
+    distributionMethod: r.distributionMethod,
     rewardSemantics: REWARD_SEMANTICS_AGGREGATE,
   };
 }
@@ -221,6 +229,8 @@ export function toEpochDetail(r: EpochRow, includeRaw: boolean): Static<typeof R
     totalReward: r.totalReward,
     denom: r.denom,
     activeSlotCount: r.activeSlotCount,
+    cumulativeEmitted: r.cumulativeEmitted,
+    distributionMethod: r.distributionMethod,
     rewardSemantics: REWARD_SEMANTICS_AGGREGATE,
   };
   if (includeRaw) {

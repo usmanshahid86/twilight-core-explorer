@@ -704,6 +704,8 @@ export function epoch(epochNumber, overrides = {}) {
     totalReward: '1000',
     denom: 'utwlt',
     activeSlotCount: 4,
+    cumulativeEmitted: '1000',
+    distributionMethod: 'DISTRIBUTION_METHOD_UNIFORM_ACTIVE_BLOCKS',
     rawSnapshotJson: { epoch: epochNumber },
     ...overrides,
   };

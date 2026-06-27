@@ -171,6 +171,8 @@ export function buildCoreSlotSemanticRebuildSteps(
           chainId,
           startHeight,
           endHeight,
+          client: args.client,
+          seedGenesis: args.seedGenesis,
         });
       },
     },

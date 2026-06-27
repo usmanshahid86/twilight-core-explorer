@@ -47,6 +47,54 @@ describe('Rewards semantic projection', () => {
     assert.equal(p.claims.size, 0);
   });
 
+  it('3a. epoch_finalized maps live nyks-core keys (allocated/eligible_slots/cumulative_emitted/distribution_method) + utwlt denom', async () => {
+    // Real Phase 7.2 fixture event shape: the chain emits `allocated`/`eligible_slots`/
+    // `cumulative_emitted`/`distribution_method` (NOT total_reward/active_slot_count/denom).
+    const p = new MockRewardsPrisma();
+    p.events.push(evt(3n, 30n, null, null, 'epoch_finalized', [
+      { key: 'epoch', value: '3' },
+      { key: 'start_height', value: '21' },
+      { key: 'end_height', value: '30' },
+      { key: 'minted_emission', value: '4161900' },
+      { key: 'cumulative_emitted', value: '12485700' },
+      { key: 'reward_pool', value: '4161900' },
+      { key: 'allocated', value: '4161900' },
+      { key: 'carry_out', value: '0' },
+      { key: 'eligible_slots', value: '4' },
+      { key: 'distribution_method', value: 'DISTRIBUTION_METHOD_UNIFORM_ACTIVE_BLOCKS' },
+    ]));
+    await projectRewardsSemanticHeight({ prisma: p, chainId: CHAIN_ID, height: 30n });
+    const e = p.epochs.get('3');
+    assert.equal(e.totalReward, '4161900'); // <- allocated
+    assert.equal(e.activeSlotCount, 4); // <- eligible_slots
+    assert.equal(e.cumulativeEmitted, '12485700');
+    assert.equal(e.distributionMethod, 'DISTRIBUTION_METHOD_UNIFORM_ACTIVE_BLOCKS');
+    assert.equal(e.denom, 'utwlt'); // <- not emitted; native-denom default
+  });
+
+  it('3b. reward_claimed maps signer -> claimant + utwlt denom (live nyks-core keys)', async () => {
+    const SIGNER = 'twilight1signerxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
+    const p = new MockRewardsPrisma();
+    p.transactions.push(successTx('CLAIM-SIGNER', 31n));
+    p.messages.push(msg(1n, 'CLAIM-SIGNER', 31n, 0, REWARDS_CLAIM_TYPE_URL, {
+      slot_id: '1', start_epoch: '2', end_epoch: '3',
+    }));
+    p.events.push(evt(10n, 31n, 'CLAIM-SIGNER', 0, 'reward_claimed', [
+      { key: 'signer', value: SIGNER },
+      { key: 'slot_id', value: '1' },
+      { key: 'start_epoch', value: '2' },
+      { key: 'end_epoch', value: '3' },
+      { key: 'amount', value: '2080950' },
+      { key: 'payout_count', value: '1' },
+      { key: 'msg_index', value: '0' },
+    ]));
+    await projectRewardsSemanticHeight({ prisma: p, chainId: CHAIN_ID, height: 31n });
+    const c = [...p.claims.values()][0];
+    assert.equal(c.claimant, SIGNER); // <- signer, not claimant/operator/creator
+    assert.equal(c.denom, 'utwlt'); // <- not emitted; native-denom default
+    assert.equal(c.amount, '2080950');
+  });
+
   it('5. MsgClaimRewards + reward_claimed creates a RewardClaimEvent', async () => {
     const p = new MockRewardsPrisma();
     seedClaim(p, { height: 120n });

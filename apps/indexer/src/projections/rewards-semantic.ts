@@ -14,6 +14,7 @@ import {
   REWARDS_PAUSE_TYPE_URL,
   REWARDS_PAUSED_EVENT_TYPE,
   REWARDS_PARAMS_CHANGE_TYPE,
+  REWARDS_NATIVE_DENOM,
   REWARDS_RESUME_TYPE_URL,
   REWARDS_RESUMED_EVENT_TYPE,
   REWARDS_SEMANTIC_PROJECTION,
@@ -239,9 +240,20 @@ async function projectEpochFinalized(
     return;
   }
 
-  const totalReward = readString(attrs.total_reward) ?? readString(attrs.amount) ?? null;
-  const denom = readString(attrs.denom) ?? null;
-  const activeSlotCount = parseInt32(readString(attrs.active_slot_count));
+  // Live nyks-core epoch_finalized emits `allocated` (rewards distributed this epoch),
+  // `eligible_slots`, `cumulative_emitted`, `distribution_method` — NOT total_reward/
+  // active_slot_count (the originally-assumed keys, kept as defensive fallbacks). denom is
+  // not emitted; rewards are utwlt by chain convention (REWARDS_NATIVE_DENOM). carry_out /
+  // reward_pool stay in preserved raw until a fixture exercises carry_out != 0. See
+  // docs/research/phase-7.2-rewards-fixture-findings.md.
+  const totalReward =
+    readString(attrs.allocated) ?? readString(attrs.total_reward) ?? readString(attrs.amount) ?? null;
+  const denom = readString(attrs.denom) ?? REWARDS_NATIVE_DENOM;
+  const activeSlotCount = parseInt32(
+    readString(attrs.eligible_slots) ?? readString(attrs.active_slot_count),
+  );
+  const cumulativeEmitted = readString(attrs.cumulative_emitted) ?? null;
+  const distributionMethod = readString(attrs.distribution_method) ?? null;
 
   const data = {
     epochNumber,
@@ -249,6 +261,8 @@ async function projectEpochFinalized(
     totalReward,
     denom,
     activeSlotCount,
+    cumulativeEmitted,
+    distributionMethod,
     sourceEventId: event.id,
     rawEventJson: buildRawEventJson(event),
   };
@@ -260,6 +274,8 @@ async function projectEpochFinalized(
       totalReward,
       denom,
       activeSlotCount,
+      cumulativeEmitted,
+      distributionMethod,
       sourceEventId: event.id,
       rawEventJson: buildRawEventJson(event),
     },
@@ -619,8 +635,12 @@ async function applyClaim(
   const endEpoch = parseBigInt(
     readString(attrs.end_epoch) ?? readString(decoded.end_epoch) ?? readString(decoded.endEpoch),
   );
-  const claimant = readString(attrs.claimant)
+  // Live nyks-core reward_claimed emits `signer` (the claim signer, which need not be the
+  // slot's payout operator — see runbook). claimant/operator/creator kept as fallbacks.
+  const claimant = readString(attrs.signer)
+    ?? readString(attrs.claimant)
     ?? readString(attrs.operator)
+    ?? readString(decoded.signer)
     ?? readString(decoded.claimant)
     ?? readString(decoded.creator)
     ?? null;
@@ -634,7 +654,7 @@ async function applyClaim(
       startEpoch: startEpoch ?? null,
       endEpoch: endEpoch ?? null,
       amount: readString(attrs.amount) ?? null,
-      denom: readString(attrs.denom) ?? null,
+      denom: readString(attrs.denom) ?? REWARDS_NATIVE_DENOM,
       height: event.height,
       txHash: event.txHash ?? message?.txHash ?? '',
       msgIndex: message?.msgIndex ?? event.msgIndex ?? null,
@@ -650,7 +670,7 @@ async function applyClaim(
       startEpoch: startEpoch ?? null,
       endEpoch: endEpoch ?? null,
       amount: readString(attrs.amount) ?? null,
-      denom: readString(attrs.denom) ?? null,
+      denom: readString(attrs.denom) ?? REWARDS_NATIVE_DENOM,
       sourceMessageId: message?.id ?? null,
       rawMessageJson: message ? buildRawMessageJson(message) : undefined,
       rawEventJson: buildRawEventJson(event),

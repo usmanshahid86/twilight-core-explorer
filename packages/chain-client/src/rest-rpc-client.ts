@@ -208,8 +208,8 @@ export class RestRpcChainClient implements ChainClient {
     return txs;
   }
 
-  async getSupply(): Promise<SupplySource[]> {
-    const raw = await this.rest(COSMOS_REST_ROUTES.supply);
+  async getSupply(height?: bigint): Promise<SupplySource[]> {
+    const raw = await this.rest(COSMOS_REST_ROUTES.supply, undefined, height);
     const supply = readArray(getRecord(raw).supply);
 
     return supply.map((coin) => {
@@ -222,8 +222,8 @@ export class RestRpcChainClient implements ChainClient {
     });
   }
 
-  async getBalances(address: string): Promise<ModuleSnapshot> {
-    return this.snapshot(buildPath(COSMOS_REST_ROUTES.balances, { address }));
+  async getBalances(address: string, height?: bigint): Promise<ModuleSnapshot> {
+    return this.snapshot(buildPath(COSMOS_REST_ROUTES.balances, { address }), undefined, height);
   }
 
   async getCoreSlotParams(): Promise<ModuleSnapshot> {
@@ -303,10 +303,12 @@ export class RestRpcChainClient implements ChainClient {
   async getSlotRewards(
     slotId: bigint,
     pagination: PaginationRequest = {},
+    height?: bigint,
   ): Promise<ModuleSnapshot> {
     return this.snapshot(
       buildPath(REWARDS_REST_ROUTES.slotRewards, { slot_id: slotId }),
       buildPaginationQuery(pagination),
+      height,
     );
   }
 
@@ -324,8 +326,8 @@ export class RestRpcChainClient implements ChainClient {
     );
   }
 
-  async getCumulativeEmitted(): Promise<ModuleSnapshot> {
-    return this.snapshot(REWARDS_REST_ROUTES.cumulativeEmitted);
+  async getCumulativeEmitted(height?: bigint): Promise<ModuleSnapshot> {
+    return this.snapshot(REWARDS_REST_ROUTES.cumulativeEmitted, undefined, height);
   }
 
   async getSupplySchedule(): Promise<ModuleSnapshot> {
@@ -336,8 +338,8 @@ export class RestRpcChainClient implements ChainClient {
     return this.snapshot(REWARDS_REST_ROUTES.currentEpochActiveBlocks);
   }
 
-  async getModuleBalances(): Promise<ModuleSnapshot> {
-    return this.snapshot(REWARDS_REST_ROUTES.moduleBalances);
+  async getModuleBalances(height?: bigint): Promise<ModuleSnapshot> {
+    return this.snapshot(REWARDS_REST_ROUTES.moduleBalances, undefined, height);
   }
 
   private async rpc(
@@ -354,19 +356,25 @@ export class RestRpcChainClient implements ChainClient {
   private async rest(
     path: string,
     query?: Record<string, string | number | bigint | boolean | undefined>,
+    height?: bigint,
   ): Promise<unknown> {
     return getJson(this.restUrl, path, {
       query,
       timeoutMs: this.timeoutMs,
       fetchImpl: this.fetchImpl,
+      // Cosmos SDK serves historical state at a specific block when this header is set, so
+      // sampled snapshots reflect (and are honestly labeled at) the requested height rather
+      // than whatever 'latest' happens to be when the query lands.
+      ...(height !== undefined ? { headers: { 'x-cosmos-block-height': height.toString() } } : {}),
     });
   }
 
   private async snapshot(
     path: string,
     query?: Record<string, string | number | bigint | boolean | undefined>,
+    height?: bigint,
   ): Promise<ModuleSnapshot> {
-    return { raw: await this.rest(path, query) };
+    return { raw: await this.rest(path, query, height) };
   }
 }
 

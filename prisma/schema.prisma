@@ -600,18 +600,23 @@ model CoreSlotConsensusKeyRotation {
 
 // Aggregate/finalization context from epoch_finalized. NOT claim truth.
 model RewardEpochProjection {
-  id              BigInt    @id @default(autoincrement())
-  epochNumber     BigInt    @unique
-  height          BigInt
-  blockTime       DateTime?
-  totalReward     String?
-  denom           String?
-  activeSlotCount Int?
-  sourceEventId   BigInt?   @unique
-  rawEventJson    Json?
-  rawSnapshotJson Json?
-  createdAt       DateTime  @default(now())
-  updatedAtDb     DateTime  @updatedAt
+  id                 BigInt    @id @default(autoincrement())
+  epochNumber        BigInt    @unique
+  height             BigInt
+  blockTime          DateTime?
+  totalReward        String?
+  denom              String?
+  activeSlotCount    Int?
+  // Promoted from raw in Phase 7.2 (validated against the live rewards fixture). carryOut /
+  // rewardPool stay in rawEventJson until a fixture exercises carry_out != 0 (see
+  // docs/research/phase-7.2-rewards-fixture-findings.md, decision D2).
+  cumulativeEmitted  String?
+  distributionMethod String?
+  sourceEventId      BigInt?   @unique
+  rawEventJson       Json?
+  rawSnapshotJson    Json?
+  createdAt          DateTime  @default(now())
+  updatedAtDb        DateTime  @updatedAt
 
   @@index([height])
 }

@@ -11,9 +11,13 @@ import { REWARDS_NATIVE_DENOM, REWARDS_SNAPSHOT_PROJECTION } from './types.js';
  * downstream consumers.
  */
 export interface RewardsSnapshotChainClient {
-  getSlotRewards(slotId: bigint, pagination?: { key?: string | undefined }): Promise<{ raw: unknown }>;
-  getModuleBalances(): Promise<{ raw: unknown }>;
-  getCumulativeEmitted(): Promise<{ raw: unknown }>;
+  getSlotRewards(
+    slotId: bigint,
+    pagination?: { key?: string | undefined },
+    height?: bigint,
+  ): Promise<{ raw: unknown }>;
+  getModuleBalances(height?: bigint): Promise<{ raw: unknown }>;
+  getCumulativeEmitted(height?: bigint): Promise<{ raw: unknown }>;
 }
 
 export interface RewardsSnapshotPrisma extends ProjectionCursorPrisma {
@@ -59,7 +63,7 @@ export async function ingestRewardsSnapshot(
     let key: string | undefined;
     let guard = 0;
     do {
-      const snapshot = await client.getSlotRewards(slotId, key ? { key } : undefined);
+      const snapshot = await client.getSlotRewards(slotId, key ? { key } : undefined, height);
       for (const reward of extractSlotRewards(snapshot.raw)) {
         await upsertSlotReward(prisma, { slotId, height, reward, raw: snapshot.raw });
         slotRewardRows += 1;
@@ -70,7 +74,7 @@ export async function ingestRewardsSnapshot(
   }
 
   let balanceSamples = 0;
-  const moduleBalances = await client.getModuleBalances();
+  const moduleBalances = await client.getModuleBalances(height);
   for (const balance of extractBalances(moduleBalances.raw)) {
     await upsertBalanceSample(prisma, {
       height,
@@ -84,7 +88,7 @@ export async function ingestRewardsSnapshot(
     balanceSamples += 1;
   }
 
-  const cumulative = await client.getCumulativeEmitted();
+  const cumulative = await client.getCumulativeEmitted(height);
   const cumulativeAmount = extractAmount(cumulative.raw);
   if (cumulativeAmount) {
     await upsertBalanceSample(prisma, {
