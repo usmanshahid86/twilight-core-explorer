@@ -20,7 +20,9 @@ TypeScript monorepo (npm workspaces):
 | `packages/db` | Prisma client |
 | `packages/decoder` | descriptor-backed protobuf tx decoding |
 | `packages/proto` | Twilight descriptor artifacts |
-| `apps/indexer` | ingestion + semantic projections (`api/`, `web/` are future) |
+| `apps/indexer` | ingestion + semantic projections |
+| `apps/api` | DB-only public REST/OpenAPI service (Phase 9; 32 paths) |
+| `apps/web` | Next.js app-router explorer UI consuming the API (Phase 10) |
 | `prisma/` | schema + migrations |
 | `docs/research/` | one design/report doc per phase; the project checkpoint is the status index |
 
@@ -96,9 +98,9 @@ Implemented:
 
 Not yet implemented:
 
-- Public HTTP API routes.
-- Web explorer UI.
-- Proposer enrichment.
+- Twilight-specific web pages: CoreSlot, liveness, rewards, and the operator page (Phase 11/12). The
+  public API (Phase 9, 32 paths) and the web foundation + generic explorer pages — Overview, blocks,
+  transactions, accounts, search (Phase 10a/10b) — are done.
 - Production deployment packaging and operating runbooks.
 - Generated gRPC/proto client transport behind `ChainClient`.
 

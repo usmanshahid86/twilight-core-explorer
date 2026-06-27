@@ -23,8 +23,12 @@ stack (6a/6b/7/8a–8c-3) is complete and live-proven. On top of it the **public
 health/status/blocks), 9b (generic explorer: txs/accounts/search/diagnostics), 9c (CoreSlot/validator/
 liveness/health/network), and 9d (rewards/supply/account-balances) are all done, tested, and
 live-validated** (a strictly DB-only Fastify + TypeBox `apps/api`; OpenAPI **32 paths**), along with
-the **9d-0** indexer balance/supply snapshots. **The next phase is 10 (web foundation)**; Phase 7.2
-(live rewards-claim fixture) remains an open evidence task. See §6 for the 9a–9d breakdown.
+the **9d-0** indexer balance/supply snapshots. On top of that the **web explorer is now live: Phase
+10-0 (plan), 10a (foundation — Next.js app-router + Tailwind `apps/web`, typed OpenAPI client, auction
+theme, Overview/home, search, freshness model, standard states), and 10b (generic pages — blocks,
+transactions, accounts + sampled balances) are complete, tested (apps/web 62 tests, 13 routes), and
+Codex-passed**. **The next phase is 11 (Twilight-specific pages + the operator page)**; Phase 7.2
+(live rewards-claim fixture) remains an open evidence task. See §6 for the phase breakdown.
 
 This document summarizes what has already been decided and built, what is still only
 designed, and the recommended sequence from here. It is intended to keep implementation
@@ -939,23 +943,29 @@ What shipped (`balance_snapshot_v1` projection quartet):
 If truly live (not sampled) balances are ever wanted, that is a deliberate separate chain-reading
 service, explicitly outside the read-only API.
 
-### Phase 10: Web Foundation and Generic Explorer
+### Phase 10: Web Foundation and Generic Explorer (completed)
 
-Goal:
+Reports: `phase-10-web-design-and-execution-plan.md`, `phase-10a-web-foundation-report.md`,
+`phase-10b-generic-explorer-pages-report.md`.
 
-- Build the web app shell and generic explorer pages.
+Delivered `apps/web` — a strictly DB-only Next.js 14 app-router + Tailwind explorer consuming the
+Phase 9 API only (client-leaning: TanStack Query v5, no RSC data fetching, no mutations):
 
-Scope:
+- **10a (foundation):** extracted the reference `auction` theme (CSS-var tokens); typed OpenAPI client
+  generated from `openapi.json` (`apiGet`) + thin wrapper (envelope / `error.code` / opaque-cursor);
+  string-safe formatters (BigInt `utwlt→TWLT`, raw preserved); layout/nav shell; **Overview/home**;
+  global **search** shell (typed picker on ambiguity); the freshness model (API-down / indexer-lag /
+  projection-fail / sample-old / no-sample); standard states; `/api` diagnostics.
+- **10b (generic pages):** `apiGetPath` for templated paths; first keyset pagination
+  (`useInfiniteQuery`, opaque cursors, `nextCursor:null` stops); **blocks**, **transactions**,
+  **accounts** lists + details; block→txs via `/txs?height=`; lazy `include=raw`; account sampled
+  balances (`sampled:false` → "no sample", never `0`). Account tx-history omitted (the Phase 9 API has
+  no address/signer tx filter — not invented).
 
-- dark Twilight theme adapted from reference explorer.
-- dashboard.
-- blocks.
-- txs.
-- accounts.
-- search.
-- supply/network/API status.
-
-Do not bring old zkOS/dark-pool/BTC bridge pages forward.
+Invariants honored: heights/ids/amounts/cursors stay strings (no `Number()`); only generated-type
+fields rendered (no invented fields); reward/claim caveats kept visible; background via CSS-var theme
+tokens (no hardcoded hex). No old zkOS/dark-pool/BTC bridge IA carried forward. apps/web: 62 tests,
+13 routes; Codex PASS on 10a and 10b.
 
 ### Phase 11: Twilight-Specific Pages
 
@@ -1031,7 +1041,8 @@ snapshots are done — so the entire backend + API surface is built and live-val
 
 Remaining:
 
-- MVP usable explorer: web foundation (10) then Twilight-specific pages (11).
+- MVP usable explorer: web foundation + generic pages (10) are **done**; next is Twilight-specific
+  pages (11) then rewards/operator economics (12).
 - Production-grade operator explorer: the above + operator education/onboarding (12) and
   deployment/hardening (13, which also absorbs the API hardening deferred from 9a–9c — rate limiting,
   security headers, cache-control/ETag, a real linter).
@@ -1112,13 +1123,15 @@ Dependencies that must not be blurred:
 
 Recommended next implementation step:
 
-**Phase 10: Web Foundation** — the entire **public DB-only API is complete (9a → 9b → 9c → 9d)** plus
-the **9d-0** indexer balance/supply snapshots, all live-validated (apps/api 113 tests, OpenAPI 32
-paths). The next implementation step is the web app shell + generic explorer pages (dashboard, blocks,
-txs, accounts, search, supply/network/API-status) consuming the API, then Twilight-specific pages
-(Phase 11). **Phase 7.2** (live rewards-claim fixture) remains an open evidence task — not a phase
-blocker, but required before claim/operator-economics surfaces are presented as production-ready
-(9d already gates this with the `productionClaimReadiness:"gated_by_phase_7_2"` in-data caveat).
+**Phase 11: Twilight-Specific Pages + Operator page** — the backend/API (9a–9d, 9d-0) and the web
+foundation + generic explorer (Phase 10-0/10a/10b: `apps/web`, 62 tests, 13 routes, Codex PASS) are
+complete. The next implementation step is the Twilight-differentiating surfaces over the 9c/9d API:
+CoreSlot list/detail (lifecycle/authority/liveness/health/proposed-blocks/rewards), validator-set-at-
+height, proposer leaderboard, network liveness-risk, and the first-class **Operator page** (liveness +
+economics + authority history, reached via search). Phase 12 (rewards economics) and Phase 13
+(hardening) follow. **Phase 7.2** (live rewards-claim fixture) remains an open evidence task — not a
+phase blocker, but required before claim/operator-economics surfaces are presented as production-ready
+(9d/12 gate this with the `productionClaimReadiness:"gated_by_phase_7_2"` in-data caveat).
 
 The operator-liveness data dependency that gated the operator UX milestone is now fully satisfied:
 `CoreSlotHealthSnapshot` + `NetworkLivenessRiskSnapshot` give per-operator health and network

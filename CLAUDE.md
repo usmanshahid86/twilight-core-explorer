@@ -25,7 +25,9 @@ packages/
   decoder/       descriptor-backed protobuf tx decoding
   proto/         Twilight descriptor artifacts
 apps/
-  indexer/       ingestion + semantic projections (api/, web/ are future)
+  indexer/       ingestion + semantic projections
+  api/           DB-only public REST/OpenAPI service (Phase 9; 32 paths)
+  web/           Next.js app-router explorer UI consuming the API (Phase 10)
 prisma/          schema + migrations
 docs/research/   one report per phase; checkpoint is the index/source of truth
 ```
