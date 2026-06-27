@@ -35,7 +35,10 @@ class MockSeedPrisma {
     this.failures = new Map();
     this.coreSlotProjection = {
       upsert: async (args) => {
-        this.slots.set(args.where.slotId.toString(), { ...args.create });
+        const key = args.where.slotId.toString();
+        const existing = this.slots.get(key);
+        // Honor create-vs-update like Prisma so the no-clobber behavior is exercised.
+        this.slots.set(key, existing ? { ...existing, ...args.update } : { ...args.create });
       },
     };
     this.projectionFailure = {
@@ -94,6 +97,19 @@ describe('CoreSlot genesis identity seed (F1)', () => {
     assert.deepEqual([...p.slots.keys()].sort(), ['1', '2', '3', '4']);
   });
 
+  it('re-seed does not clobber event-derived state (no updatedHeight regression)', async () => {
+    const p = new MockSeedPrisma();
+    const client = clientWith([genesisSlot(1, { pubkeyB64: PUB })]);
+    await seedCoreSlotGenesisIdentity({ prisma: p, chainId: CHAIN_ID, client });
+    // Simulate later on-chain event replay updating the row past the genesis baseline.
+    Object.assign(p.slots.get('1'), { status: 'INACTIVE', updatedHeight: 42n });
+    // An incremental re-seed (non-reset, startHeight<=1) must leave event-derived state intact.
+    await seedCoreSlotGenesisIdentity({ prisma: p, chainId: CHAIN_ID, client });
+    const row = p.slots.get('1');
+    assert.equal(row.status, 'INACTIVE'); // not regressed to genesis ACTIVE
+    assert.equal(row.updatedHeight, 42n); // not regressed to genesis baseline 1
+  });
+
   it('records invalid_slot_id and skips a slot missing its id (never fabricates)', async () => {
     const p = new MockSeedPrisma();
     const bad = genesisSlot(2, { pubkeyB64: PUB });
@@ -106,7 +122,11 @@ describe('CoreSlot genesis identity seed (F1)', () => {
     assert.equal(result.slotsSeeded, 0);
     assert.equal(result.failuresCreated, 1);
     assert.equal(p.slots.size, 0);
-    assert.equal([...p.failures.values()][0].failureKind, 'invalid_slot_id');
+    const failure = [...p.failures.values()][0];
+    assert.equal(failure.failureKind, 'invalid_slot_id');
+    // Durability: stamped at the pre-chain sentinel height 0 so the metadata height-1 cleanup
+    // (deleteMany sourceHeight=1) cannot silently delete it. See coreslot-genesis-identity.ts.
+    assert.equal(failure.sourceHeight, 0n);
   });
 
   it('records genesis_coreslot_malformed when app_state.coreslot is empty', async () => {
@@ -117,7 +137,9 @@ describe('CoreSlot genesis identity seed (F1)', () => {
       client: clientWith(undefined, {}),
     });
     assert.equal(result.slotsSeeded, 0);
-    assert.equal([...p.failures.values()][0].failureKind, 'genesis_coreslot_malformed');
+    const failure = [...p.failures.values()][0];
+    assert.equal(failure.failureKind, 'genesis_coreslot_malformed');
+    assert.equal(failure.sourceHeight, 0n); // durable past the metadata height-1 cleanup
   });
 
   it('rethrows + records genesis_unavailable when getGenesis fails', async () => {

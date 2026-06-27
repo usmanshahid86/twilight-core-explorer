@@ -114,7 +114,13 @@ export async function seedCoreSlotGenesisIdentity(
     await args.prisma.coreSlotProjection.upsert({
       where: { slotId: slot.slotId },
       create,
-      update: create,
+      // Genesis identity is immutable and is only a BASELINE: on the reset+replay flow the
+      // table was cleared first, so this always takes the `create` path; later on-chain
+      // metadata/lifecycle/payout events upsert their own changes onto the same slotId. On an
+      // incremental re-seed (non-reset, startHeight<=1) the row already carries event-derived
+      // state, so the seed must NOT overwrite it — a no-op update preserves it (and avoids
+      // regressing updatedHeight back to the genesis baseline).
+      update: {},
     });
     slotsSeeded += 1;
   }
@@ -209,8 +215,15 @@ async function createFailure(
 ): Promise<void> {
   const failure: ProjectionFailureInput = {
     projectionName: CORESLOT_METADATA_PROJECTION,
+    // Genesis-document failures are stamped at the pre-chain sentinel height 0, NOT 1. The
+    // metadata per-height projection opens each height with
+    // `deleteMany({ projectionName, sourceHeight: height, resolved: false })` to keep reruns
+    // idempotent; since this seed runs inside the same metadata projection and the height loop
+    // starts at the min indexed block (>=1, CometBFT has no block 0), stamping a genesis failure
+    // at height 1 would let the height-1 pass silently delete it — defeating failure durability.
+    // Height 0 is never revisited by the loop, so the failure persists.
     module: 'coreslot',
-    sourceHeight: 1n,
+    sourceHeight: 0n,
     sourceTxHash: null,
     sourceMsgIndex: null,
     sourceMessageId: null,

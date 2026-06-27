@@ -89,6 +89,49 @@ up to date · static route guards: no stale/unsupported route implementations (o
 - Path B (separate `twilight_explorer_rewards` DB) stands; consolidate to one rewards-complete canonical
   fixture after Phase 12, per the scope doc.
 
+## 7b. Adversarial review + fixes (2026-06-27)
+
+Local adversarial-reviewer ran the full ritual independently (all numbers matched), verified the
+consensus-address derivation byte-for-byte and the live end-state, and returned **PARTIAL** with one
+MAJOR + notes. Resolved:
+
+- **MAJOR (fixed) — genesis-seed ProjectionFailures were deletable at height 1.** The seed stamped
+  failures at `sourceHeight: 1n` with `projectionName: CORESLOT_METADATA_PROJECTION`; the metadata
+  per-height pass opens height 1 with `deleteMany({projectionName, sourceHeight: 1, resolved:false})`,
+  so on a *malformed* genesis the durable failure was silently swallowed (failure-durability invariant
+  violation; happy path unaffected). **Fix:** stamp genesis-document failures at the pre-chain sentinel
+  `sourceHeight: 0n` (never revisited by the height loop, since min indexed block ≥1). Added assertions
+  that genesis failures persist at height 0.
+- **NOTE (fixed) — incremental re-seed could regress event-derived fields.** The upsert `update` branch
+  re-wrote the full baseline (incl. `updatedHeight: 1n`). Changed to a **no-op `update: {}`** so a
+  non-reset re-seed never clobbers lifecycle/metadata-derived state; added a no-clobber regression test
+  (and made the mock honor create-vs-update, addressing the reviewer's test-coverage note).
+- **NOTE (accepted, locked) — `denom ← utwlt`** on events that carry no denom is the locked D4
+  native-denom default, applied consistently (epoch + claim, both branches).
+- **Follow-up (out of scope, flagged) — temporal-map shares the same latent pattern:**
+  `coreslot-temporal-map.ts` writes *per-slot* genesis failures (`invalid_consensus_address`, etc.) at
+  `sourceHeight: 1n`, and `projectCoreSlotTemporalMapHeight` deletes `sourceHeight:height,resolved:false`
+  at height 1 — so a malformed *active* genesis slot's window failure is likewise deletable. Pre-existing
+  in a proven (Phase 8) component; left untouched here to keep this PR focused. **Recommend a separate
+  fix** mirroring the sentinel-height approach.
+
+Post-fix validation re-run: typecheck/lint OK; indexer **266** pass / 0 fail (was 265; +1 no-clobber
+test); happy-path fixture data intact (4 ACTIVE CoreSlots, 5 epochs, 3 slot rewards claimed, 0 failures).
+
+**Re-review (same reviewer, scoped to the fixes): PASS.** Independently confirmed the `0n` sentinel
+survives every `deleteMany` path in the blocks-present scenario, no `failureKey` collision across the
+three genesis failure kinds, and the no-clobber test genuinely discriminates the fix. Two non-blocking
+residuals tracked as follow-ups:
+- **Empty-`Block`-table sentinel edge:** `getMinBlockHeight` falls back to `0n` on an empty canonical
+  table, so `endHeight < startHeight` is `0 < 0 = false` and the loop runs height 0 → the height-0
+  `deleteMany` could wipe `0n` genesis failures. Requires empty-DB **and** malformed genesis **and**
+  projecting-before-ingesting at once (operationally unreachable; you always ingest first). Airtight fix:
+  have the height loop skip 0, or guard the rebuild against a zero-block chain.
+- **Duplicate-malformed-slot `failureKey` collapse (pre-existing, not introduced here):** N genesis slots
+  each missing `slot_id` share one deterministic `failureKey` → collapse to a single `ProjectionFailure`
+  row while `failuresCreated` counts N. Equally true before this change. Fix: add a per-slot discriminator
+  (e.g. array index) to the genesis-failure key.
+
 ## 8. Final recommendation
 
 **Ready for review** (local adversarial-reviewer, then Codex/Copilot on the PR). All locked decisions
