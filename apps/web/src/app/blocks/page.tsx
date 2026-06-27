@@ -1,11 +1,13 @@
-import { PlaceholderPage } from '@/components/PlaceholderPage';
+import { BlocksList } from '@/components/blocks/BlocksList';
 
 export default function BlocksPage() {
   return (
-    <PlaceholderPage
-      title="Blocks"
-      phase="10b"
-      description="Browse indexed blocks with proposer attribution and per-block detail."
-    />
+    <div className="space-y-6">
+      <div>
+        <h1 className="font-serif text-3xl text-text">Blocks</h1>
+        <p className="mt-1 text-sm text-text-muted">Indexed blocks, newest first.</p>
+      </div>
+      <BlocksList />
+    </div>
   );
 }

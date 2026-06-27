@@ -1,11 +1,13 @@
-import { PlaceholderPage } from '@/components/PlaceholderPage';
+import { AccountsList } from '@/components/accounts/AccountsList';
 
 export default function AccountsPage() {
   return (
-    <PlaceholderPage
-      title="Accounts"
-      phase="10b"
-      description="Look up accounts and their sampled balances."
-    />
+    <div className="space-y-6">
+      <div>
+        <h1 className="font-serif text-3xl text-text">Accounts</h1>
+        <p className="mt-1 text-sm text-text-muted">Indexed accounts and their sampled balances.</p>
+      </div>
+      <AccountsList />
+    </div>
   );
 }

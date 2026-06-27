@@ -1,5 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, apiGet } from './client';
+import { ApiError, apiGet, apiGetPath } from './client';
+
+function spyFetch(body: unknown = { data: {} }) {
+  const spy = vi.fn(async (_url?: string, _init?: unknown) => ({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify(body),
+  }));
+  vi.stubGlobal('fetch', spy);
+  return spy;
+}
+function lastUrl(spy: ReturnType<typeof spyFetch>): string {
+  return String(spy.mock.calls[0]?.[0]);
+}
 
 function mockFetch(status: number, body: unknown) {
   vi.stubGlobal(
@@ -43,5 +56,32 @@ describe('apiGet envelope + error handling', () => {
     const err = await apiGet('/api/v1/status').catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ApiError);
     expect((err as ApiError).code).toBe('network_unavailable');
+  });
+});
+
+describe('apiGetPath templated paths', () => {
+  it('substitutes and URL-encodes path params (never calls a literal {token})', async () => {
+    const spy = spyFetch();
+    await apiGetPath('/api/v1/accounts/{address}', { address: 'twilight 1/x' });
+    const url = lastUrl(spy);
+    expect(url).toContain('/api/v1/accounts/twilight%201%2Fx');
+    expect(url).not.toContain('{address}');
+  });
+
+  it('forwards query params alongside the substituted path', async () => {
+    const spy = spyFetch();
+    await apiGetPath('/api/v1/blocks/{height}', { height: '3196' }, { include: 'raw' });
+    const url = lastUrl(spy);
+    expect(url).toContain('/api/v1/blocks/3196');
+    expect(url).toContain('include=raw');
+  });
+
+  it('rejects with missing_path_param and issues NO fetch when a required param is absent', async () => {
+    const spy = vi.fn();
+    vi.stubGlobal('fetch', spy);
+    await expect(apiGetPath('/api/v1/blocks/{height}', {})).rejects.toMatchObject({
+      code: 'missing_path_param',
+    });
+    expect(spy).not.toHaveBeenCalled();
   });
 });

@@ -1,7 +1,8 @@
 // Typed TanStack Query hooks. All data fetching is client-side (client-leaning posture):
 // no RSC server-fetching, no route-segment caching, no server actions.
-import { useQuery } from '@tanstack/react-query';
-import { apiGet, type JsonOf } from './client';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { apiGet, apiGetPath, type JsonOf } from './client';
+import { nextPageParam } from './pagination';
 
 const STATUS_REFETCH_MS = 15_000;
 const LIST_REFETCH_MS = 30_000;
@@ -106,5 +107,118 @@ export function useSearch(q: string) {
     queryKey: ['search', trimmed],
     queryFn: () => apiGet('/api/v1/search', { q: trimmed }),
     enabled: trimmed.length > 0,
+  });
+}
+
+// ---------- Phase 10b: generic explorer list + detail hooks ----------
+
+const LIST_PAGE = 25;
+
+export type AccountsResponse = JsonOf<'/api/v1/accounts'>;
+
+// Detail response types (templated paths), derived from the generated schema.
+export type BlockDetailResponse = JsonOf<'/api/v1/blocks/{height}'>;
+export type TxDetailResponse = JsonOf<'/api/v1/txs/{hash}'>;
+export type AccountDetailResponse = JsonOf<'/api/v1/accounts/{address}'>;
+export type AccountBalancesResponse = JsonOf<'/api/v1/accounts/{address}/balances'>;
+
+// --- Blocks ---
+export function useBlocksList() {
+  return useInfiniteQuery({
+    queryKey: ['blocks', 'list'],
+    queryFn: ({ pageParam }) =>
+      apiGet('/api/v1/blocks', { limit: LIST_PAGE, cursor: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextPageParam,
+  });
+}
+
+export function useBlock(height: string) {
+  return useQuery({
+    queryKey: ['block', height],
+    queryFn: () => apiGetPath('/api/v1/blocks/{height}', { height }),
+    enabled: height.length > 0,
+  });
+}
+
+export function useBlockRaw(height: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['block', height, 'raw'],
+    queryFn: () => apiGetPath('/api/v1/blocks/{height}', { height }, { include: 'raw' }),
+    enabled: enabled && height.length > 0,
+  });
+}
+
+/** Transactions in a given block, via the /txs `height` filter (block -> txs). */
+export function useTxsByHeight(height: string) {
+  return useInfiniteQuery({
+    queryKey: ['txs', 'byHeight', height],
+    queryFn: ({ pageParam }) =>
+      apiGet('/api/v1/txs', { limit: LIST_PAGE, cursor: pageParam, height }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextPageParam,
+    enabled: height.length > 0,
+  });
+}
+
+// --- Transactions ---
+export function useTxsList() {
+  return useInfiniteQuery({
+    queryKey: ['txs', 'list'],
+    queryFn: ({ pageParam }) => apiGet('/api/v1/txs', { limit: LIST_PAGE, cursor: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextPageParam,
+  });
+}
+
+export function useTx(hash: string) {
+  return useQuery({
+    queryKey: ['tx', hash],
+    queryFn: () => apiGetPath('/api/v1/txs/{hash}', { hash }),
+    enabled: hash.length > 0,
+  });
+}
+
+export function useTxRaw(hash: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['tx', hash, 'raw'],
+    queryFn: () => apiGetPath('/api/v1/txs/{hash}', { hash }, { include: 'raw' }),
+    enabled: enabled && hash.length > 0,
+  });
+}
+
+// --- Accounts ---
+export function useAccountsList() {
+  return useInfiniteQuery({
+    queryKey: ['accounts', 'list'],
+    queryFn: ({ pageParam }) =>
+      apiGet('/api/v1/accounts', { limit: LIST_PAGE, cursor: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextPageParam,
+  });
+}
+
+export function useAccount(address: string) {
+  return useQuery({
+    queryKey: ['account', address],
+    queryFn: () => apiGetPath('/api/v1/accounts/{address}', { address }),
+    enabled: address.length > 0,
+  });
+}
+
+export function useAccountRaw(address: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['account', address, 'raw'],
+    queryFn: () => apiGetPath('/api/v1/accounts/{address}', { address }, { include: 'raw' }),
+    enabled: enabled && address.length > 0,
+  });
+}
+
+/** Sampled balances. Always 200 (unknown address -> sampled:false), so no not-found branch here. */
+export function useAccountBalances(address: string) {
+  return useQuery({
+    queryKey: ['account', address, 'balances'],
+    queryFn: () => apiGetPath('/api/v1/accounts/{address}/balances', { address }),
+    enabled: address.length > 0,
   });
 }

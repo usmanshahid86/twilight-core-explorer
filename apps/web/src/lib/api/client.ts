@@ -20,6 +20,8 @@ export const ERROR_CODES = {
   networkUnavailable: 'network_unavailable',
   /** Synthetic: non-2xx without a recognizable error envelope. */
   httpError: 'http_error',
+  /** Synthetic: a required path parameter was missing before the request was issued. */
+  missingPathParam: 'missing_path_param',
 } as const;
 
 export class ApiError extends Error {
@@ -69,18 +71,15 @@ function buildUrl(path: string, query?: Record<string, string | number | boolean
   return url.toString();
 }
 
-/**
- * GET a Phase 9 endpoint. Returns the full typed envelope (`{ data }` or `{ data, page }`).
- * Throws `ApiError` (carrying `error.code`) on transport failure or a non-2xx error envelope —
- * callers branch on `code`, never on message text.
- */
-export async function apiGet<P extends keyof paths>(
-  path: P,
+// Shared GET core: fetch a concrete (already-substituted) path + parse the envelope. Throws ApiError
+// (carrying error.code) on transport failure or a non-2xx error envelope.
+async function request(
+  concretePath: string,
   query?: Record<string, string | number | boolean | undefined>,
-): Promise<JsonOf<P>> {
+): Promise<unknown> {
   let res: Response;
   try {
-    res = await fetch(buildUrl(path as string, query), {
+    res = await fetch(buildUrl(concretePath, query), {
       method: 'GET',
       headers: { accept: 'application/json' },
     });
@@ -110,5 +109,46 @@ export async function apiGet<P extends keyof paths>(
     throw new ApiError(ERROR_CODES.httpError, `Request failed (HTTP ${res.status}).`, res.status);
   }
 
-  return body as JsonOf<P>;
+  return body;
+}
+
+// Substitute {name} tokens in a templated path from `params`, URL-encoding each value. Rejects a
+// missing/empty required param BEFORE any fetch, so a literal `/blocks/{height}` can never be called.
+function substitutePath(template: string, params: Record<string, string>): string {
+  return template.replace(/\{([^}]+)\}/g, (_match, name: string) => {
+    const value = params[name];
+    if (value === undefined || value === '') {
+      throw new ApiError(
+        ERROR_CODES.missingPathParam,
+        `Missing required path parameter: ${name}`,
+        0,
+      );
+    }
+    return encodeURIComponent(value);
+  });
+}
+
+/**
+ * GET a collection/query endpoint. Returns the full typed envelope (`{ data }` or `{ data, page }`).
+ * Callers branch on `error.code`, never on message text. (Behavior unchanged from Phase 10a.)
+ */
+export async function apiGet<P extends keyof paths>(
+  path: P,
+  query?: Record<string, string | number | boolean | undefined>,
+): Promise<JsonOf<P>> {
+  return (await request(path as string, query)) as JsonOf<P>;
+}
+
+/**
+ * GET a templated endpoint (e.g. `/api/v1/blocks/{height}`). `params` fills the `{...}` tokens
+ * (URL-encoded); a missing required param rejects before fetch. Response typing is preserved from
+ * the generated schema via `JsonOf<P>` on the templated path key.
+ */
+export async function apiGetPath<P extends keyof paths>(
+  path: P,
+  params: Record<string, string>,
+  query?: Record<string, string | number | boolean | undefined>,
+): Promise<JsonOf<P>> {
+  const concrete = substitutePath(path as string, params);
+  return (await request(concrete, query)) as JsonOf<P>;
 }
