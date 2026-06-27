@@ -12,7 +12,8 @@ import { RewardAmount } from '@/components/rewards/RewardAmount';
  * Sampled total supply (Phase 12c). Renders ONLY the observed denom -> amount sample at a sampled
  * height, with the `source:"sampled"` caveat + freshness. Deliberately NOT a computed economic
  * breakdown: no circulating / bonded / total-vs-available labels, no cap / halving / emission
- * schedule (none of which the contract exposes). Absence of a sample renders NoSample, never 0.
+ * schedule (none of which the contract exposes). When there is no sample the contract returns 404,
+ * surfaced here as ErrorState/NotFound (never a fabricated 0).
  */
 export function SupplyView() {
   const supply = useSupply();
