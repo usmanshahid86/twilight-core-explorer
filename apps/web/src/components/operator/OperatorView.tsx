@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { Card, CardBody } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { MonoCopy } from '@/components/ui/MonoCopy';
@@ -76,6 +77,11 @@ export function OperatorView({ address }: { address: string }) {
               Showing slot {primarySlot.slotId}.
             </div>
           ) : null}
+          <div className="pt-1">
+            <Link href="/rewards" className="text-sm text-primary hover:text-primary-light">
+              View rewards →
+            </Link>
+          </div>
         </CardBody>
       </Card>
 
