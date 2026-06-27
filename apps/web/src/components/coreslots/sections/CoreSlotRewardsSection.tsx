@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { PaginatedTable, type Column } from '@/components/list/PaginatedTable';
 import { Card, CardBody, CardHeader } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -40,7 +41,17 @@ export function CoreSlotRewardsSection({ slotId }: { slotId: string }) {
 
   return (
     <Card>
-      <CardHeader title="Rewards (observed projection)" />
+      <CardHeader
+        title="Rewards (observed projection)"
+        action={
+          <Link
+            href={`/rewards/claims?slotId=${encodeURIComponent(slotId)}`}
+            className="text-primary hover:text-primary-light"
+          >
+            View claim history →
+          </Link>
+        }
+      />
       <CardBody>
         {firstRow ? (
           <RewardCaveat>

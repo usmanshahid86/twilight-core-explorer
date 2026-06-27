@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { Card, CardBody, CardHeader } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { MonoCopy } from '@/components/ui/MonoCopy';
@@ -52,7 +53,17 @@ export function AccountDetail({ address }: { address: string }) {
       </Card>
 
       <Card>
-        <CardHeader title="Sampled balances" />
+        {/* /supply is the only contract-safe cross-link here: both are sampled observations. An
+            account is not provably a claimant/operator, so a rewards/claims link would invent a
+            relation the contract does not expose. */}
+        <CardHeader
+          title="Sampled balances"
+          action={
+            <Link href="/supply" className="text-sm text-primary hover:text-primary-light">
+              Network supply →
+            </Link>
+          }
+        />
         <CardBody>
           <BalancesSection address={a.address} />
         </CardBody>

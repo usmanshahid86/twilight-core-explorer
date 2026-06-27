@@ -71,6 +71,11 @@ describe('CoreSlotDetail', () => {
     // Rewards caveat sourced from contract fields, visible:
     expect(screen.getByText('read_only_no_claim_action')).toBeInTheDocument();
     expect(screen.getByText('projection_observed_not_live_claimable')).toBeInTheDocument();
+    // 12c cross-link: rewards section links to the filtered claim history for this slot.
+    expect(screen.getByRole('link', { name: /view claim history/i })).toHaveAttribute(
+      'href',
+      '/rewards/claims?slotId=2',
+    );
   });
 
   it('non-numeric slot id -> invalid input, no API call', () => {

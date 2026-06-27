@@ -40,6 +40,8 @@ describe('OperatorView', () => {
     expect(screen.getByTestId('coreslot-detail')).toHaveTextContent('slot:2');
     // display name from metadata.moniker leads the page:
     expect(screen.getAllByText('core5').length).toBeGreaterThan(0);
+    // 12c cross-link: operator identity card links to the rewards hub.
+    expect(screen.getByRole('link', { name: /view rewards/i })).toHaveAttribute('href', '/rewards');
   });
 
   it('consensus fallback shows "matched by consensus address"', () => {
