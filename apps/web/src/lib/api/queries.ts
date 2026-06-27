@@ -222,3 +222,114 @@ export function useAccountBalances(address: string) {
     enabled: address.length > 0,
   });
 }
+
+// ---------- Phase 11a: CoreSlot list + detail + sub-resources ----------
+
+export type CoreSlotDetailResponse = JsonOf<'/api/v1/coreslots/{slotId}'>;
+export type CoreSlotEventsResponse = JsonOf<'/api/v1/coreslots/{slotId}/events'>;
+export type CoreSlotWindowsResponse = JsonOf<'/api/v1/coreslots/{slotId}/windows'>;
+export type CoreSlotKeyRotationsResponse = JsonOf<'/api/v1/coreslots/{slotId}/key-rotations'>;
+export type CoreSlotLivenessResponse = JsonOf<'/api/v1/coreslots/{slotId}/liveness'>;
+export type CoreSlotHealthResponse = JsonOf<'/api/v1/coreslots/{slotId}/health'>;
+export type CoreSlotProposedBlocksResponse = JsonOf<'/api/v1/coreslots/{slotId}/proposed-blocks'>;
+export type CoreSlotRewardsResponse = JsonOf<'/api/v1/coreslots/{slotId}/rewards'>;
+
+const enabledSlot = (slotId: string) => slotId.length > 0;
+
+export function useCoreSlotsList() {
+  return useInfiniteQuery({
+    queryKey: ['coreslots', 'list'],
+    queryFn: ({ pageParam }) => apiGet('/api/v1/coreslots', { limit: LIST_PAGE, cursor: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextPageParam,
+  });
+}
+
+export function useCoreSlot(slotId: string) {
+  return useQuery({
+    queryKey: ['coreslot', slotId],
+    queryFn: () => apiGetPath('/api/v1/coreslots/{slotId}', { slotId }),
+    enabled: enabledSlot(slotId),
+  });
+}
+
+export function useCoreSlotRaw(slotId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['coreslot', slotId, 'raw'],
+    queryFn: () => apiGetPath('/api/v1/coreslots/{slotId}', { slotId }, { include: 'raw' }),
+    enabled: enabled && enabledSlot(slotId),
+  });
+}
+
+export function useCoreSlotEvents(slotId: string) {
+  return useInfiniteQuery({
+    queryKey: ['coreslot', slotId, 'events'],
+    queryFn: ({ pageParam }) =>
+      apiGetPath('/api/v1/coreslots/{slotId}/events', { slotId }, { limit: LIST_PAGE, cursor: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextPageParam,
+    enabled: enabledSlot(slotId),
+  });
+}
+
+export function useCoreSlotWindows(slotId: string) {
+  return useInfiniteQuery({
+    queryKey: ['coreslot', slotId, 'windows'],
+    queryFn: ({ pageParam }) =>
+      apiGetPath('/api/v1/coreslots/{slotId}/windows', { slotId }, { limit: LIST_PAGE, cursor: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextPageParam,
+    enabled: enabledSlot(slotId),
+  });
+}
+
+export function useCoreSlotKeyRotations(slotId: string) {
+  return useInfiniteQuery({
+    queryKey: ['coreslot', slotId, 'key-rotations'],
+    queryFn: ({ pageParam }) =>
+      apiGetPath('/api/v1/coreslots/{slotId}/key-rotations', { slotId }, { limit: LIST_PAGE, cursor: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextPageParam,
+    enabled: enabledSlot(slotId),
+  });
+}
+
+/** Liveness is a plain array (per windowKind), NOT paginated — useQuery. */
+export function useCoreSlotLiveness(slotId: string) {
+  return useQuery({
+    queryKey: ['coreslot', slotId, 'liveness'],
+    queryFn: () => apiGetPath('/api/v1/coreslots/{slotId}/liveness', { slotId }),
+    enabled: enabledSlot(slotId),
+  });
+}
+
+/** Health is a single object — useQuery. */
+export function useCoreSlotHealth(slotId: string) {
+  return useQuery({
+    queryKey: ['coreslot', slotId, 'health'],
+    queryFn: () => apiGetPath('/api/v1/coreslots/{slotId}/health', { slotId }),
+    enabled: enabledSlot(slotId),
+  });
+}
+
+export function useCoreSlotProposedBlocks(slotId: string) {
+  return useInfiniteQuery({
+    queryKey: ['coreslot', slotId, 'proposed-blocks'],
+    queryFn: ({ pageParam }) =>
+      apiGetPath('/api/v1/coreslots/{slotId}/proposed-blocks', { slotId }, { limit: LIST_PAGE, cursor: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextPageParam,
+    enabled: enabledSlot(slotId),
+  });
+}
+
+export function useCoreSlotRewards(slotId: string) {
+  return useInfiniteQuery({
+    queryKey: ['coreslot', slotId, 'rewards'],
+    queryFn: ({ pageParam }) =>
+      apiGetPath('/api/v1/coreslots/{slotId}/rewards', { slotId }, { limit: LIST_PAGE, cursor: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextPageParam,
+    enabled: enabledSlot(slotId),
+  });
+}

@@ -1,11 +1,15 @@
-import { PlaceholderPage } from '@/components/PlaceholderPage';
+import { CoreSlotsList } from '@/components/coreslots/CoreSlotsList';
 
 export default function CoreSlotsPage() {
   return (
-    <PlaceholderPage
-      title="CoreSlots"
-      phase="11"
-      description="CoreSlot PoA lifecycle, authority history, liveness, and per-slot detail."
-    />
+    <div className="space-y-6">
+      <div>
+        <h1 className="font-serif text-3xl text-text">CoreSlots</h1>
+        <p className="mt-1 text-sm text-text-muted">
+          The CoreSlot PoA validator set — lifecycle, authority, liveness, and per-slot detail.
+        </p>
+      </div>
+      <CoreSlotsList />
+    </div>
   );
 }
