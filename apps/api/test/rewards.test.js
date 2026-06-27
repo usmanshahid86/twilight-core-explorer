@@ -71,7 +71,7 @@ describe('coreslot rewards', () => {
     const item = res.json().data[0];
     assert.equal(item.claimed, true);
     assert.equal(item.claimedAtHeight, '100');
-    assert.equal(item.productionClaimReadiness, 'gated_by_phase_7_2');
+    assert.equal(item.productionClaimReadiness, 'read_only_no_claim_action');
     assert.equal(item.claimSemantics, 'projection_observed_not_live_claimable');
     await app.close();
   });
@@ -82,7 +82,7 @@ describe('rewards claims', () => {
     const app = await build({ claims: [claim(1, 2, 10), claim(2, 2, 10), claim(3, 3, 11)] });
     const res = await app.inject({ url: '/api/v1/rewards/claims?limit=2' });
     assert.deepEqual(res.json().data.map((c) => c.id), ['3', '2']); // h11/id3, h10/id2
-    assert.equal(res.json().data[0].productionClaimReadiness, 'gated_by_phase_7_2');
+    assert.equal(res.json().data[0].productionClaimReadiness, 'read_only_no_claim_action');
     assert.equal(res.json().data[0].claimSemantics, 'event_history_only');
     const res2 = await app.inject({
       url: `/api/v1/rewards/claims?limit=2&cursor=${encodeURIComponent(res.json().page.nextCursor)}`,

@@ -416,3 +416,85 @@ export function useOperatorDirectory(slotIds: string[]) {
     enabled: ids.length > 0,
   });
 }
+
+// --- Rewards (Phase 12b: read-only economic surfaces) ---
+export type RewardsEpochsResponse = JsonOf<'/api/v1/rewards/epochs'>;
+export type RewardEpochResponse = JsonOf<'/api/v1/rewards/epochs/{epoch}'>;
+export type RewardsClaimsResponse = JsonOf<'/api/v1/rewards/claims'>;
+export type RewardsBalancesResponse = JsonOf<'/api/v1/rewards/balances'>;
+export type RewardsParamsResponse = JsonOf<'/api/v1/rewards/params'>;
+export type RewardsTreasuryResponse = JsonOf<'/api/v1/rewards/treasury-payments'>;
+
+export function useRewardsEpochs() {
+  return useInfiniteQuery({
+    queryKey: ['rewards', 'epochs', 'list'],
+    queryFn: ({ pageParam }) =>
+      apiGet('/api/v1/rewards/epochs', { limit: LIST_PAGE, cursor: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextPageParam,
+  });
+}
+
+export function useRewardEpoch(epoch: string) {
+  return useQuery({
+    queryKey: ['reward-epoch', epoch],
+    queryFn: () => apiGetPath('/api/v1/rewards/epochs/{epoch}', { epoch }),
+    enabled: epoch.length > 0,
+  });
+}
+
+/** Lazy include=raw for an epoch — only fetched when a raw panel is expanded. */
+export function useRewardEpochRaw(epoch: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['reward-epoch', epoch, 'raw'],
+    queryFn: () => apiGetPath('/api/v1/rewards/epochs/{epoch}', { epoch }, { include: 'raw' }),
+    enabled: enabled && epoch.length > 0,
+  });
+}
+
+/** Optional claims filters power cross-links (e.g. ?slotId=). undefined values are omitted. */
+export interface ClaimsFilter {
+  slotId?: string | undefined;
+  claimant?: string | undefined;
+}
+
+export function useRewardsClaims(filter: ClaimsFilter = {}) {
+  const { slotId, claimant } = filter;
+  return useInfiniteQuery({
+    queryKey: ['rewards', 'claims', 'list', slotId ?? null, claimant ?? null],
+    queryFn: ({ pageParam }) =>
+      apiGet('/api/v1/rewards/claims', { limit: LIST_PAGE, cursor: pageParam, slotId, claimant }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextPageParam,
+  });
+}
+
+export function useRewardsBalances() {
+  return useInfiniteQuery({
+    queryKey: ['rewards', 'balances', 'list'],
+    queryFn: ({ pageParam }) =>
+      apiGet('/api/v1/rewards/balances', { limit: LIST_PAGE, cursor: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextPageParam,
+  });
+}
+
+export function useRewardsParams() {
+  return useInfiniteQuery({
+    queryKey: ['rewards', 'params', 'list'],
+    queryFn: ({ pageParam }) =>
+      apiGet('/api/v1/rewards/params', { limit: LIST_PAGE, cursor: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextPageParam,
+  });
+}
+
+export function useRewardsTreasury() {
+  return useInfiniteQuery({
+    queryKey: ['rewards', 'treasury', 'list'],
+    queryFn: ({ pageParam }) =>
+      apiGet('/api/v1/rewards/treasury-payments', { limit: LIST_PAGE, cursor: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextPageParam,
+  });
+}

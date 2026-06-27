@@ -1995,7 +1995,7 @@ export interface paths {
                                 claimTxHash: string | null;
                                 sampledAtHeight: string | null;
                                 /** @enum {string} */
-                                productionClaimReadiness: "gated_by_phase_7_2";
+                                productionClaimReadiness: "read_only_no_claim_action";
                                 /** @enum {string} */
                                 claimSemantics: "projection_observed_not_live_claimable";
                             }[];
@@ -2098,7 +2098,7 @@ export interface paths {
                                 txHash: string;
                                 msgIndex: number | null;
                                 /** @enum {string} */
-                                productionClaimReadiness: "gated_by_phase_7_2";
+                                productionClaimReadiness: "read_only_no_claim_action";
                                 /** @enum {string} */
                                 claimSemantics: "event_history_only";
                             }[];

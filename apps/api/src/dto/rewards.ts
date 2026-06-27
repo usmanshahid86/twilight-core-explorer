@@ -3,9 +3,12 @@ import type { Static } from '@sinclair/typebox';
 import { HeightString, Nullable, PageInfoSchema } from './common.js';
 import { bigToString, toIso } from '../lib/serialize.js';
 
-// Locked caveat constants (Q1: in-data caveat fields; envelope unchanged).
+// Locked caveat constants (in-data caveat fields; envelope unchanged).
+// productionClaimReadiness flipped from the historical `gated_by_phase_7_2` to the durable
+// read-only posture after Phase 7.2 merged + live-validated (Phase 12 §17/§18). The three
+// data-nature caveats below are unchanged.
 export const REWARD_SEMANTICS_AGGREGATE = 'aggregate_projection';
-export const PRODUCTION_CLAIM_READINESS = 'gated_by_phase_7_2';
+export const PRODUCTION_CLAIM_READINESS = 'read_only_no_claim_action';
 export const CLAIM_SEMANTICS_HISTORY = 'event_history_only';
 export const CLAIM_SEMANTICS_OBSERVED = 'projection_observed_not_live_claimable';
 

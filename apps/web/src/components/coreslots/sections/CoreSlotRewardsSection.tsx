@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/Badge';
 import { useCoreSlotRewards, type CoreSlotRewardsResponse } from '@/lib/api/queries';
 import { formatAmount } from '@/lib/format/amount';
 import { formatHeight } from '@/lib/format/height';
+import { RewardCaveat } from '@/components/rewards/RewardCaveat';
 
 type Reward = CoreSlotRewardsResponse['data'][number];
 
@@ -42,11 +43,11 @@ export function CoreSlotRewardsSection({ slotId }: { slotId: string }) {
       <CardHeader title="Rewards (observed projection)" />
       <CardBody>
         {firstRow ? (
-          <div className="mb-3 rounded-xl border border-accent-yellow/30 bg-accent-yellow/10 px-4 py-2 text-xs text-accent-yellow">
+          <RewardCaveat>
             Observed/historical projection — <span className="font-medium">not live-claimable</span>.
             claimSemantics: <span className="font-mono">{firstRow.claimSemantics}</span>; production claim
             readiness: <span className="font-mono">{firstRow.productionClaimReadiness}</span>.
-          </div>
+          </RewardCaveat>
         ) : null}
         <PaginatedTable
           query={query}
