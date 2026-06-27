@@ -5,8 +5,8 @@ export interface ChainClient {
   getBlockResults(height: bigint): Promise<BlockResultsSource>;
   getTx(hash: string): Promise<TxSource>;
   getTxsByHeight(height: bigint): Promise<TxSource[]>;
-  getSupply(): Promise<SupplySource[]>;
-  getBalances(address: string): Promise<ModuleSnapshot>;
+  getSupply(height?: bigint): Promise<SupplySource[]>;
+  getBalances(address: string, height?: bigint): Promise<ModuleSnapshot>;
   getCoreSlotParams(): Promise<ModuleSnapshot>;
   getCoreSlots(): Promise<ModuleSnapshot>;
   getActiveCoreSlots(): Promise<ModuleSnapshot>;
@@ -21,16 +21,20 @@ export interface ChainClient {
   getEpochInfo(): Promise<ModuleSnapshot>;
   getNextHalving(): Promise<ModuleSnapshot>;
   getEpochReward(epoch: bigint): Promise<ModuleSnapshot>;
-  getSlotRewards(slotId: bigint, pagination?: PaginationRequest): Promise<ModuleSnapshot>;
+  getSlotRewards(
+    slotId: bigint,
+    pagination?: PaginationRequest,
+    height?: bigint,
+  ): Promise<ModuleSnapshot>;
   getClaimableRewards(
     slotId: bigint,
     startEpoch: bigint,
     endEpoch: bigint,
   ): Promise<ModuleSnapshot>;
-  getCumulativeEmitted(): Promise<ModuleSnapshot>;
+  getCumulativeEmitted(height?: bigint): Promise<ModuleSnapshot>;
   getSupplySchedule(): Promise<ModuleSnapshot>;
   getCurrentEpochActiveBlocks(): Promise<ModuleSnapshot>;
-  getModuleBalances(): Promise<ModuleSnapshot>;
+  getModuleBalances(height?: bigint): Promise<ModuleSnapshot>;
 }
 
 export interface GenesisSource {

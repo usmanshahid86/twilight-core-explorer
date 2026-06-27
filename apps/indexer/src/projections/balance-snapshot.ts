@@ -25,8 +25,8 @@ import {
  * duplicated here (rewards_snapshot_v1 owns them).
  */
 export interface BalanceSnapshotChainClient {
-  getSupply(): Promise<Array<{ denom: string; amount: string; raw?: unknown }>>;
-  getBalances(address: string): Promise<{ raw: unknown }>;
+  getSupply(height?: bigint): Promise<Array<{ denom: string; amount: string; raw?: unknown }>>;
+  getBalances(address: string, height?: bigint): Promise<{ raw: unknown }>;
 }
 
 export interface BalanceSnapshotPrisma extends ProjectionCursorPrisma {
@@ -73,11 +73,11 @@ export async function projectBalanceSnapshot(
   try {
     // Skip malformed coins (empty denom/amount) so we never persist a junk supply row — the same
     // tolerant validation the account-balance path (extractCoins) applies.
-    supply = (await client.getSupply())
+    supply = (await client.getSupply(height))
       .map((c) => ({ denom: c.denom, amount: c.amount, raw: c.raw ?? c }))
       .filter((c) => c.denom.length > 0 && c.amount.length > 0);
     for (const address of addresses) {
-      const snapshot = await client.getBalances(address);
+      const snapshot = await client.getBalances(address, height);
       accountBalances.push({ address, coins: extractCoins(snapshot.raw) });
     }
   } catch (error) {

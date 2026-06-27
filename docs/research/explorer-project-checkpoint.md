@@ -483,6 +483,16 @@ Important conclusion:
 
 ## 5. Known Gaps
 
+### Tracked engineering follow-ups (non-blocking)
+
+- **Phase 7.2 review follow-ups** — see [`phase-7.2-followups.md`](phase-7.2-followups.md): (FU-1)
+  `coreslot-temporal-map.ts` shares the genesis-failure-durability pattern the genesis-identity seed
+  fixed (per-slot genesis failures at `sourceHeight: 1n` are deleted by the height-1 cleanup; fix with
+  the `0n` sentinel); (FU-2) the genesis-identity `0n` sentinel is not airtight on an empty `Block`
+  table (unreachable order; guard the zero-block rebuild); (FU-3) duplicate malformed-genesis slots
+  collapse to one `ProjectionFailure` (add a per-slot discriminator to the failureKey). All low-priority,
+  judged non-blocking by both the local adversarial reviewer and Codex.
+
 ### Data Gaps
 
 1. ~~Block commit signatures and CoreSlot attribution are stored, but liveness is not computed.~~

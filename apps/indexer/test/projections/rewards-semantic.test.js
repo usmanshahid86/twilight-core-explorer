@@ -47,6 +47,54 @@ describe('Rewards semantic projection', () => {
     assert.equal(p.claims.size, 0);
   });
 
+  it('3a. epoch_finalized maps live nyks-core keys (allocated/eligible_slots/cumulative_emitted/distribution_method) + utwlt denom', async () => {
+    // Real Phase 7.2 fixture event shape: the chain emits `allocated`/`eligible_slots`/
+    // `cumulative_emitted`/`distribution_method` (NOT total_reward/active_slot_count/denom).
+    const p = new MockRewardsPrisma();
+    p.events.push(evt(3n, 30n, null, null, 'epoch_finalized', [
+      { key: 'epoch', value: '3' },
+      { key: 'start_height', value: '21' },
+      { key: 'end_height', value: '30' },
+      { key: 'minted_emission', value: '4161900' },
+      { key: 'cumulative_emitted', value: '12485700' },
+      { key: 'reward_pool', value: '4161900' },
+      { key: 'allocated', value: '4161900' },
+      { key: 'carry_out', value: '0' },
+      { key: 'eligible_slots', value: '4' },
+      { key: 'distribution_method', value: 'DISTRIBUTION_METHOD_UNIFORM_ACTIVE_BLOCKS' },
+    ]));
+    await projectRewardsSemanticHeight({ prisma: p, chainId: CHAIN_ID, height: 30n });
+    const e = p.epochs.get('3');
+    assert.equal(e.totalReward, '4161900'); // <- allocated
+    assert.equal(e.activeSlotCount, 4); // <- eligible_slots
+    assert.equal(e.cumulativeEmitted, '12485700');
+    assert.equal(e.distributionMethod, 'DISTRIBUTION_METHOD_UNIFORM_ACTIVE_BLOCKS');
+    assert.equal(e.denom, 'utwlt'); // <- not emitted; native-denom default
+  });
+
+  it('3b. reward_claimed maps signer -> claimant + utwlt denom (live nyks-core keys)', async () => {
+    const SIGNER = 'twilight1signerxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
+    const p = new MockRewardsPrisma();
+    p.transactions.push(successTx('CLAIM-SIGNER', 31n));
+    p.messages.push(msg(1n, 'CLAIM-SIGNER', 31n, 0, REWARDS_CLAIM_TYPE_URL, {
+      slot_id: '1', start_epoch: '2', end_epoch: '3',
+    }));
+    p.events.push(evt(10n, 31n, 'CLAIM-SIGNER', 0, 'reward_claimed', [
+      { key: 'signer', value: SIGNER },
+      { key: 'slot_id', value: '1' },
+      { key: 'start_epoch', value: '2' },
+      { key: 'end_epoch', value: '3' },
+      { key: 'amount', value: '2080950' },
+      { key: 'payout_count', value: '1' },
+      { key: 'msg_index', value: '0' },
+    ]));
+    await projectRewardsSemanticHeight({ prisma: p, chainId: CHAIN_ID, height: 31n });
+    const c = [...p.claims.values()][0];
+    assert.equal(c.claimant, SIGNER); // <- signer, not claimant/operator/creator
+    assert.equal(c.denom, 'utwlt'); // <- not emitted; native-denom default
+    assert.equal(c.amount, '2080950');
+  });
+
   it('5. MsgClaimRewards + reward_claimed creates a RewardClaimEvent', async () => {
     const p = new MockRewardsPrisma();
     seedClaim(p, { height: 120n });
@@ -249,6 +297,80 @@ describe('Rewards observed snapshot ingestion', () => {
     assert.equal(p.balanceSamples.length, 2);
     assert.ok(p.balanceSamples.some((b) => b.sampleKind === 'module_balance'));
     assert.ok(p.balanceSamples.some((b) => b.sampleKind === 'cumulative_emitted'));
+  });
+
+  it('extracts module balances from the live nyks-core {denom, <module>_balance} object shape', async () => {
+    const p = new MockRewardsPrisma();
+    const client = mockClient({
+      moduleBalances: { denom: 'utwlt', rewards_balance: '17688075', fee_pool_balance: '0' },
+      cumulativeEmitted: { amount: '20809500', denom: 'utwlt' },
+    });
+    const result = await ingestRewardsSnapshot({ prisma: p, client, chainId: CHAIN_ID, height: 200n, slotIds: [] });
+    assert.equal(result.failed, false);
+    const mod = p.balanceSamples.filter((b) => b.sampleKind === 'module_balance');
+    assert.deepEqual(mod.map((b) => b.moduleName).sort(), ['fee_pool', 'rewards']);
+    const rewards = mod.find((b) => b.moduleName === 'rewards');
+    assert.equal(rewards.amount, '17688075');
+    assert.equal(rewards.denom, 'utwlt');
+    // the shape now parses, so the absence-justification failure must NOT fire
+    assert.ok(!p.failures.some((f) => f.failureKind === 'module_balance_sample_unavailable'));
+  });
+
+  it('maps claimed_at_height 0 / absent to null for unclaimed rewards (not a misleading 0)', async () => {
+    const p = new MockRewardsPrisma();
+    const client = mockClient({
+      slotRewards: { 4: { rewards: [
+        { epoch_number: '4', amount: '10', denom: 'utwlt', claimed: false, claimed_at_height: '0' },
+        { epoch_number: '5', amount: '10', denom: 'utwlt', claimed: false }, // claimed_at_height absent
+      ] } },
+    });
+    await ingestRewardsSnapshot({ prisma: p, client, chainId: CHAIN_ID, height: 200n, slotIds: [4n] });
+    assert.equal(p.slotRewards.length, 2);
+    for (const r of p.slotRewards) {
+      assert.equal(r.claimed, false);
+      assert.equal(r.claimedAtHeight, null); // not 0n
+    }
+  });
+
+  it('records a NON-BLOCKING module_balance_sample_unavailable when no module balances extract', async () => {
+    const p = new MockRewardsPrisma();
+    const client = mockClient({
+      moduleBalances: { balances: [] }, // empty / unrecognized shape
+      cumulativeEmitted: { amount: '5000', denom: 'utwlt' },
+    });
+    const result = await ingestRewardsSnapshot({ prisma: p, client, chainId: CHAIN_ID, height: 200n, slotIds: [] });
+    assert.equal(result.failed, false); // non-blocking: the rest of the snapshot still succeeds
+    assert.ok(p.failures.some((f) => f.failureKind === 'module_balance_sample_unavailable'));
+    assert.ok(!p.balanceSamples.some((b) => b.sampleKind === 'module_balance')); // absence is now justified, not silent
+    assert.ok(p.balanceSamples.some((b) => b.sampleKind === 'cumulative_emitted'));
+  });
+
+  it('halts + records rewards_snapshot_chain_read_failed when a chain read throws', async () => {
+    const p = new MockRewardsPrisma();
+    const client = {
+      getSlotRewards: async () => { throw new Error('REST 503'); },
+      getModuleBalances: async () => ({ raw: { balances: [] } }),
+      getCumulativeEmitted: async () => ({ raw: {} }),
+    };
+    const result = await ingestRewardsSnapshot({ prisma: p, client, chainId: CHAIN_ID, height: 200n, slotIds: [4n] });
+    assert.equal(result.failed, true);
+    assert.ok(p.failures.some((f) => f.failureKind === 'rewards_snapshot_chain_read_failed'));
+  });
+
+  it('writes NO rows when a LATER read fails (true read-before-write, no partial sample)', async () => {
+    const p = new MockRewardsPrisma();
+    const client = {
+      // slot rewards read SUCCEEDS (would have been written under the old incremental code)...
+      getSlotRewards: async () => ({ raw: { rewards: [{ epoch_number: '1', amount: '10', denom: 'utwlt' }] } }),
+      // ...but a subsequent read fails, so nothing must be written for this height.
+      getModuleBalances: async () => { throw new Error('REST 503'); },
+      getCumulativeEmitted: async () => ({ raw: {} }),
+    };
+    const result = await ingestRewardsSnapshot({ prisma: p, client, chainId: CHAIN_ID, height: 200n, slotIds: [4n] });
+    assert.equal(result.failed, true);
+    assert.equal(p.slotRewards.length, 0); // NO partial slot-reward write despite a successful slot read
+    assert.equal(p.balanceSamples.length, 0);
+    assert.ok(p.failures.some((f) => f.failureKind === 'rewards_snapshot_chain_read_failed'));
   });
 
   it('paginates getSlotRewards until next_key is exhausted', async () => {

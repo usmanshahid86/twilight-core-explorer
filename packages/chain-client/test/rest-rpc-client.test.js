@@ -204,6 +204,41 @@ describe('RestRpcChainClient', () => {
     );
   });
 
+  it('pins sampled REST reads to a height via the x-cosmos-block-height header', async () => {
+    const seen = [];
+    const fetchImpl = async (input, init) => {
+      seen.push({ url: input.toString(), headers: init?.headers });
+      return createJsonResponse({
+        supply: [{ denom: 'utwlt', amount: '1000' }],
+        rewards: [],
+        balances: [],
+        pagination: { next_key: null },
+      });
+    };
+    const client = new RestRpcChainClient({
+      cometRpcUrl: 'http://rpc.test',
+      restUrl: 'http://rest.test',
+      fetchImpl,
+    });
+
+    await client.getSupply(53n);
+    await client.getSlotRewards(1n, {}, 53n);
+    await client.getModuleBalances(53n);
+    await client.getCumulativeEmitted(53n);
+    await client.getBalances('twilight1address', 53n);
+    await client.getSupply(); // no height -> no header
+
+    for (let i = 0; i < 5; i += 1) {
+      assert.equal(
+        seen[i].headers?.['x-cosmos-block-height'],
+        '53',
+        `pinned call ${i} should carry the height header`,
+      );
+    }
+    // Unpinned (latest) reads must not set the header at all.
+    assert.equal(seen[5].headers, undefined);
+  });
+
   it('falls back to CometBFT block txs when REST tx search cannot decode a tx', async () => {
     const failingTxSearchUrl = 'http://rest.test/cosmos/tx/v1beta1/txs?query=tx.height%3D17';
     const { calls, fetchImpl } = createRecordingFetch({

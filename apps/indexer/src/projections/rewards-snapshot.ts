@@ -1,5 +1,14 @@
-import { updateProjectionCursorSuccess, type ProjectionCursorPrisma } from './cursor.js';
-import { REWARDS_NATIVE_DENOM, REWARDS_SNAPSHOT_PROJECTION } from './types.js';
+import {
+  haltProjectionCursorError,
+  updateProjectionCursorSuccess,
+  type ProjectionCursorPrisma,
+} from './cursor.js';
+import {
+  REWARDS_NATIVE_DENOM,
+  REWARDS_SNAPSHOT_PROJECTION,
+  withProjectionFailureKey,
+  type ProjectionFailureInput,
+} from './types.js';
 
 /**
  * Observed-sample ingestion for rewards (projection rewards_snapshot_v1).
@@ -11,9 +20,13 @@ import { REWARDS_NATIVE_DENOM, REWARDS_SNAPSHOT_PROJECTION } from './types.js';
  * downstream consumers.
  */
 export interface RewardsSnapshotChainClient {
-  getSlotRewards(slotId: bigint, pagination?: { key?: string | undefined }): Promise<{ raw: unknown }>;
-  getModuleBalances(): Promise<{ raw: unknown }>;
-  getCumulativeEmitted(): Promise<{ raw: unknown }>;
+  getSlotRewards(
+    slotId: bigint,
+    pagination?: { key?: string | undefined },
+    height?: bigint,
+  ): Promise<{ raw: unknown }>;
+  getModuleBalances(height?: bigint): Promise<{ raw: unknown }>;
+  getCumulativeEmitted(height?: bigint): Promise<{ raw: unknown }>;
 }
 
 export interface RewardsSnapshotPrisma extends ProjectionCursorPrisma {
@@ -23,6 +36,11 @@ export interface RewardsSnapshotPrisma extends ProjectionCursorPrisma {
     upsert(args: unknown): Promise<unknown>;
   };
   rewardsBalanceSample: { upsert(args: unknown): Promise<unknown> };
+  projectionFailure: {
+    upsert(args: unknown): Promise<unknown>;
+    deleteMany(args: unknown): Promise<unknown>;
+  };
+  $transaction<T>(fn: (tx: RewardsSnapshotPrisma) => Promise<T>): Promise<T>;
 }
 
 interface SlotRewardRow {
@@ -42,6 +60,8 @@ export interface IngestRewardsSnapshotResult {
   height: bigint;
   slotRewardRows: number;
   balanceSamples: number;
+  // true when a chain read failed: the cursor was halted and no success was recorded.
+  failed: boolean;
 }
 
 export async function ingestRewardsSnapshot(
@@ -52,55 +72,126 @@ export async function ingestRewardsSnapshot(
   const slotIds = args.slotIds
     ?? (await prisma.coreSlotProjection.findMany({ select: { slotId: true } })).map((r) => r.slotId);
 
+  // Clear this height's prior unresolved failures so a re-run re-derives them cleanly (idempotent,
+  // mirroring the per-height projectors) — e.g. a module_balance_sample_unavailable left by an
+  // earlier run must not linger once the sample succeeds.
+  await prisma.projectionFailure.deleteMany({
+    where: { projectionName: REWARDS_SNAPSHOT_PROJECTION, sourceHeight: height, resolved: false },
+  });
+
+  // --- 1. READ all chain state first; write nothing yet. ------------------------------------
+  // True read-before-write (like balance-snapshot): if ANY read fails we halt + record and leave
+  // the DB untouched for this height — no partial sample is ever visible. Reads are pure.
+  let slotRewards: Array<{ slotId: bigint; reward: SlotRewardSnapshot; raw: unknown }>;
+  let moduleBalanceEntries: BalanceEntry[];
+  let moduleBalancesRaw: unknown;
+  let cumulativeAmount: { denom: string; amount: string } | null;
+  let cumulativeRaw: unknown;
+  try {
+    slotRewards = [];
+    for (const slotId of slotIds) {
+      // Paginate until the chain's pagination.next_key is exhausted so a slot with many
+      // epochs of rewards is not silently truncated to the first page.
+      let key: string | undefined;
+      let guard = 0;
+      do {
+        const snapshot = await client.getSlotRewards(slotId, key ? { key } : undefined, height);
+        for (const reward of extractSlotRewards(snapshot.raw)) {
+          slotRewards.push({ slotId, reward, raw: snapshot.raw });
+        }
+        key = extractNextKey(snapshot.raw);
+        guard += 1;
+      } while (key && guard < 10_000);
+    }
+
+    const moduleBalances = await client.getModuleBalances(height);
+    moduleBalancesRaw = moduleBalances.raw;
+    moduleBalanceEntries = extractBalances(moduleBalances.raw);
+
+    const cumulative = await client.getCumulativeEmitted(height);
+    cumulativeRaw = cumulative.raw;
+    cumulativeAmount = extractAmount(cumulative.raw);
+  } catch (error) {
+    // A chain read failed: halt the cursor and record the failure. Nothing was written for this
+    // height, so there is no partial sample to reconcile; a re-run after the chain recovers
+    // re-samples cleanly.
+    await haltProjectionCursorError(prisma, REWARDS_SNAPSHOT_PROJECTION, chainId, height, error);
+    await createFailure(prisma, {
+      sourceHeight: height,
+      failureKind: 'rewards_snapshot_chain_read_failed',
+      error: formatError(error),
+    });
+    return { height, slotRewardRows: 0, balanceSamples: 0, failed: true };
+  }
+
+  // --- 2. WRITE everything in one transaction (every read succeeded). ------------------------
   let slotRewardRows = 0;
-  for (const slotId of slotIds) {
-    // Paginate until the chain's pagination.next_key is exhausted so a slot with many
-    // epochs of rewards is not silently truncated to the first page.
-    let key: string | undefined;
-    let guard = 0;
-    do {
-      const snapshot = await client.getSlotRewards(slotId, key ? { key } : undefined);
-      for (const reward of extractSlotRewards(snapshot.raw)) {
-        await upsertSlotReward(prisma, { slotId, height, reward, raw: snapshot.raw });
-        slotRewardRows += 1;
-      }
-      key = extractNextKey(snapshot.raw);
-      guard += 1;
-    } while (key && guard < 10_000);
-  }
-
   let balanceSamples = 0;
-  const moduleBalances = await client.getModuleBalances();
-  for (const balance of extractBalances(moduleBalances.raw)) {
-    await upsertBalanceSample(prisma, {
-      height,
-      sampleKind: 'module_balance',
-      address: balance.address,
-      moduleName: balance.moduleName,
-      denom: balance.denom,
-      amount: balance.amount,
-      raw: balance.raw,
-    });
-    balanceSamples += 1;
-  }
-
-  const cumulative = await client.getCumulativeEmitted();
-  const cumulativeAmount = extractAmount(cumulative.raw);
-  if (cumulativeAmount) {
-    await upsertBalanceSample(prisma, {
-      height,
-      sampleKind: 'cumulative_emitted',
-      address: null,
-      moduleName: null,
-      denom: cumulativeAmount.denom,
-      amount: cumulativeAmount.amount,
-      raw: cumulative.raw,
-    });
-    balanceSamples += 1;
-  }
+  await prisma.$transaction(async (tx) => {
+    for (const { slotId, reward, raw } of slotRewards) {
+      await upsertSlotReward(tx, { slotId, height, reward, raw });
+      slotRewardRows += 1;
+    }
+    for (const balance of moduleBalanceEntries) {
+      await upsertBalanceSample(tx, {
+        height,
+        sampleKind: 'module_balance',
+        address: balance.address,
+        moduleName: balance.moduleName,
+        denom: balance.denom,
+        amount: balance.amount,
+        raw: balance.raw,
+      });
+      balanceSamples += 1;
+    }
+    // A successful read that yields NO module_balance rows is either a genuinely-empty module set
+    // or (more dangerously) a response shape extractBalances does not recognize. Either way, record
+    // a NON-BLOCKING ProjectionFailure with the raw payload so the absence is justified and visible
+    // rather than a silent gap — the cursor still advances (the rest of the snapshot succeeded).
+    if (moduleBalanceEntries.length === 0) {
+      await createFailure(tx, {
+        sourceHeight: height,
+        failureKind: 'module_balance_sample_unavailable',
+        rawEventJson: moduleBalancesRaw,
+        error: 'getModuleBalances returned no extractable module_balance entries.',
+      });
+    }
+    if (cumulativeAmount) {
+      await upsertBalanceSample(tx, {
+        height,
+        sampleKind: 'cumulative_emitted',
+        address: null,
+        moduleName: null,
+        denom: cumulativeAmount.denom,
+        amount: cumulativeAmount.amount,
+        raw: cumulativeRaw,
+      });
+      balanceSamples += 1;
+    }
+  });
 
   await updateProjectionCursorSuccess(prisma, REWARDS_SNAPSHOT_PROJECTION, chainId, height);
-  return { height, slotRewardRows, balanceSamples };
+  return { height, slotRewardRows, balanceSamples, failed: false };
+}
+
+async function createFailure(
+  prisma: RewardsSnapshotPrisma,
+  input: Omit<ProjectionFailureInput, 'projectionName' | 'module'>,
+): Promise<void> {
+  const data = withProjectionFailureKey({
+    projectionName: REWARDS_SNAPSHOT_PROJECTION,
+    module: 'rewards',
+    ...input,
+  });
+  await prisma.projectionFailure.upsert({
+    where: { failureKey: data.failureKey },
+    create: data,
+    update: { ...data, resolved: false, resolvedAt: null },
+  });
+}
+
+function formatError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 interface SlotRewardSnapshot {
@@ -194,9 +285,12 @@ function extractSlotRewards(raw: unknown): SlotRewardSnapshot[] {
       amount,
       denom: readString(record.denom) ?? REWARDS_NATIVE_DENOM,
       claimed: readBool(record.claimed),
-      claimedAtHeight: parseBigInt(
+      // The chain returns claimed_at_height "0" for UNCLAIMED rewards; a real claim height is
+      // always > 0. Map 0 (and unparseable) to null so an unclaimed reward never exposes a
+      // claimedAtHeight that reads like a real block height.
+      claimedAtHeight: claimedAtHeightOrNull(
         readString(record.claimed_at_height) ?? readString(record.claimedAtHeight),
-      ) ?? null,
+      ),
     });
   }
   return out;
@@ -212,22 +306,40 @@ interface BalanceEntry {
 
 function extractBalances(raw: unknown): BalanceEntry[] {
   const root = asRecord(raw);
-  const list = readArray(root.balances) ?? readArray(root.module_balances) ?? readArray(raw) ?? [];
-  const out: BalanceEntry[] = [];
-  for (const item of list) {
-    const record = asRecord(item);
-    const denom = readString(record.denom);
-    const amount = readString(record.amount);
-    if (!denom || amount === undefined) continue;
-    out.push({
-      address: readString(record.address) ?? null,
-      moduleName: readString(record.module_name) ?? readString(record.moduleName) ?? readString(record.name) ?? null,
-      denom,
-      amount,
-      raw: item,
-    });
+  // Shape A — an array of {denom, amount, module_name?} entries (generic / forward-compat).
+  const list = readArray(root.balances) ?? readArray(root.module_balances) ?? readArray(raw);
+  if (list) {
+    const out: BalanceEntry[] = [];
+    for (const item of list) {
+      const record = asRecord(item);
+      const denom = readString(record.denom);
+      const amount = readString(record.amount);
+      if (!denom || amount === undefined) continue;
+      out.push({
+        address: readString(record.address) ?? null,
+        moduleName: readString(record.module_name) ?? readString(record.moduleName) ?? readString(record.name) ?? null,
+        denom,
+        amount,
+        raw: item,
+      });
+    }
+    if (out.length > 0) return out;
   }
-  return out;
+  // Shape B — live nyks-core x/rewards: a single object { denom, <module>_balance: amount, ... }
+  // (e.g. { denom: "utwlt", rewards_balance: "...", fee_pool_balance: "0" }). Emit one
+  // module_balance entry per `*_balance` field, moduleName derived from the field name.
+  const denom = readString(root.denom);
+  if (denom) {
+    const out: BalanceEntry[] = [];
+    for (const [key, value] of Object.entries(root)) {
+      if (!key.endsWith('_balance')) continue;
+      const amount = readString(value);
+      if (amount === undefined) continue;
+      out.push({ address: null, moduleName: key.slice(0, -'_balance'.length), denom, amount, raw: root });
+    }
+    return out;
+  }
+  return [];
 }
 
 function extractAmount(raw: unknown): { denom: string; amount: string } | null {
@@ -288,6 +400,13 @@ function parseBigInt(value: string | undefined): bigint | undefined {
   } catch {
     return undefined;
   }
+}
+
+// A claim height of 0 (the chain's sentinel for "not claimed") or an unparseable value is not a
+// real block height — represent it as null rather than a misleading 0.
+function claimedAtHeightOrNull(value: string | undefined): bigint | null {
+  const parsed = parseBigInt(value);
+  return parsed !== undefined && parsed > 0n ? parsed : null;
 }
 
 function toJson(value: unknown): unknown {

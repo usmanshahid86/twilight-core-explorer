@@ -291,6 +291,8 @@ export type ProjectionFailureKind =
   | 'invalid_proposer_address'
   | 'unknown_proposer_attribution_shape'
   | 'balance_snapshot_chain_read_failed'
+  | 'rewards_snapshot_chain_read_failed'
+  | 'module_balance_sample_unavailable'
   | 'unknown_semantic_type'
   | 'unknown_coreslot_message'
   | 'unknown_coreslot_event'

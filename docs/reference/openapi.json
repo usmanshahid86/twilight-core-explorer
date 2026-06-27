@@ -4642,6 +4642,8 @@
                           "totalReward",
                           "denom",
                           "activeSlotCount",
+                          "cumulativeEmitted",
+                          "distributionMethod",
                           "rewardSemantics"
                         ],
                         "properties": {
@@ -4689,6 +4691,26 @@
                             "anyOf": [
                               {
                                 "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "cumulativeEmitted": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "distributionMethod": {
+                            "anyOf": [
+                              {
+                                "type": "string"
                               },
                               {
                                 "type": "null"
@@ -4817,6 +4839,8 @@
                         "totalReward",
                         "denom",
                         "activeSlotCount",
+                        "cumulativeEmitted",
+                        "distributionMethod",
                         "rewardSemantics"
                       ],
                       "properties": {
@@ -4864,6 +4888,26 @@
                           "anyOf": [
                             {
                               "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "cumulativeEmitted": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "distributionMethod": {
+                          "anyOf": [
+                            {
+                              "type": "string"
                             },
                             {
                               "type": "null"

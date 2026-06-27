@@ -4,6 +4,7 @@ export interface JsonRequestOptions {
   query?: Record<string, string | number | bigint | boolean | undefined> | undefined;
   timeoutMs?: number | undefined;
   fetchImpl?: FetchLike | undefined;
+  headers?: Record<string, string> | undefined;
 }
 
 export class ChainClientError extends Error {
@@ -47,7 +48,11 @@ export async function getJson<T = unknown>(
     : undefined;
 
   try {
-    const response = await fetchImpl(url, { signal: controller.signal });
+    const init: RequestInit = { signal: controller.signal };
+    if (options.headers && Object.keys(options.headers).length > 0) {
+      init.headers = options.headers;
+    }
+    const response = await fetchImpl(url, init);
     if (!response.ok) {
       const bodySnippet = (await response.text()).slice(0, 500);
       throw new ChainClientError(
