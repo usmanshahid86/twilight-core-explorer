@@ -3,6 +3,8 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { apiGet, apiGetPath, type JsonOf } from './client';
 import { nextPageParam } from './pagination';
+import { resolveOperator } from '../operator-resolver';
+import { displayName, parseOperatorMetadata } from '../operator-metadata';
 
 const STATUS_REFETCH_MS = 15_000;
 const LIST_REFETCH_MS = 30_000;
@@ -331,5 +333,84 @@ export function useCoreSlotRewards(slotId: string) {
     initialPageParam: undefined as string | undefined,
     getNextPageParam: nextPageParam,
     enabled: enabledSlot(slotId),
+  });
+}
+
+// ---------- Phase 11b+c: operator resolution + bounded fan-outs ----------
+
+const FANOUT_CAP = 100;
+
+/** Resolve an address -> CoreSlot(s) via the operator/consensus/payout fallback (pure resolver). */
+export function useOperatorResolution(address: string) {
+  return useQuery({
+    queryKey: ['operator', address],
+    queryFn: () => resolveOperator(address),
+    enabled: address.length > 0,
+  });
+}
+
+export type SlotHealthResult = { slotId: string; health: CoreSlotHealthResponse['data'] | null };
+
+/** Bounded, non-blocking per-slot health fan-out for the network /liveness page. A per-slot failure
+ *  yields `health: null` for that row — never fails the whole query. Capped at FANOUT_CAP. */
+export function useCoreSlotHealthFanout(slotIds: string[]) {
+  const ids = slotIds.slice(0, FANOUT_CAP);
+  return useQuery({
+    queryKey: ['health-fanout', ids],
+    queryFn: async (): Promise<SlotHealthResult[]> =>
+      Promise.all(
+        ids.map(async (slotId): Promise<SlotHealthResult> => {
+          try {
+            const r = await apiGetPath('/api/v1/coreslots/{slotId}/health', { slotId });
+            return { slotId, health: r.data };
+          } catch {
+            return { slotId, health: null };
+          }
+        }),
+      ),
+    enabled: ids.length > 0,
+  });
+}
+
+export type OperatorDirectoryEntry = {
+  slotId: string;
+  operatorAddress: string | null;
+  displayName: string;
+  moniker?: string | undefined;
+  metadataExtras: Record<string, unknown>;
+};
+
+/** Bounded, non-blocking operator-name directory: fetches /coreslots/{slotId} to enrich slot tables
+ *  with monikers. A per-slot failure is OMITTED (callers fall back to their own operator address), so
+ *  this never blocks /network. Droppable if the API later adds operatorMetadata to list/network. */
+export function useOperatorDirectory(slotIds: string[]) {
+  const ids = slotIds.slice(0, FANOUT_CAP);
+  return useQuery({
+    queryKey: ['operator-directory', ids],
+    queryFn: async (): Promise<Record<string, OperatorDirectoryEntry>> => {
+      const entries = await Promise.all(
+        ids.map(async (slotId): Promise<OperatorDirectoryEntry | null> => {
+          try {
+            const r = await apiGetPath('/api/v1/coreslots/{slotId}', { slotId });
+            const meta = parseOperatorMetadata(r.data.metadata);
+            return {
+              slotId,
+              operatorAddress: r.data.operatorAddress,
+              displayName: displayName({ moniker: meta.moniker, operatorAddress: r.data.operatorAddress }),
+              moniker: meta.moniker,
+              metadataExtras: meta.extras,
+            };
+          } catch {
+            return null;
+          }
+        }),
+      );
+      const map: Record<string, OperatorDirectoryEntry> = {};
+      for (const entry of entries) {
+        if (entry) map[entry.slotId] = entry;
+      }
+      return map;
+    },
+    enabled: ids.length > 0,
   });
 }

@@ -13,6 +13,7 @@ const NAV: { label: string; href: string }[] = [
   { label: 'Accounts', href: '/accounts' },
   { label: 'CoreSlots', href: '/coreslots' },
   { label: 'Liveness', href: '/liveness' },
+  { label: 'Network', href: '/network' },
   { label: 'Rewards', href: '/rewards' },
   { label: 'Supply', href: '/supply' },
   { label: 'API', href: '/api' },

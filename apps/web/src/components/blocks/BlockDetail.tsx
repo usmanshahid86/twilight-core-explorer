@@ -7,6 +7,7 @@ import { MonoCopy } from '@/components/ui/MonoCopy';
 import { DataList } from '@/components/detail/DataList';
 import { DetailShell } from '@/components/detail/DetailShell';
 import { RawSection } from '@/components/detail/RawSection';
+import { OperatorLink } from '@/components/operator/OperatorLink';
 import { ErrorState, InvalidInput, LoadingState } from '@/components/states/States';
 import { BlockTxsSection } from './BlockTxsSection';
 import { useBlock, useBlockRaw } from '@/lib/api/queries';
@@ -58,7 +59,14 @@ export function BlockDetail({ height }: { height: string }) {
               { label: 'Time', value: formatAbsoluteTime(b.time) },
               { label: 'Chain', value: b.chainId ?? '—' },
               { label: 'Transactions', value: <span className="font-mono">{b.txCount}</span> },
-              { label: 'Proposer', value: <MonoCopy value={proposer} label="proposer" /> },
+              {
+                label: 'Proposer',
+                value: b.proposer.operatorAddress ? (
+                  <OperatorLink operatorAddress={b.proposer.operatorAddress} />
+                ) : (
+                  <MonoCopy value={proposer} label="proposer" />
+                ),
+              },
               {
                 label: 'Attribution',
                 value: b.proposer.attributionStatus ? (
