@@ -37,12 +37,14 @@ export function SearchResults() {
       return <div className="text-sm text-text-muted">Redirecting…</div>;
     }
     return (
-      <>
+      // Self-contained spacing between the summary and the picker (PR #40) — don't rely on the page's
+      // space-y reaching through this fragment.
+      <div className="space-y-4">
         <p className="text-sm text-text-muted">
           {results.length} matches for “{q}”. Multiple types matched — choose one.
         </p>
         <SearchResultsPicker results={results} />
-      </>
+      </div>
     );
   })();
 

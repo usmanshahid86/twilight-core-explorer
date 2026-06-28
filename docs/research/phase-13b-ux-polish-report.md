@@ -101,7 +101,8 @@ nav-breakpoint guard from the Codex review). Existing detail/operator/search tes
 
 ## Validation (all green)
 
-`apps/web` typecheck · **158 tests** (+4) · build ✓. No API/schema/contract change.
+`apps/web` typecheck · **159 tests** (+5 vs main's 154: contrast guard, 3× Header nav-grouping +
+breakpoint) · build ✓. No API/schema/contract change.
 
 ## Recommendation
 

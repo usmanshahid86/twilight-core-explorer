@@ -52,7 +52,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <main
               id="main"
               tabIndex={-1}
-              className="flex-1 w-full lg:w-[1432px] lg:mx-auto px-4 sm:px-6 lg:px-[156px] pt-6 pb-6 lg:pb-12 focus:outline-none"
+              // No focus:outline-none — the global :focus-visible ring shows where focus lands after
+              // "Skip to main content" is activated, so keyboard users see the destination (PR #40).
+              className="flex-1 w-full lg:w-[1432px] lg:mx-auto px-4 sm:px-6 lg:px-[156px] pt-6 pb-6 lg:pb-12"
             >
               {children}
             </main>
