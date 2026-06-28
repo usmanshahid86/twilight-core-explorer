@@ -365,6 +365,26 @@ describe('CoreSlot temporal consensus map projection', () => {
     assert.equal(prisma.projectionFailures[0].failureKind, 'invalid_consensus_address');
   });
 
+  it('FU-1 root: a malformed rotation stamps its failure at the processing height, never the 0n genesis sentinel', async () => {
+    const prisma = new TemporalMockPrisma();
+    // status=applied, but appliedHeight + effectiveHeight are null -> sourceHeight must fall back to the
+    // processing height (not 0n). Found at height 15 via requestedHeight; produces effective_height_invalid.
+    prisma.seedRotation(CORESLOT_KEY_ROTATION_STATUS.applied, {
+      requestedHeight: 15n,
+      appliedHeight: null,
+      effectiveHeight: null,
+      cancelledHeight: null,
+    });
+
+    await projectCoreSlotTemporalMapHeight({ prisma, chainId: CHAIN_ID, height: 15n });
+
+    assert.equal(prisma.projectionFailures.length, 1);
+    assert.equal(prisma.projectionFailures[0].failureKind, 'effective_height_invalid');
+    // Root fix: stamped at the processing height (15n), NOT the 0n genesis sentinel — so a genesis
+    // re-seed cleanup at 0n can never collaterally delete it. (Pre-fix this was 0n.)
+    assert.equal(prisma.projectionFailures[0].sourceHeight, 15n);
+  });
+
   it('records temporal_window_conflict for duplicate active genesis consensus addresses', async () => {
     const prisma = new TemporalMockPrisma();
 

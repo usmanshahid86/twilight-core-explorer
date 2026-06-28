@@ -192,10 +192,11 @@ export async function projectCoreSlotTemporalMapRange(
 // sentinel.
 const GENESIS_SEED_FAILURE_SOURCE_HEIGHT = 0n;
 
-// The failure kinds the genesis seed can emit. The idempotent re-seed cleanup is scoped to these so it
-// can NEVER collaterally delete a non-genesis failure that also falls back to the 0n sentinel — e.g. a
-// malformed rotation whose heights are all null (projectRotation uses `?? 0n`). 0n is NOT an exclusive
-// genesis namespace, so a kind filter (not just the height) is required here.
+// The failure kinds the genesis seed can emit, used to scope the idempotent re-seed cleanup. 0n is now
+// EXCLUSIVELY the genesis namespace — projectRotation falls back to the processing height, never 0n — so
+// no non-genesis failure can land at 0n. The kind filter is retained as defense-in-depth + explicit
+// intent (it documents exactly what the genesis seed produces); the load-bearing guarantee is the
+// 0n-exclusivity, which the `rotation fallback -> processing height` test pins.
 const GENESIS_SEED_FAILURE_KINDS: ProjectionFailureKind[] = [
   'genesis_unavailable',
   'genesis_coreslot_malformed',
@@ -230,8 +231,9 @@ export async function seedCoreSlotGenesisTemporalMap(args: {
       await tx.projectionFailure.deleteMany({
         where: {
           projectionName: CORESLOT_TEMPORAL_MAP_PROJECTION,
-          // Idempotent re-seed: clear prior genesis-seed failures at the sentinel, scoped by kind so a
-          // malformed-rotation failure that also lands at 0n (projectRotation `?? 0n`) is never touched.
+          // Idempotent re-seed: clear prior genesis-seed failures at the sentinel. 0n is exclusive to the
+          // genesis seed (projectRotation never falls back to 0n), so this only ever matches genesis
+          // failures; the kind filter is kept as defense-in-depth + explicit intent.
           sourceHeight: GENESIS_SEED_FAILURE_SOURCE_HEIGHT,
           failureKind: { in: GENESIS_SEED_FAILURE_KINDS },
           resolved: false,
@@ -310,7 +312,7 @@ export async function projectCoreSlotTemporalMapHeight(
       }
 
       for (const rotation of rotations) {
-        await projectRotation(tx, rotation, counters);
+        await projectRotation(tx, rotation, counters, height);
       }
 
       await updateProjectionCursorSuccess(
@@ -599,6 +601,11 @@ async function projectRotation(
   tx: CoreSlotTemporalMapProjectionPrisma,
   rotation: RotationSource,
   counters: Counters,
+  // The per-height processing height. Used as the last-resort `sourceHeight` for a malformed rotation
+  // whose own heights are all null — so its failures land at the height being processed (owned by the
+  // per-height cleanup, idempotent) and NEVER at the 0n genesis sentinel. This keeps 0n exclusive to
+  // the genesis seed (FU-1), so the genesis re-seed cleanup cannot collaterally delete a rotation failure.
+  height: bigint,
 ): Promise<void> {
   if (
     rotation.status === CORESLOT_KEY_ROTATION_STATUS.requested
@@ -612,7 +619,7 @@ async function projectRotation(
     && rotation.status !== CORESLOT_KEY_ROTATION_STATUS.immediateApplied
   ) {
     await createFailure(tx, {
-      sourceHeight: rotation.appliedHeight ?? rotation.cancelledHeight ?? 0n,
+      sourceHeight: rotation.appliedHeight ?? rotation.cancelledHeight ?? height,
       sourceEventId: rotation.sourceAppliedEventId,
       failureKind: 'unknown_semantic_type',
       rawEventJson: rotation.rawAppliedEventJson,
@@ -622,7 +629,8 @@ async function projectRotation(
     return;
   }
 
-  const sourceHeight = rotation.appliedHeight ?? rotation.effectiveHeight ?? 0n;
+  // Fall back to the processing height (never 0n) so rotation failures stay out of the genesis sentinel.
+  const sourceHeight = rotation.appliedHeight ?? rotation.effectiveHeight ?? height;
   const newConsensusAddress = normalizeConsensusAddress(rotation.newConsensusAddress);
   if (!newConsensusAddress.ok) {
     await createFailure(tx, {

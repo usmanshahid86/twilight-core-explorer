@@ -52,12 +52,17 @@ id) or add a scoped disable.
 failures by `sourceHeight = height` **unscoped by failureKind**; on a full rebuild it runs at height 1
 and silently wiped genesis failures — so a malformed/ambiguous genesis was *not* durably surfaced
 (violating the "ambiguous history → ProjectionFailure" invariant). Fix: a `GENESIS_SEED_FAILURE_SOURCE_HEIGHT
-= 0n` sentinel (below any real block height; nothing else uses 0) for all genesis-seed failures and the
-re-seed cleanup (now unscoped, since the whole sentinel is the genesis-failure namespace → idempotent
-across every kind). Mirrors the `coreslot-genesis-identity` 0n fix. The window record is unaffected
-(`effectiveFromHeight` stays 1n; the window does not store `sourceHeight`). **Guard:** a failing-before
-test in `coreslot-temporal-map.test.js` — a genesis failure is stamped at `0n` and **survives** a
-height-1 `projectCoreSlotTemporalMapHeight` cleanup (pre-fix it was deleted).
+= 0n` sentinel (below any real block height) for all genesis-seed failures. The re-seed cleanup deletes
+genesis failures at the `0n` sentinel; **`0n` is exclusively the genesis namespace** because
+`projectRotation` now falls back to the *processing height* (never `0n`) for a malformed rotation whose
+heights are all null — so the cleanup can never collaterally delete a rotation failure. The cleanup is
+kept scoped to `GENESIS_SEED_FAILURE_KINDS` as defense-in-depth + explicit intent (the load-bearing
+guarantee is the `0n`-exclusivity, not the kind list). Mirrors the `coreslot-genesis-identity` 0n fix.
+The window record is unaffected (`effectiveFromHeight` stays 1n; the window does not store `sourceHeight`).
+**Guards:** failing-before tests in `coreslot-temporal-map.test.js` — (1) a genesis failure stamped at `0n`
+**survives** a height-1 `projectCoreSlotTemporalMapHeight` cleanup (with a live control failure at `1n`
+that the same pass deletes, proving the cleanup is live); (2) a malformed rotation stamps its failure at
+the **processing height** (`15n`), never `0n` (pre-fix it was `0n`) — pinning the `0n`-exclusivity.
 
 ## J-002 — deferred rewards-side filters (documented per plan §5.1)
 
@@ -77,26 +82,35 @@ API already serves them (no contract change when surfaced later). The existing `
 
 ## Validation (all green)
 
-root `typecheck` · `lint` · `test` · `apps/api test` **114** · `apps/indexer test` **275 pass** (+1
-FU-1 durability test) · `chain-client test` · `apps/web test` **33 files** (+1 `coverage.test.ts`;
+root `typecheck` · `lint` · `test` · `apps/api test` **114** · `apps/indexer test` **276 pass** (+2
+FU-1 tests: genesis durability + the rotation-fallback `0n`-exclusivity guard) · `chain-client test` ·
+`apps/web test` **33 files** (+1 `coverage.test.ts`;
 coverage guard 33/33) · `api openapi:check` + `web openapi:check` **up to date** (no contract change) ·
 web `build` ✓ · static route guards clean. Diff: web + indexer only — 9 modified + 1 deleted tracked +
 2 new (`lib/api/coverage.test.ts`, this report); no schema/API/OpenAPI change.
 
 ## Review
 
-**Adversarial-reviewer subagent: PASS** (0 blockers, 0 majors). Folded in:
-- **MIN-1** — the FU-1 re-seed `deleteMany` was unscoped over the `0n` sentinel, which could collaterally
-  delete a malformed-rotation failure that also falls back to `0n` (`projectRotation ?? 0n`). Re-scoped to
-  the genesis failure kinds (`GENESIS_SEED_FAILURE_KINDS`) so it only ever clears genesis-seed failures.
-- **NOTE-1** — strengthened the FU-1 test with a live control failure at `(1n, resolved:false)`: the
-  control is deleted by the height-1 cleanup (proving it is live) while the `0n` genesis failure survives,
-  so the durability assertion is no longer vacuous under the mock.
+**Adversarial-reviewer subagent: PASS**, then a **Codex review caught a real FU-1 blocker** that the
+adversarial pass under-rated — both now resolved:
+- **Codex blocker (the root cause)** — scoping the genesis cleanup by `failureKind` (the initial MIN-1
+  patch) was **insufficient**: two of the genesis kinds (`invalid_consensus_address`,
+  `temporal_window_conflict`) are *also* produced by `projectRotation`, which had its own `?? 0n`
+  fallback — so a malformed rotation could land those kinds at `0n` and the genesis cleanup would still
+  delete them. **Root fix:** thread the per-height `height` into `projectRotation` and fall back to it
+  (never `0n`), so `0n` is **exclusively** the genesis namespace and the cleanup can only ever match
+  genesis failures. The kind scope is kept as defense-in-depth; the load-bearing guarantee is the
+  `0n`-exclusivity, pinned by a new test (a malformed rotation stamps at the processing height `15n`,
+  never `0n`).
+- **NOTE-1** — strengthened the FU-1 durability test with a live control failure at `(1n, resolved:false)`
+  the height-1 cleanup deletes, so the "survives" assertion is no longer vacuous under the mock.
 - **NOTE-2** — corrected this report's M-002 lint claim.
 
-Residual (tracked, non-blocking): `projectRotation`'s `?? 0n` fallback shares the genesis sentinel
-namespace — a future cleanup should move it off `0n`; the `START_HEIGHT=0` edge mirrors the accepted
-`genesis-identity` assumption (height 0 never revisited). **External (Codex) review: pending** (user-run).
+Residual (tracked, non-blocking): the `START_HEIGHT=0` edge mirrors the accepted `genesis-identity`
+assumption (height 0 never revisited) — if the per-height loop ever ran at height 0 it would both wipe
+the genesis sentinel and let a rotation fall back to 0; the default post-reset `startHeight` is `1n`.
+**Codex review:** caught the FU-1 scoping blocker above; the root fix (rotation off `0n`) is applied —
+a re-review is recommended before this slice merges.
 
 ## Files touched
 
