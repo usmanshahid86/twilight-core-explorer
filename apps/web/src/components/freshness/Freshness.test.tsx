@@ -24,4 +24,17 @@ describe('sampled-data rendering honesty', () => {
     expect(screen.getByText(/sampled at height/i)).toBeInTheDocument();
     expect(screen.getByText(/60 blocks behind/i)).toBeInTheDocument();
   });
+
+  it('M-003: age=unknown renders "sample age unknown", never the false "sample current"', () => {
+    render(<SampleAgeLabel age={{ kind: 'unknown' }} />);
+    expect(screen.getByText('sample age unknown')).toBeInTheDocument();
+    expect(screen.queryByText('sample current')).toBeNull();
+  });
+
+  it('M-003: SampledAtNote with a known height but unknown age still shows the height + unknown badge', () => {
+    render(<SampledAtNote sampledAtHeight="100" age={{ kind: 'unknown' }} />);
+    expect(screen.getByText(/sampled at height/i)).toBeInTheDocument();
+    expect(screen.getByText('sample age unknown')).toBeInTheDocument();
+    expect(screen.queryByText('no sample')).toBeNull();
+  });
 });

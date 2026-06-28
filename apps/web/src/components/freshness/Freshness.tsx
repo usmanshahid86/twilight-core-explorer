@@ -24,6 +24,10 @@ export function SampleAgeLabel({ age }: { age: SampleAge }) {
   if (age.kind === 'none') {
     return <NoSampleLabel />;
   }
+  if (age.kind === 'unknown') {
+    // We have a sampled height but no latest height to compare — neutral, never "current".
+    return <Badge tone="neutral">sample age unknown</Badge>;
+  }
   const tone = age.kind === 'old' ? 'warning' : 'success';
   return (
     <Badge tone={tone}>

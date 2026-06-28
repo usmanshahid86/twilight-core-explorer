@@ -71,7 +71,7 @@ export function TxDetail({ hash }: { hash: string }) {
                 value: t.signerAddresses.length ? (
                   <div className="space-y-1">
                     {t.signerAddresses.map((a, i) => (
-                      <MonoCopy key={i} value={a} label="signer" />
+                      <MonoCopy key={`${a}-${i}`} value={a} label="signer" />
                     ))}
                   </div>
                 ) : (
@@ -121,7 +121,10 @@ export function TxDetail({ hash }: { hash: string }) {
           ) : (
             <div className="space-y-3">
               {t.events.map((e: TxEvent, i) => (
-                <div key={i} className="rounded-xl border border-card-border bg-background-secondary p-3">
+                <div
+                  key={`${e.phase}-${e.type}-${i}`}
+                  className="rounded-xl border border-card-border bg-background-secondary p-3"
+                >
                   <div className="flex flex-wrap items-center gap-2 text-sm">
                     <Badge tone="neutral">{e.phase}</Badge>
                     <span className="font-mono text-text">{e.type}</span>

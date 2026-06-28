@@ -184,6 +184,25 @@ export async function projectCoreSlotTemporalMapRange(
   return results;
 }
 
+// FU-1: genesis-seed ProjectionFailures are stamped at this sentinel height (below any real block
+// height, which starts at 1). The per-height cleanup in projectCoreSlotTemporalMapHeight deletes
+// failures by `sourceHeight = height` UNSCOPED by failureKind; on a full rebuild it runs at height 1
+// and would otherwise silently wipe genesis failures stamped at 1n. Stamping them at 0n makes a
+// malformed/ambiguous genesis ProjectionFailure durable. Mirrors the coreslot-genesis-identity 0n
+// sentinel.
+const GENESIS_SEED_FAILURE_SOURCE_HEIGHT = 0n;
+
+// The failure kinds the genesis seed can emit. The idempotent re-seed cleanup is scoped to these so it
+// can NEVER collaterally delete a non-genesis failure that also falls back to the 0n sentinel — e.g. a
+// malformed rotation whose heights are all null (projectRotation uses `?? 0n`). 0n is NOT an exclusive
+// genesis namespace, so a kind filter (not just the height) is required here.
+const GENESIS_SEED_FAILURE_KINDS: ProjectionFailureKind[] = [
+  'genesis_unavailable',
+  'genesis_coreslot_malformed',
+  'invalid_consensus_address',
+  'temporal_window_conflict',
+];
+
 export async function seedCoreSlotGenesisTemporalMap(args: {
   prisma: CoreSlotTemporalMapProjectionPrisma;
   chainId: string;
@@ -211,8 +230,10 @@ export async function seedCoreSlotGenesisTemporalMap(args: {
       await tx.projectionFailure.deleteMany({
         where: {
           projectionName: CORESLOT_TEMPORAL_MAP_PROJECTION,
-          sourceHeight: 1n,
-          failureKind: { in: ['genesis_unavailable', 'genesis_coreslot_malformed'] },
+          // Idempotent re-seed: clear prior genesis-seed failures at the sentinel, scoped by kind so a
+          // malformed-rotation failure that also lands at 0n (projectRotation `?? 0n`) is never touched.
+          sourceHeight: GENESIS_SEED_FAILURE_SOURCE_HEIGHT,
+          failureKind: { in: GENESIS_SEED_FAILURE_KINDS },
           resolved: false,
         },
       });
@@ -321,7 +342,7 @@ async function recordGenesisUnavailable(
   const error = input.error instanceof Error ? input.error.message : String(input.error);
   await prisma.$transaction(async (tx) => {
     await createFailure(tx, {
-      sourceHeight: 1n,
+      sourceHeight: GENESIS_SEED_FAILURE_SOURCE_HEIGHT,
       failureKind: 'genesis_unavailable',
       error,
     });
@@ -342,7 +363,7 @@ async function recordGenesisMalformed(
 ): Promise<void> {
   await prisma.$transaction(async (tx) => {
     await createFailure(tx, {
-      sourceHeight: 1n,
+      sourceHeight: GENESIS_SEED_FAILURE_SOURCE_HEIGHT,
       failureKind: 'genesis_coreslot_malformed',
       rawEventJson: input.raw,
       error: input.error,
@@ -366,7 +387,7 @@ async function seedGenesisSlot(
 
   if (slot.slotId === null) {
     await createFailure(tx, {
-      sourceHeight: 1n,
+      sourceHeight: GENESIS_SEED_FAILURE_SOURCE_HEIGHT,
       failureKind: 'genesis_coreslot_malformed',
       rawEventJson: slot.raw,
       error: 'Active genesis CoreSlot is missing a valid slot id.',
@@ -378,7 +399,7 @@ async function seedGenesisSlot(
   const consensusAddress = normalizeOptionalConsensusAddress(slot.consensusAddress);
   if (!consensusAddress.ok || consensusAddress.value === null) {
     await createFailure(tx, {
-      sourceHeight: 1n,
+      sourceHeight: GENESIS_SEED_FAILURE_SOURCE_HEIGHT,
       failureKind: 'invalid_consensus_address',
       rawEventJson: slot.raw,
       error: consensusAddress.ok
@@ -403,7 +424,8 @@ async function seedGenesisSlot(
     openedByRotationId: null,
     openedByLifecycleId: null,
     rawOpenJson: slot.raw,
-    sourceHeight: 1n,
+    // FU-1: genesis-window-conflict failures from openActiveWindow must also be durable (0n sentinel).
+    sourceHeight: GENESIS_SEED_FAILURE_SOURCE_HEIGHT,
   });
   if (opened.ok) counters.windowsWritten += opened.written ? 1 : 0;
   else counters.failuresCreated += 1;
