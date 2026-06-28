@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { Card, CardBody } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { MonoCopy } from '@/components/ui/MonoCopy';
@@ -21,38 +22,38 @@ import { CoreSlotAuthorityHistorySection } from './sections/CoreSlotAuthorityHis
 import { CoreSlotRewardsSection } from './sections/CoreSlotRewardsSection';
 import { CoreSlotRawSection } from './sections/CoreSlotRawSection';
 
-export function CoreSlotDetail({ slotId }: { slotId: string }) {
+export function CoreSlotDetail({ slotId, embedded = false }: { slotId: string; embedded?: boolean }) {
   // String-safe numeric-slot-id check (no Number()). Neutral message matches the regex; the API still
   // validates (invalid_slot_id / not_found) and ErrorState branches on error.code.
   const valid = /^\d+$/.test(slotId);
   const query = useCoreSlot(valid ? slotId : '');
 
-  if (!valid) {
-    return (
-      <DetailShell title={`CoreSlot ${slotId}`}>
-        <InvalidInput message="CoreSlot id must be a numeric slot id." />
+  // Embedded (e.g. inside the operator page) renders headless — no DetailShell h1 — so the host keeps a
+  // single h1 (M-010). Standalone wraps with the breadcrumbed shell (M-006).
+  const wrap = (title: string, node: ReactNode) =>
+    embedded ? (
+      <div className="space-y-6">{node}</div>
+    ) : (
+      <DetailShell title={title} backHref="/coreslots" backLabel="CoreSlots">
+        {node}
       </DetailShell>
     );
+
+  if (!valid) {
+    return wrap(`CoreSlot ${slotId}`, <InvalidInput message="CoreSlot id must be a numeric slot id." />);
   }
   if (query.isPending) {
-    return (
-      <DetailShell title="CoreSlot">
-        <LoadingState rows={5} />
-      </DetailShell>
-    );
+    return wrap('CoreSlot', <LoadingState rows={5} />);
   }
   if (query.isError) {
-    return (
-      <DetailShell title={`CoreSlot ${slotId}`}>
-        <ErrorState error={query.error} context="CoreSlot" />
-      </DetailShell>
-    );
+    return wrap(`CoreSlot ${slotId}`, <ErrorState error={query.error} context="CoreSlot" />);
   }
 
   const c = query.data.data;
   const operatorMeta = parseOperatorMetadata(c.metadata);
-  return (
-    <DetailShell title={`CoreSlot ${c.slotId}`}>
+  return wrap(
+    `CoreSlot ${c.slotId}`,
+    <>
       <Card>
         <CardBody>
           <DataList
@@ -110,6 +111,6 @@ export function CoreSlotDetail({ slotId }: { slotId: string }) {
       <CoreSlotAuthorityHistorySection slotId={c.slotId} />
       <CoreSlotRewardsSection slotId={c.slotId} />
       <CoreSlotRawSection slotId={c.slotId} />
-    </DetailShell>
+    </>,
   );
 }

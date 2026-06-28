@@ -1,22 +1,26 @@
 'use client';
 
+import { Fragment } from 'react';
 import { clsx } from 'clsx';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { SearchBar } from './SearchBar';
 
-// IA reshaped for Twilight (CoreSlot PoA + rewards), NOT the reference bridge/ZkOS nav.
-const NAV: { label: string; href: string }[] = [
-  { label: 'Overview', href: '/' },
-  { label: 'Blocks', href: '/blocks' },
-  { label: 'Transactions', href: '/txs' },
-  { label: 'Accounts', href: '/accounts' },
-  { label: 'CoreSlots', href: '/coreslots' },
-  { label: 'Liveness', href: '/liveness' },
-  { label: 'Network', href: '/network' },
-  { label: 'Rewards', href: '/rewards' },
-  { label: 'Supply', href: '/supply' },
-  { label: 'API', href: '/api' },
+// IA reshaped for Twilight (CoreSlot PoA + rewards), NOT the reference bridge/ZkOS nav. Items are
+// grouped by concern (explore / validators / economics / diagnostics) for discoverability; the desktop
+// nav renders a subtle separator at each group boundary.
+export type NavGroup = 'explore' | 'validators' | 'economics' | 'diagnostics';
+export const NAV: { label: string; href: string; group: NavGroup }[] = [
+  { label: 'Overview', href: '/', group: 'explore' },
+  { label: 'Blocks', href: '/blocks', group: 'explore' },
+  { label: 'Transactions', href: '/txs', group: 'explore' },
+  { label: 'Accounts', href: '/accounts', group: 'explore' },
+  { label: 'CoreSlots', href: '/coreslots', group: 'validators' },
+  { label: 'Liveness', href: '/liveness', group: 'validators' },
+  { label: 'Network', href: '/network', group: 'validators' },
+  { label: 'Rewards', href: '/rewards', group: 'economics' },
+  { label: 'Supply', href: '/supply', group: 'economics' },
+  { label: 'API', href: '/api', group: 'diagnostics' },
 ];
 
 function isActive(pathname: string, href: string): boolean {
@@ -27,7 +31,7 @@ function isActive(pathname: string, href: string): boolean {
 export function Header() {
   const pathname = usePathname();
   return (
-    <header className="fixed inset-x-0 top-0 z-40 border-b border-card-border bg-background/90 backdrop-blur">
+    <header className="sticky top-0 z-40 border-b border-card-border bg-background/90 backdrop-blur">
       <div className="mx-auto w-full lg:w-[1432px] px-4 sm:px-6 lg:px-[156px]">
         <div className="flex h-16 items-center justify-between gap-4">
           <Link href="/" className="flex items-center gap-2">
@@ -38,19 +42,23 @@ export function Header() {
             <SearchBar />
           </div>
           <nav className="hidden items-center gap-1 xl:flex" aria-label="Primary">
-            {NAV.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={clsx(
-                  'rounded-lg px-2.5 py-1.5 text-sm',
-                  isActive(pathname, item.href)
-                    ? 'bg-card text-primary'
-                    : 'text-text-secondary hover:text-text',
-                )}
-              >
-                {item.label}
-              </Link>
+            {NAV.map((item, i) => (
+              <Fragment key={item.href}>
+                {i > 0 && NAV[i - 1]?.group !== item.group ? (
+                  <span aria-hidden="true" className="mx-1 h-4 w-px bg-card-border" />
+                ) : null}
+                <Link
+                  href={item.href}
+                  className={clsx(
+                    'rounded-lg px-2.5 py-1.5 text-sm',
+                    isActive(pathname, item.href)
+                      ? 'bg-card text-primary'
+                      : 'text-text-secondary hover:text-text',
+                  )}
+                >
+                  {item.label}
+                </Link>
+              </Fragment>
             ))}
           </nav>
         </div>

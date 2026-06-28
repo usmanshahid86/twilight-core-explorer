@@ -14,7 +14,16 @@ import { formatHeight } from '@/lib/format/height';
 export function LivenessOverview() {
   const query = useLivenessRisk();
 
-  if (query.isPending) return <LoadingState rows={3} />;
+  if (query.isPending) {
+    return (
+      <Card>
+        <CardHeader title="Network liveness risk" />
+        <CardBody>
+          <LoadingState rows={3} />
+        </CardBody>
+      </Card>
+    );
+  }
   if (query.isError) {
     if (query.error instanceof ApiError && query.error.code === ERROR_CODES.notFound) {
       return (

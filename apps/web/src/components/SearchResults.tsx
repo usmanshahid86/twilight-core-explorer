@@ -21,29 +21,32 @@ export function SearchResults() {
     if (onlyHref) router.replace(onlyHref);
   }, [onlyHref, router]);
 
-  if (q.length === 0) {
-    return <InvalidInput message="Enter a height, hash, address, or CoreSlot id to search." />;
-  }
-  if (query.isPending) return <LoadingState rows={4} />;
-  if (query.isError) return <ErrorState error={query.error} context="Search" />;
+  // A single, stable h1 across every state (M-011) — the per-state body renders beneath it.
+  const body = (() => {
+    if (q.length === 0) {
+      return <InvalidInput message="Enter a height, hash, address, or CoreSlot id to search." />;
+    }
+    if (query.isPending) return <LoadingState rows={4} />;
+    if (query.isError) return <ErrorState error={query.error} context="Search" />;
 
-  const results = query.data.data;
-  if (results.length === 0) {
-    return <EmptyState message={`No results for “${q}”.`} />;
-  }
-  if (onlyHref) {
-    return <div className="text-sm text-text-muted">Redirecting…</div>;
-  }
-
-  return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="font-serif text-2xl text-text">Search results</h1>
-        <p className="mt-1 text-sm text-text-muted">
+    const results = query.data.data;
+    if (results.length === 0) {
+      return <EmptyState message={`No results for “${q}”.`} />;
+    }
+    if (onlyHref) {
+      return <div className="text-sm text-text-muted">Redirecting…</div>;
+    }
+    return (
+      <>
+        <p className="text-sm text-text-muted">
           {results.length} matches for “{q}”. Multiple types matched — choose one.
         </p>
-      </div>
-      <SearchResultsPicker results={results} />
-    </div>
-  );
+        <SearchResultsPicker results={results} />
+      </>
+    );
+  })();
+
+  // The h1 + wrapper live in search/page.tsx (above Suspense) so the heading is present in every
+  // render including the SSR/fallback; this component renders only the per-state body.
+  return body;
 }

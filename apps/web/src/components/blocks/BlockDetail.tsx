@@ -49,7 +49,7 @@ export function BlockDetail({ height }: { height: string }) {
   const b = query.data.data;
   const proposer = b.proposer.operatorAddress ?? b.proposer.address ?? b.proposer.rawAddress;
   return (
-    <DetailShell title={`Block ${formatHeight(b.height)}`}>
+    <DetailShell title={`Block ${formatHeight(b.height)}`} backHref="/blocks" backLabel="Blocks">
       <Card>
         <CardBody>
           <DataList

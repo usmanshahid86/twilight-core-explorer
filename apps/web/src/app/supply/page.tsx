@@ -1,5 +1,7 @@
 import { SupplyView } from '@/components/supply/SupplyView';
 
+export const metadata = { title: "Supply" };
+
 export default function SupplyPage() {
   return (
     <div className="space-y-6">

@@ -12,10 +12,13 @@ export function Card({ children, className }: { children: ReactNode; className?:
 export function CardHeader({
   title,
   href,
+  linkLabel,
   action,
 }: {
   title: string;
   href?: string;
+  // Precise, unique link text (J-006). Defaults to "View all", which only fits a list destination.
+  linkLabel?: string;
   action?: ReactNode;
 }) {
   return (
@@ -25,7 +28,7 @@ export function CardHeader({
         {action}
         {href ? (
           <a href={href} className="text-primary hover:text-primary-light">
-            View all →
+            {linkLabel ?? 'View all'} →
           </a>
         ) : null}
       </div>

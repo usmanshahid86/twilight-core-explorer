@@ -1,5 +1,7 @@
 import { BlocksList } from '@/components/blocks/BlocksList';
 
+export const metadata = { title: "Blocks" };
+
 export default function BlocksPage() {
   return (
     <div className="space-y-6">

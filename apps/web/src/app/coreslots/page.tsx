@@ -1,5 +1,7 @@
 import { CoreSlotsList } from '@/components/coreslots/CoreSlotsList';
 
+export const metadata = { title: "CoreSlots" };
+
 export default function CoreSlotsPage() {
   return (
     <div className="space-y-6">

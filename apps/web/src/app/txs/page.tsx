@@ -1,5 +1,7 @@
 import { TxsList } from '@/components/txs/TxsList';
 
+export const metadata = { title: "Transactions" };
+
 export default function TxsPage() {
   return (
     <div className="space-y-6">
