@@ -1,6 +1,8 @@
 import { ValidatorSetSection } from '@/components/network/ValidatorSetSection';
 import { ProposerLeaderboard } from '@/components/network/ProposerLeaderboard';
 
+export const metadata = { title: "Network" };
+
 export default function NetworkPage() {
   return (
     <div className="space-y-6">

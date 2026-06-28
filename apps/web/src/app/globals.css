@@ -44,7 +44,8 @@
 
   --text: 249 250 251;
   --text-secondary: 163 163 179;
-  --text-muted: 107 107 122;
+  /* WCAG 1.4.3: ~5.3:1 on --background (was 107 107 122 ≈ 3.9:1, sub-AA for normal text). */
+  --text-muted: 128 128 144;
 
   --border: 31 31 35;
   --border-light: 42 42 46;
@@ -80,7 +81,8 @@
 
   --text: 255 255 255;
   --text-secondary: 148 163 184;
-  --text-muted: 100 116 139;
+  /* WCAG 1.4.3: ~5.5:1 on the legacy --background (was 100 116 139 ≈ 3.9:1). */
+  --text-muted: 130 144 163;
 
   --border: 51 65 85;
   --border-light: 71 85 105;
@@ -98,6 +100,19 @@ body {
   background-color: rgb(var(--background));
   color: rgb(var(--text));
   font-family: var(--font-sans);
+}
+
+/* Keep in-page anchor targets (e.g. the skip link → #main) clear of the sticky header. */
+html {
+  scroll-padding-top: 5rem;
+}
+
+/* WCAG 2.4.7 — a consistent, visible keyboard-focus indicator for every interactive element.
+   `:where()` keeps specificity at 0 so a component can still opt into its own focus style. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid rgb(var(--primary));
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 /* Custom scrollbar */

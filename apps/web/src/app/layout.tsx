@@ -20,7 +20,8 @@ const instrumentSerif = Instrument_Serif({
 const robotoMono = Roboto_Mono({ subsets: ['latin'], variable: '--font-mono' });
 
 export const metadata: Metadata = {
-  title: 'Twilight Core Explorer',
+  // `%s` is filled by each route's `metadata.title`; routes without one fall back to `default`.
+  title: { default: 'Twilight Core Explorer', template: '%s · Twilight Core Explorer' },
   description:
     'Operator-grade explorer for Twilight Core — CoreSlot PoA, liveness, rewards, and network health.',
 };
@@ -38,10 +39,23 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       className={`${inter.variable} ${instrumentSerif.variable} ${robotoMono.variable}`}
     >
       <body className="bg-background text-text">
+        {/* WCAG 2.4.1 — first focusable element: bypass the header/nav straight to content. */}
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-card focus:px-4 focus:py-2 focus:text-primary"
+        >
+          Skip to main content
+        </a>
         <div className="min-h-screen bg-background flex flex-col">
           <Providers>
             <Header />
-            <main className="flex-1 w-full lg:w-[1432px] lg:mx-auto px-4 sm:px-6 lg:px-[156px] pt-20 lg:pt-[57px] pb-6 lg:pb-12">
+            <main
+              id="main"
+              tabIndex={-1}
+              // No focus:outline-none — the global :focus-visible ring shows where focus lands after
+              // "Skip to main content" is activated, so keyboard users see the destination (PR #40).
+              className="flex-1 w-full lg:w-[1432px] lg:mx-auto px-4 sm:px-6 lg:px-[156px] pt-6 pb-6 lg:pb-12"
+            >
               {children}
             </main>
             <Footer />

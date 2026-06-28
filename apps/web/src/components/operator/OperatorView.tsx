@@ -56,7 +56,7 @@ export function OperatorView({ address }: { address: string }) {
   const name = displayName({ moniker: meta.moniker, operatorAddress });
 
   return (
-    <DetailShell title={name}>
+    <DetailShell title={name} backHref="/coreslots" backLabel="CoreSlots">
       <Card>
         <CardBody className="space-y-2">
           <div className="text-sm text-text-muted">
@@ -87,7 +87,7 @@ export function OperatorView({ address }: { address: string }) {
 
       <OperatorProfile metadata={meta} />
 
-      <CoreSlotDetail slotId={primarySlot.slotId} />
+      <CoreSlotDetail slotId={primarySlot.slotId} embedded />
     </DetailShell>
   );
 }

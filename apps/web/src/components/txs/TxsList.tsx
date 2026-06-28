@@ -3,9 +3,11 @@
 import Link from 'next/link';
 import { PaginatedTable, type Column } from '@/components/list/PaginatedTable';
 import { Badge } from '@/components/ui/Badge';
+import { CopyButton } from '@/components/ui/CopyButton';
 import { useTxsList, type TxsResponse } from '@/lib/api/queries';
 import { formatHeight } from '@/lib/format/height';
 import { statusTone } from '@/lib/format/status';
+import { shortenMiddle } from '@/lib/format/address';
 
 type Tx = TxsResponse['data'][number];
 
@@ -15,9 +17,15 @@ export function TxsList() {
     {
       header: 'Hash',
       cell: (t) => (
-        <Link href={`/txs/${encodeURIComponent(t.hash)}`} className="text-primary hover:text-primary-light">
-          <span className="font-mono">{t.hash.slice(0, 14)}…</span>
-        </Link>
+        <span className="inline-flex items-center gap-1.5">
+          <Link
+            href={`/txs/${encodeURIComponent(t.hash)}`}
+            className="font-mono text-primary hover:text-primary-light"
+          >
+            {shortenMiddle(t.hash)}
+          </Link>
+          <CopyButton value={t.hash} label="tx hash" />
+        </span>
       ),
     },
     {

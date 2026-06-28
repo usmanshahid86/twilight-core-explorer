@@ -37,7 +37,7 @@ export function AccountDetail({ address }: { address: string }) {
 
   const a = query.data.data;
   return (
-    <DetailShell title="Account">
+    <DetailShell title="Account" backHref="/accounts" backLabel="Accounts">
       <Card>
         <CardBody>
           <DataList

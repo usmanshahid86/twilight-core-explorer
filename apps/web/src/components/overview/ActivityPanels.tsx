@@ -6,6 +6,8 @@ import { Card, CardBody, CardHeader } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Table, Td, Th, Tr } from '@/components/ui/Table';
 import { MonoCopy } from '@/components/ui/MonoCopy';
+import { CopyButton } from '@/components/ui/CopyButton';
+import { shortenMiddle } from '@/lib/format/address';
 import { EmptyState } from '@/components/states/States';
 import { useLatestBlocks, useRecentTxs } from '@/lib/api/queries';
 import { formatHeight } from '@/lib/format/height';
@@ -16,7 +18,7 @@ export function LatestBlocksPanel() {
   const query = useLatestBlocks(8);
   return (
     <Card>
-      <CardHeader title="Latest blocks" href="/blocks" />
+      <CardHeader title="Latest blocks" href="/blocks" linkLabel="All blocks" />
       <CardBody>
         <QueryBoundary query={query} context="Latest blocks" loadingRows={5}>
           {(res) =>
@@ -63,7 +65,7 @@ export function RecentTxPanel() {
   const query = useRecentTxs(8);
   return (
     <Card>
-      <CardHeader title="Recent transactions" href="/txs" />
+      <CardHeader title="Recent transactions" href="/txs" linkLabel="All transactions" />
       <CardBody>
         <QueryBoundary query={query} context="Recent transactions" loadingRows={5}>
           {(res) =>
@@ -83,9 +85,15 @@ export function RecentTxPanel() {
                 {res.data.map((t) => (
                   <Tr key={t.hash}>
                     <Td>
-                      <Link href={`/txs/${encodeURIComponent(t.hash)}`} className="text-primary hover:text-primary-light">
-                        <span className="font-mono">{t.hash.slice(0, 12)}…</span>
-                      </Link>
+                      <span className="inline-flex items-center gap-1.5">
+                        <Link
+                          href={`/txs/${encodeURIComponent(t.hash)}`}
+                          className="font-mono text-primary hover:text-primary-light"
+                        >
+                          {shortenMiddle(t.hash)}
+                        </Link>
+                        <CopyButton value={t.hash} label="tx hash" />
+                      </span>
                     </Td>
                     <Td mono>{formatHeight(t.height)}</Td>
                     <Td>{t.messageTypes[0] ?? '—'}</Td>

@@ -5,6 +5,7 @@ import { Card, CardBody, CardHeader } from '@/components/ui/Card';
 import { StatCard } from '@/components/ui/StatCard';
 import { Badge } from '@/components/ui/Badge';
 import type { ReactNode } from 'react';
+import { ApiError, ERROR_CODES } from '@/lib/api/client';
 import {
   useCoreSlots,
   useLivenessRisk,
@@ -43,7 +44,7 @@ export function CoreSlotHealthPanel() {
 
   return (
     <Card>
-      <CardHeader title="CoreSlot active set" href="/coreslots" />
+      <CardHeader title="CoreSlot active set" href="/coreslots" linkLabel="All CoreSlots" />
       <CardBody>
         <QueryBoundary query={slots} context="CoreSlots" loadingRows={3}>
           {(res) => {
@@ -70,10 +71,17 @@ export function CoreSlotHealthPanel() {
 
 export function LivenessRiskPanel() {
   const query = useLivenessRisk();
+  // J-008: a 404 is "no snapshot yet" — render it as the SAME soft state the /liveness page uses,
+  // not a hard error, so the home page and the liveness page agree.
+  const is404 =
+    query.isError && query.error instanceof ApiError && query.error.code === ERROR_CODES.notFound;
   return (
     <Card>
-      <CardHeader title="Network liveness risk" href="/liveness" />
+      <CardHeader title="Network liveness risk" href="/liveness" linkLabel="Open liveness" />
       <CardBody>
+        {is404 ? (
+          <div className="text-sm text-text-muted">No liveness snapshot yet.</div>
+        ) : (
         <QueryBoundary query={query} context="Liveness risk" loadingRows={3}>
           {(res) => {
             const d = res.data;
@@ -99,6 +107,7 @@ export function LivenessRiskPanel() {
             );
           }}
         </QueryBoundary>
+        )}
       </CardBody>
     </Card>
   );

@@ -58,7 +58,7 @@ export function RewardEpochDetail({ epoch }: { epoch: string }) {
   ];
 
   return (
-    <DetailShell title={`Epoch ${e.epochNumber}`}>
+    <DetailShell title={`Epoch ${e.epochNumber}`} backHref="/rewards" backLabel="Rewards">
       <Card>
         <CardBody>
           <RewardCaveat>

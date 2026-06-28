@@ -65,7 +65,7 @@ export function ClaimsSection({ filter }: { filter?: ClaimsFilter }) {
       <CardBody>
         {firstRow ? (
           <RewardCaveat>
-            productionClaimReadiness:{' '}
+            production claim readiness:{' '}
             <span className="font-mono">{firstRow.productionClaimReadiness}</span>; claimSemantics:{' '}
             <span className="font-mono">{firstRow.claimSemantics}</span> — historical claim events;
             the explorer performs no claim action.

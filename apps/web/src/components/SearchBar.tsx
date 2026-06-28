@@ -29,7 +29,7 @@ export function SearchBar() {
         onChange={(e) => setValue(e.target.value)}
         placeholder="Search height, hash, address, or CoreSlot…"
         aria-label="Search the explorer"
-        className="w-full rounded-xl border border-card-border bg-background-secondary py-2 pl-9 pr-3 text-sm text-text placeholder:text-text-muted focus:border-primary focus:outline-none"
+        className="w-full rounded-xl border border-card-border bg-background-secondary py-2 pl-9 pr-3 text-sm text-text placeholder:text-text-muted focus:border-primary"
       />
     </form>
   );

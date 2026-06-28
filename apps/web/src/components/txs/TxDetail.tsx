@@ -40,7 +40,7 @@ export function TxDetail({ hash }: { hash: string }) {
 
   const t = query.data.data;
   return (
-    <DetailShell title="Transaction">
+    <DetailShell title="Transaction" backHref="/txs" backLabel="Transactions">
       <Card>
         <CardBody>
           <DataList

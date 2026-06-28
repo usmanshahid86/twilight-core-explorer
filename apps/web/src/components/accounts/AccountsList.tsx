@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/Badge';
 import { CopyButton } from '@/components/ui/CopyButton';
 import { useAccountsList, type AccountsResponse } from '@/lib/api/queries';
 import { formatHeight } from '@/lib/format/height';
+import { shortenMiddle } from '@/lib/format/address';
 
 type Account = AccountsResponse['data'][number];
 
@@ -17,7 +18,7 @@ export function AccountsList() {
       cell: (a) => (
         <span className="inline-flex items-center gap-1.5">
           <Link href={`/accounts/${encodeURIComponent(a.address)}`} className="font-mono text-primary hover:text-primary-light">
-            {a.address.length > 24 ? `${a.address.slice(0, 16)}…${a.address.slice(-6)}` : a.address}
+            {shortenMiddle(a.address)}
           </Link>
           <CopyButton value={a.address} label="address" />
         </span>

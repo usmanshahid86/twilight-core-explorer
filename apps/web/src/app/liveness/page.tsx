@@ -1,6 +1,8 @@
 import { LivenessOverview } from '@/components/liveness/LivenessOverview';
 import { PerSlotHealthTable } from '@/components/liveness/PerSlotHealthTable';
 
+export const metadata = { title: "Liveness" };
+
 export default function LivenessPage() {
   return (
     <div className="space-y-6">

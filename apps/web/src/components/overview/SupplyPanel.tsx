@@ -13,7 +13,7 @@ export function SupplyPanel() {
   const status = useStatus();
   return (
     <Card>
-      <CardHeader title="Supply" href="/supply" />
+      <CardHeader title="Supply (sampled)" href="/supply" linkLabel="Supply detail" />
       <CardBody>
         <QueryBoundary query={supply} context="Supply" loadingRows={2}>
           {(res) => {
