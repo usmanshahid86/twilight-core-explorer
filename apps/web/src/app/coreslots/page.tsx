@@ -1,8 +1,17 @@
 import { CoreSlotsList } from '@/components/coreslots/CoreSlotsList';
+import { oneParam } from '@/lib/search-params';
+import { coerceStatus, CORESLOT_STATUS_OPTIONS } from '@/lib/status-filters';
 
 export const metadata = { title: "CoreSlots" };
 
-export default function CoreSlotsPage() {
+export default function CoreSlotsPage({
+  searchParams,
+}: {
+  searchParams: { status?: string | string[] };
+}) {
+  // Validate the raw URL param at the trust boundary: only canonical UPPERCASE enum values reach the
+  // case-sensitive API filter; unknown/lowercase values normalize or drop to "All".
+  const status = coerceStatus(oneParam(searchParams.status), CORESLOT_STATUS_OPTIONS);
   return (
     <div className="space-y-6">
       <div>
@@ -11,7 +20,7 @@ export default function CoreSlotsPage() {
           The CoreSlot PoA validator set — lifecycle, authority, liveness, and per-slot detail.
         </p>
       </div>
-      <CoreSlotsList />
+      <CoreSlotsList status={status} />
     </div>
   );
 }
