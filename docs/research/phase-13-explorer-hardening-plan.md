@@ -51,7 +51,10 @@ These are hard constraints; a sub-phase that violates one is out of scope, not "
 
 1. **Hardening, not features.** No new page, endpoint, response field, or projection unless it is the
    *fix* to an audited correctness/consistency defect. New capability is Phase 14+ or a tracked
-   follow-up.
+   follow-up. **One acknowledged exception (recorded post-13a):** the `13b-filters` slice (§5.3) — two
+   high-value list `status` filters the API *already serves* — is a deliberate, bounded **feature**
+   carve-out, scoped to exactly those two and reviewed on its own so the exception stays visible and does
+   not erode this guardrail.
 2. **Polish, not redesign.** 13b-ux improves clarity/consistency of the *existing* IA. No new visual
    language, no route restructuring beyond fixing a demonstrably broken/inconsistent link.
 3. **Preserve every hard invariant** in `CLAUDE.md` (generic rows authoritative; projections
@@ -150,10 +153,13 @@ become tests/lint).
 
 ---
 
-## 5. Phase 13b — Remediation (fix) — split: 13b-code + 13b-ux
+## 5. Phase 13b — Remediation (fix) — split: 13b-code + 13b-ux + 13b-filters
 
-Your original 13b was UX-only; the audit surfaces both **code-correctness** and **UX** findings, so
-remediation has two tracks. They can run in parallel (different files), but both gate on 13a.
+Your original 13b was UX-only; the 13a audit surfaces both **code-correctness** and **UX** findings, and
+the J-002 decision adds a small scoped **filters** carve-out — so remediation has three tracks. They are
+mostly disjoint (different files) but share one overlap zone (sample-freshness rendering: 13b-code fixes
+`deriveSampleAge`, 13b-ux fixes the consuming surfaces), so the recommended order is **13b-code → 13b-ux
+→ 13b-filters**, each gating on 13a and reviewed/committed on its own.
 
 ### 5.1 — 13b-code (correctness)
 
@@ -196,6 +202,26 @@ Fix the Judgment/usability findings from 13a:
 **Deliverable:** the polish + updated/added component tests (titles, breadcrumbs, a11y roles) +
 `docs/research/phase-13b-ux-polish-report.md`. **Guardrail:** no route restructuring, no new visual
 system; every change is a clarity/consistency correction with a before/after rationale.
+
+### 5.3 — 13b-filters (scoped feature carve-out — J-002 resolution)
+
+A small, separately-reviewed slice that is explicitly a **feature, not hardening** (the one acknowledged
+exception to guardrail #1). Surface the two high-value, operator-facing list `status` filters the API
+already serves:
+- **`coreslots?status=`** ("active / inactive / suspended / removed CoreSlots") and **`txs?status=`**
+  ("failed transactions only") — as URL-param-synced filter controls matching the existing `?slotId=`
+  searchParams pattern, with **cursor reset on filter change** (keyset pagination must restart), an
+  empty-filtered state, and accessible controls (labelled, keyboard-operable).
+- Kept tight to these two so it establishes **one reusable filter pattern**; no other filters.
+
+Deferred (documented, not built): the J-002 rewards-side filters — claims `txHash`/`fromHeight`/
+`toHeight`, balances `sampleKind`/`denom`/`height`, params `changeType` — a later "rewards filters"
+follow-up that adopts this pattern. The existing `?slotId=` cross-link (12c) is unchanged.
+
+**Deliverable:** the two filter controls + tests (each param reaches `apiGet`; cursor resets on change;
+empty-filtered state) + the deferred-filters note + `docs/research/phase-13b-filters-report.md`.
+**Guardrail:** no API/contract change (the params already exist); no new routes; cursor/pagination
+semantics preserved; `openapi:check` stays green.
 
 ---
 
@@ -327,17 +353,21 @@ is mostly static content + live params over the existing API.
 | **FU-3** duplicate malformed-genesis slot failureKey discriminator | → 13b-code **if cheap**, else keep tracked | Edge case. |
 | `RewardAmount` → neutral `CoinAmount` | → 13b-ux (optional) or defer | Cleanliness, not correctness; avoid cross-PR churn. |
 | `/supply?height=` historical lookup | **Deferred** (post-14 / on demand) | Feature, not hardening. |
-| Claims/balances **filter UI** | **Deferred** | Feature. |
+| List **`status` filters** (`coreslots?status=`, `txs?status=`) | **→ 13b-filters (§5.3)** | J-002: high-value, API already serves them; scoped feature carve-out, built now. |
+| Rewards-side **filter UI** (claims range/txHash, balances kind/denom, params changeType) | **Deferred** | J-002: documented later "rewards filters" follow-up; lower value, narrow datasets. |
 | Dedicated rewards **reconcile command** | **Deferred** | Tooling/feature. |
 
 ---
 
 ## 10. Sequencing, cadence, and definition-of-done
 
-**Order:** `13a (audit) → 13b-code + 13b-ux (parallel) → 13c-1…13c-4 (build hardening; can overlap 13b)
-→ 13d (RC verify)`. Linear on the audit→fix dependency; the four 13c slices can start once 13a's
-fix-homes are assigned and are independently reviewable (no one giant backend PR). 13c-1 (the static
-guards half) pairs naturally with 13b-code, which authors the guards it then wires everywhere.
+**Order:** `13a (audit) → 13b-code → 13b-ux → 13b-filters → 13c-1…13c-4 (build hardening; can overlap
+13b) → 13d (RC verify)`. The three 13b slices run sequentially (not parallel) because of the one
+freshness/sampled overlap zone — 13b-code fixes `deriveSampleAge` before 13b-ux touches the consuming
+surfaces; 13b-filters (the feature carve-out) lands last so it sits on the corrected, polished list
+pages. The four 13c slices can start once 13a's fix-homes are assigned and are independently reviewable
+(no one giant backend PR). 13c-1 (the static guards half) pairs naturally with 13b-code, which authors
+the guards it then wires everywhere.
 
 **Cadence per sub-phase** (the established ritual): plan the slice → implement → full validation ritual
 → write the per-sub-phase report → adversarial-reviewer subagent PASS → external (Codex) PASS → fold
@@ -387,6 +417,18 @@ The five open questions were resolved with the user; the sections above already 
 5. **Rate limiting preserves the `{ error }` envelope and is disable-able for local/test** (13c-3).
 6. **Version/build truthfulness uses build/env metadata only — no chain access** (13c-4) — protects the
    DB-only hard invariant.
+
+### Post-13a decisions (2026-06-28) — from the 13a audit's two product calls
+
+The 13a audit (`phase-13a-explorer-hardening-audit.md`) surfaced two product decisions; both resolved:
+
+1. **J-001 → surface decode-failures** on the `/api` diagnostics page in **13b-code** (new
+   `useDecodeFailures` hook + a "Decode failures" card). Not allowlisted/deferred.
+2. **J-002 → tiered.** The two high-value list `status` filters (`coreslots?status=`, `txs?status=`) ship
+   now as the **`13b-filters`** slice (§5.3) — a scoped feature carve-out, the one acknowledged exception
+   to guardrail #1. The rewards-side filters (claims range/txHash, balances kind/denom, params
+   changeType) are **deferred + documented**. The `?slotId=` cross-link is unchanged. This grew 13b from
+   two sub-slices to **three** (13b-code → 13b-ux → 13b-filters).
 
 **Remaining to confirm at kickoff (not blockers):** the exact devnet range/height window for the soak;
 whether `docs/operations/` also absorbs the env-var contract or keeps it in the release-readiness doc;
