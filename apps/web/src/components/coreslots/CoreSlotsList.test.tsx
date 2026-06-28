@@ -29,7 +29,10 @@ function renderWithClient(ui: ReactElement) {
   return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
 }
 
-afterEach(() => apiGet.mockReset());
+afterEach(() => {
+  apiGet.mockReset();
+  replace.mockReset();
+});
 
 describe('CoreSlotsList', () => {
   it('renders the CoreSlot list with a slot link and status', async () => {

@@ -10,7 +10,7 @@ Status: implemented; pending adversarial + Codex review.
 The one **acknowledged feature** in Phase 13 (the single exception to guardrail #1 "hardening, not
 features"), kept deliberately small + separately reviewed. Surface the two high-value, operator-facing
 list `status` filters the API **already serves**:
-- **`coreslots?status=`** — active / inactive / suspended / removed
+- **`coreslots?status=`** — active / pending / inactive / suspended / removed
 - **`txs?status=`** — success / failed
 
 …as URL-synced, accessible controls matching the existing `?slotId=` searchParams pattern, with cursor
@@ -31,8 +31,8 @@ filter pattern**.
 
 - **`components/list/StatusFilter.tsx`** (new, reusable) — a labelled, keyboard-operable `<select>`
   (`<label htmlFor>` + native select) that syncs `?status=` via `usePathname` + `router.replace`
-  (`replace`, not `push` — no history spam; `usePathname` keeps it out of a Suspense boundary). Exports
-  `CORESLOT_STATUS_OPTIONS` + `TX_STATUS_OPTIONS`. `''` ⇒ "All" ⇒ bare path (param dropped).
+  (`replace`, not `push` — no history spam; `usePathname` keeps it out of a Suspense boundary). Takes
+  its options as a prop (the enums live in `lib/status-filters.ts`, below). `''` ⇒ "All" ⇒ bare path.
 - **`lib/api/queries.ts`** — `useCoreSlotsList(status?)` / `useTxsList(status?)`: `status` added to both
   the `queryKey` (cursor reset) and `apiGet`.
 - **`components/{coreslots/CoreSlotsList,txs/TxsList}.tsx`** — accept a `status` prop, render the filter
