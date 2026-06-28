@@ -29,8 +29,9 @@
     "indexer:dev": "npm --prefix apps/indexer run dev",
     "indexer:start": "npm --prefix apps/indexer start",
     "test:integration": "node --test apps/indexer/test/*.integration.test.js",
+    "test:guards": "node --test scripts/guards/*.test.js",
     "typecheck": "npm run db:generate && npm run typecheck --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present",
+    "test": "npm run test:guards && npm run test --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present"
   },
   "engines": {
@@ -38,6 +39,9 @@
   },
   "devDependencies": {
     "@types/node": "^26.0.0",
+    "@typescript-eslint/eslint-plugin": "7.18.0",
+    "@typescript-eslint/parser": "7.18.0",
+    "eslint": "^8.57.0",
     "pg": "^8.13.1",
     "prisma": "^6.18.0"
   }

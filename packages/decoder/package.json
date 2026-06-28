@@ -16,7 +16,8 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "pretest": "npm run build",
-    "test": "node --test"
+    "test": "node --test",
+    "lint": "eslint src --ext .ts"
   },
   "dependencies": {
     "@twilight-explorer/proto": "0.0.0",
