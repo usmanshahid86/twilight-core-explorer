@@ -18,7 +18,8 @@ module.exports = {
     '**/node_modules/**',
     '**/generated/**',
     'apps/web/**', // web is linted by its own next config
-    'packages/proto/**', // generated descriptor artifacts, not hand-written source
+    // packages/proto's descriptor artifacts (.pb/.json) and dist are non-.ts / covered by the dist+
+    // generated ignores above; its hand-written src/index.ts IS linted (Codex 13c-1 review).
     '**/*.js',
     '**/*.cjs',
     '**/*.mjs',

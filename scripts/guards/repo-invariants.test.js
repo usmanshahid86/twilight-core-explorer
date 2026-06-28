@@ -20,6 +20,7 @@ const SRC_ROOTS = [
   'packages/config/src',
   'packages/db/src',
   'packages/decoder/src',
+  'packages/proto/src',
 ];
 const EXTRA_FILES = ['prisma/schema.prisma'];
 const SCAN_EXT = /\.(ts|tsx|prisma)$/;

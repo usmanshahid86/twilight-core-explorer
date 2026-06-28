@@ -21,17 +21,21 @@ vacuous (M-016).
   compatible) + declared `eslint` at the root.
 - Added a shared root **`.eslintrc.cjs`** for the non-Next TS workspaces (`root:true`, parser + plugin,
   `eslint:recommended` + `@typescript-eslint/recommended` *non-type-checked* — fast, low-noise), ignoring
-  `dist`/`generated`/`node_modules`/`packages/proto`/`apps/web`. Set `apps/web/.eslintrc.json` `root:true`
-  so it stays isolated on `next lint`.
-- Added a `lint` script (`eslint src --ext .ts`) to `apps/api`, `apps/indexer`, `packages/{chain-client,
-  config,db,decoder}`.
+  `dist`/`generated`/`node_modules`/`apps/web` (proto's descriptor `.pb`/`.json` artifacts are non-`.ts`
+  and its build output is under `dist`, so the lint scope `src --ext .ts` already excludes them — its
+  hand-written `src/index.ts` IS linted). Set `apps/web/.eslintrc.json` `root:true` so it stays isolated
+  on `next lint`.
+- Added a `lint` script (`eslint src --ext .ts`) to `apps/api`, `apps/indexer`, and
+  `packages/{chain-client,config,db,decoder,proto}`.
 - **Warn-only**: every rule that fires today is a *warning*, so `npm run lint` exits 0 and the baseline is
-  visible without blocking. The codebase is clean — only **4 warnings** across ~136 TS files (a
+  visible without blocking. The codebase is clean — only **4 warnings** across ~137 TS files (a
   non-null-assertion, two empty/namespace, an empty-interface); the one error (`no-namespace` in
   `packages/config`) was downgraded to warn rather than refactored (out of scope for a warn-only pass).
   Promotion of selected rules to `error` is a later pass.
 
-Result: **`npm run lint` now genuinely exercises all 8 workspaces** and exits 0.
+Result: **`npm run lint` now genuinely exercises all 8 workspaces** — `apps/{api,indexer,web}` +
+`packages/{chain-client,config,db,decoder,proto}` (web via `next lint`, the rest via the shared root
+config) — and exits 0.
 
 ## Part B — automated repo invariant guards (HARD-FAIL)
 
@@ -67,9 +71,15 @@ repo-wide scan over the new file.
 
 ## Validation (all green)
 
-root `typecheck` · **`lint` (now all 8 workspaces, warn-only, exit 0, 4 warnings)** · **`test` (runs
-`test:guards` 4/4 first, then all workspaces)** · `apps/web test` · `openapi:check` api + web up to date ·
-web `build` ✓ · `git diff --check` clean.
+root `typecheck` (see note) · **`lint` (now all 8 workspaces incl. `packages/proto`, warn-only, exit 0,
+4 warnings)** · **`test` (runs `test:guards` 8/8 first — now scanning `packages/proto/src` too — then all
+workspaces)** · `apps/web test` · `openapi:check` api + web up to date · web `build` ✓ · `git diff --check`
+clean.
+
+> Typecheck note (Codex 13c-1 review): on a tree carrying a **stale `apps/web/.next` build cache**, the
+> first `npm run typecheck` can fail with a generated `.next/types/.../layout.ts` referencing a missing
+> module — a local generated-artifact staleness, **not source drift**. `apps/web build` (or clearing
+> `.next`) refreshes it and `typecheck` passes. No source change is involved.
 
 ## Notes / scope boundary
 
