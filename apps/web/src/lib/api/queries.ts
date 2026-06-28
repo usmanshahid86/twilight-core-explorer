@@ -12,6 +12,7 @@ const LIST_REFETCH_MS = 30_000;
 
 export type StatusResponse = JsonOf<'/api/v1/status'>;
 export type ProjectionsResponse = JsonOf<'/api/v1/projections'>;
+export type DecodeFailuresResponse = JsonOf<'/api/v1/decode-failures'>;
 export type BlocksResponse = JsonOf<'/api/v1/blocks'>;
 export type TxsResponse = JsonOf<'/api/v1/txs'>;
 export type CoreSlotsResponse = JsonOf<'/api/v1/coreslots'>;
@@ -33,6 +34,16 @@ export function useProjections() {
   return useQuery({
     queryKey: ['projections'],
     queryFn: () => apiGet('/api/v1/projections'),
+    refetchInterval: STATUS_REFETCH_MS,
+  });
+}
+
+// Bounded "latest unresolved decode failures" for the /api diagnostics surface (resolved defaults
+// false server-side). A diagnostics view, not a full list — newest first, capped at `limit`.
+export function useDecodeFailures(limit = 50) {
+  return useQuery({
+    queryKey: ['decode-failures', { limit }],
+    queryFn: () => apiGet('/api/v1/decode-failures', { limit }),
     refetchInterval: STATUS_REFETCH_MS,
   });
 }

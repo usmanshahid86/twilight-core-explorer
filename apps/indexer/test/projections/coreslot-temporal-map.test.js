@@ -326,6 +326,65 @@ describe('CoreSlot temporal consensus map projection', () => {
     assert.equal(prisma.projectionFailures[0].failureKind, 'invalid_consensus_address');
   });
 
+  it('FU-1: a genesis ProjectionFailure is stamped at the 0n sentinel and survives the height-1 cleanup', async () => {
+    const prisma = new TemporalMockPrisma();
+
+    // A malformed active genesis slot -> a genesis-seed ProjectionFailure.
+    await seedCoreSlotGenesisTemporalMap({
+      prisma,
+      chainId: CHAIN_ID,
+      client: genesisClient([genesisSlot({ slotId: '1', consensusAddress: 'bad' })]),
+    });
+    assert.equal(prisma.projectionFailures.length, 1);
+    assert.equal(prisma.projectionFailures[0].failureKind, 'invalid_consensus_address');
+    // Durability: stamped below any real block height (which starts at 1).
+    assert.equal(prisma.projectionFailures[0].sourceHeight, 0n);
+
+    // Control: a (non-genesis) failure at height 1, resolved:false. The height-1 per-height cleanup
+    // MUST delete this — proving the cleanup is genuinely live — while the 0n genesis failure survives.
+    // (Pre-fix the genesis failure was itself stamped at 1n and got deleted right here, with the control.)
+    const projectionName = prisma.projectionFailures[0].projectionName;
+    prisma.projectionFailures.push({
+      failureKey: 'control-1n',
+      projectionName,
+      sourceHeight: 1n,
+      failureKind: 'temporal_window_conflict',
+      resolved: false,
+    });
+    assert.equal(prisma.projectionFailures.length, 2);
+
+    await projectCoreSlotTemporalMapHeight({ prisma, chainId: CHAIN_ID, height: 1n });
+
+    // The 1n control is deleted; the 0n genesis failure remains.
+    assert.equal(
+      prisma.projectionFailures.length,
+      1,
+      'height-1 cleanup deletes the 1n control but keeps the 0n genesis failure',
+    );
+    assert.equal(prisma.projectionFailures[0].sourceHeight, 0n);
+    assert.equal(prisma.projectionFailures[0].failureKind, 'invalid_consensus_address');
+  });
+
+  it('FU-1 root: a malformed rotation stamps its failure at the processing height, never the 0n genesis sentinel', async () => {
+    const prisma = new TemporalMockPrisma();
+    // status=applied, but appliedHeight + effectiveHeight are null -> sourceHeight must fall back to the
+    // processing height (not 0n). Found at height 15 via requestedHeight; produces effective_height_invalid.
+    prisma.seedRotation(CORESLOT_KEY_ROTATION_STATUS.applied, {
+      requestedHeight: 15n,
+      appliedHeight: null,
+      effectiveHeight: null,
+      cancelledHeight: null,
+    });
+
+    await projectCoreSlotTemporalMapHeight({ prisma, chainId: CHAIN_ID, height: 15n });
+
+    assert.equal(prisma.projectionFailures.length, 1);
+    assert.equal(prisma.projectionFailures[0].failureKind, 'effective_height_invalid');
+    // Root fix: stamped at the processing height (15n), NOT the 0n genesis sentinel — so a genesis
+    // re-seed cleanup at 0n can never collaterally delete it. (Pre-fix this was 0n.)
+    assert.equal(prisma.projectionFailures[0].sourceHeight, 15n);
+  });
+
   it('records temporal_window_conflict for duplicate active genesis consensus addresses', async () => {
     const prisma = new TemporalMockPrisma();
 

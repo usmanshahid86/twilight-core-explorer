@@ -184,6 +184,26 @@ export async function projectCoreSlotTemporalMapRange(
   return results;
 }
 
+// FU-1: genesis-seed ProjectionFailures are stamped at this sentinel height (below any real block
+// height, which starts at 1). The per-height cleanup in projectCoreSlotTemporalMapHeight deletes
+// failures by `sourceHeight = height` UNSCOPED by failureKind; on a full rebuild it runs at height 1
+// and would otherwise silently wipe genesis failures stamped at 1n. Stamping them at 0n makes a
+// malformed/ambiguous genesis ProjectionFailure durable. Mirrors the coreslot-genesis-identity 0n
+// sentinel.
+const GENESIS_SEED_FAILURE_SOURCE_HEIGHT = 0n;
+
+// The failure kinds the genesis seed can emit, used to scope the idempotent re-seed cleanup. 0n is now
+// EXCLUSIVELY the genesis namespace — projectRotation falls back to the processing height, never 0n — so
+// no non-genesis failure can land at 0n. The kind filter is retained as defense-in-depth + explicit
+// intent (it documents exactly what the genesis seed produces); the load-bearing guarantee is the
+// 0n-exclusivity, which the `rotation fallback -> processing height` test pins.
+const GENESIS_SEED_FAILURE_KINDS: ProjectionFailureKind[] = [
+  'genesis_unavailable',
+  'genesis_coreslot_malformed',
+  'invalid_consensus_address',
+  'temporal_window_conflict',
+];
+
 export async function seedCoreSlotGenesisTemporalMap(args: {
   prisma: CoreSlotTemporalMapProjectionPrisma;
   chainId: string;
@@ -211,8 +231,11 @@ export async function seedCoreSlotGenesisTemporalMap(args: {
       await tx.projectionFailure.deleteMany({
         where: {
           projectionName: CORESLOT_TEMPORAL_MAP_PROJECTION,
-          sourceHeight: 1n,
-          failureKind: { in: ['genesis_unavailable', 'genesis_coreslot_malformed'] },
+          // Idempotent re-seed: clear prior genesis-seed failures at the sentinel. 0n is exclusive to the
+          // genesis seed (projectRotation never falls back to 0n), so this only ever matches genesis
+          // failures; the kind filter is kept as defense-in-depth + explicit intent.
+          sourceHeight: GENESIS_SEED_FAILURE_SOURCE_HEIGHT,
+          failureKind: { in: GENESIS_SEED_FAILURE_KINDS },
           resolved: false,
         },
       });
@@ -289,7 +312,7 @@ export async function projectCoreSlotTemporalMapHeight(
       }
 
       for (const rotation of rotations) {
-        await projectRotation(tx, rotation, counters);
+        await projectRotation(tx, rotation, counters, height);
       }
 
       await updateProjectionCursorSuccess(
@@ -321,7 +344,7 @@ async function recordGenesisUnavailable(
   const error = input.error instanceof Error ? input.error.message : String(input.error);
   await prisma.$transaction(async (tx) => {
     await createFailure(tx, {
-      sourceHeight: 1n,
+      sourceHeight: GENESIS_SEED_FAILURE_SOURCE_HEIGHT,
       failureKind: 'genesis_unavailable',
       error,
     });
@@ -342,7 +365,7 @@ async function recordGenesisMalformed(
 ): Promise<void> {
   await prisma.$transaction(async (tx) => {
     await createFailure(tx, {
-      sourceHeight: 1n,
+      sourceHeight: GENESIS_SEED_FAILURE_SOURCE_HEIGHT,
       failureKind: 'genesis_coreslot_malformed',
       rawEventJson: input.raw,
       error: input.error,
@@ -366,7 +389,7 @@ async function seedGenesisSlot(
 
   if (slot.slotId === null) {
     await createFailure(tx, {
-      sourceHeight: 1n,
+      sourceHeight: GENESIS_SEED_FAILURE_SOURCE_HEIGHT,
       failureKind: 'genesis_coreslot_malformed',
       rawEventJson: slot.raw,
       error: 'Active genesis CoreSlot is missing a valid slot id.',
@@ -378,7 +401,7 @@ async function seedGenesisSlot(
   const consensusAddress = normalizeOptionalConsensusAddress(slot.consensusAddress);
   if (!consensusAddress.ok || consensusAddress.value === null) {
     await createFailure(tx, {
-      sourceHeight: 1n,
+      sourceHeight: GENESIS_SEED_FAILURE_SOURCE_HEIGHT,
       failureKind: 'invalid_consensus_address',
       rawEventJson: slot.raw,
       error: consensusAddress.ok
@@ -403,7 +426,8 @@ async function seedGenesisSlot(
     openedByRotationId: null,
     openedByLifecycleId: null,
     rawOpenJson: slot.raw,
-    sourceHeight: 1n,
+    // FU-1: genesis-window-conflict failures from openActiveWindow must also be durable (0n sentinel).
+    sourceHeight: GENESIS_SEED_FAILURE_SOURCE_HEIGHT,
   });
   if (opened.ok) counters.windowsWritten += opened.written ? 1 : 0;
   else counters.failuresCreated += 1;
@@ -577,6 +601,11 @@ async function projectRotation(
   tx: CoreSlotTemporalMapProjectionPrisma,
   rotation: RotationSource,
   counters: Counters,
+  // The per-height processing height. Used as the last-resort `sourceHeight` for a malformed rotation
+  // whose own heights are all null — so its failures land at the height being processed (owned by the
+  // per-height cleanup, idempotent) and NEVER at the 0n genesis sentinel. This keeps 0n exclusive to
+  // the genesis seed (FU-1), so the genesis re-seed cleanup cannot collaterally delete a rotation failure.
+  height: bigint,
 ): Promise<void> {
   if (
     rotation.status === CORESLOT_KEY_ROTATION_STATUS.requested
@@ -590,7 +619,7 @@ async function projectRotation(
     && rotation.status !== CORESLOT_KEY_ROTATION_STATUS.immediateApplied
   ) {
     await createFailure(tx, {
-      sourceHeight: rotation.appliedHeight ?? rotation.cancelledHeight ?? 0n,
+      sourceHeight: rotation.appliedHeight ?? rotation.cancelledHeight ?? height,
       sourceEventId: rotation.sourceAppliedEventId,
       failureKind: 'unknown_semantic_type',
       rawEventJson: rotation.rawAppliedEventJson,
@@ -600,7 +629,8 @@ async function projectRotation(
     return;
   }
 
-  const sourceHeight = rotation.appliedHeight ?? rotation.effectiveHeight ?? 0n;
+  // Fall back to the processing height (never 0n) so rotation failures stay out of the genesis sentinel.
+  const sourceHeight = rotation.appliedHeight ?? rotation.effectiveHeight ?? height;
   const newConsensusAddress = normalizeConsensusAddress(rotation.newConsensusAddress);
   if (!newConsensusAddress.ok) {
     await createFailure(tx, {

@@ -40,6 +40,13 @@ describe('sample age (BigInt height math, no Number())', () => {
   it('none when there is no sample', () => {
     expect(deriveSampleAge(null, '100').kind).toBe('none');
   });
+  it('unknown (never a false "fresh") when the latest indexed height is null', () => {
+    // Regression M-003: previously returned {kind:'fresh', deltaBlocks:'0'} -> a false "sample current".
+    expect(deriveSampleAge('100', null)).toEqual({ kind: 'unknown' });
+  });
+  it('unknown when the latest indexed height is non-numeric', () => {
+    expect(deriveSampleAge('100', 'abc')).toEqual({ kind: 'unknown' });
+  });
   it('fresh on small delta', () => {
     expect(deriveSampleAge('100', '120')).toEqual({ kind: 'fresh', deltaBlocks: '20' });
   });

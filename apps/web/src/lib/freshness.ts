@@ -29,8 +29,11 @@ export function deriveProjectionHealth(failures: StatusData['projectionFailures'
 }
 
 // Sample freshness: compare an observed sample's height to the latest indexed height.
+// `unknown` = we have a sample height but no trustworthy latest height to compare against (status
+// pending/errored) — we must NOT claim "current" we cannot verify.
 export type SampleAge =
   | { kind: 'none' }
+  | { kind: 'unknown' }
   | { kind: 'fresh'; deltaBlocks: string }
   | { kind: 'old'; deltaBlocks: string };
 
@@ -40,7 +43,7 @@ export function deriveSampleAge(
 ): SampleAge {
   if (!sampledAtHeight || !/^\d+$/.test(sampledAtHeight)) return { kind: 'none' };
   if (!latestIndexedHeight || !/^\d+$/.test(latestIndexedHeight)) {
-    return { kind: 'fresh', deltaBlocks: '0' };
+    return { kind: 'unknown' };
   }
   const raw = BigInt(latestIndexedHeight) - BigInt(sampledAtHeight);
   const delta = raw < 0n ? 0n : raw;
