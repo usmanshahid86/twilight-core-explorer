@@ -62,9 +62,13 @@ export function Header() {
             ))}
           </nav>
         </div>
-        {/* Compact nav + search for narrower viewports */}
-        <div className="flex flex-col gap-2 pb-3 lg:hidden">
-          <SearchBar />
+        {/* Compact nav for narrower viewports. Visible until `xl` — where the inline desktop nav takes
+            over — so there is NO nav gap in the lg..xl band (Codex 13b-ux review). The compact search
+            hides at `lg`+, where the centered desktop search appears, to avoid a duplicate search. */}
+        <div className="flex flex-col gap-2 pb-3 xl:hidden">
+          <div className="lg:hidden">
+            <SearchBar />
+          </div>
           <nav className="flex flex-wrap gap-1" aria-label="Primary (compact)">
             {NAV.map((item) => (
               <Link

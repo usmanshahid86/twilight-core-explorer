@@ -27,7 +27,9 @@ review** (one reviewer per WCAG criterion + responsive + nav-IA/copy) as the adv
 
 **Batch 2 — structural a11y/navigation:**
 - **M-006** breadcrumbs — `DetailShell` `backHref`/`backLabel`; wired on all 6 detail surfaces
-  (block/tx/account/coreslot/reward-epoch/operator).
+  (block/tx/account/coreslot/reward-epoch/operator) on the **success state** (loading/error/empty branches
+  render the title only — browser-back + the top nav cover those; per-state breadcrumbs are a minor
+  follow-up, Codex review).
 - **J-009** — `DetailShell` optional `description`.
 - **M-009** (WCAG 1.3.1) — `Th` `scope="col"` + optional sr-only `caption` on `Table`.
 - **M-010** — `CoreSlotDetail` `embedded` mode (headless, no second `DetailShell`/h1) reused by
@@ -64,6 +66,14 @@ labels all PASS). **No blockers; no default-theme majors.**
   made tx-hash cells copyable for parity.
 - **Table lens F6** — added `scroll-padding-top` so anchors clear the new sticky header.
 
+**Codex review (PARTIAL → resolved):** Codex independently re-validated (all gates green) and caught one
+real **responsive bug the multi-lens pass missed** — the primary nav **disappeared in the 1024–1279px
+(`lg`..`xl`) band**: the inline desktop nav appears only at `xl`, but the compact nav hid at `lg`, so that
+laptop-width band had no primary nav at all. **Fixed:** the compact nav block now stays visible until `xl`
+(its search hides at `lg`+ to avoid duplicating the centered desktop search), so the two nav variants meet
+at `xl` with no gap. Added a **class-level breakpoint guard** in `Header.test.tsx`. (Codex also noted the
+breadcrumbs are success-state-only — now clarified in M-006 above.)
+
 ## Documented follow-ups (tracked, out of this slice's scope)
 
 - **Legacy-theme contrast pass** (contrast lens) — the *opt-in* `legacy` theme (`NEXT_PUBLIC_UI_THEME=legacy`)
@@ -85,8 +95,9 @@ labels all PASS). **No blockers; no default-theme majors.**
 
 ## New tests / guards
 
-`theme-tokens.test.ts` (contrast, M-008) · `Header.test.tsx` (nav grouping, J-007). Existing detail/
-operator/search tests still green (the `embedded` + breadcrumb refactors are covered).
+`theme-tokens.test.ts` (contrast, M-008) · `Header.test.tsx` (nav grouping J-007 + the `lg`..`xl`
+nav-breakpoint guard from the Codex review). Existing detail/operator/search tests still green (the
+`embedded` + breadcrumb refactors are covered).
 
 ## Validation (all green)
 
@@ -95,5 +106,7 @@ operator/search tests still green (the `embedded` + breadcrumb refactors are cov
 ## Recommendation
 
 Ready to commit/merge. The default theme is a11y-clean, every audited finding is fixed or consciously
-documented, and the multi-lens gate passed with its should-fixes folded in. The tracked follow-ups
-(legacy-theme contrast, table captions) are honest, scoped, and non-blocking.
+documented, the multi-lens gate passed with its should-fixes folded in, and the **Codex review's one
+required patch (the `lg`..`xl` nav-gap) is fixed + guarded** — moving its verdict from PARTIAL to PASS.
+The tracked follow-ups (legacy-theme contrast, table captions, mobile nav disclosure) are honest, scoped,
+and non-blocking.

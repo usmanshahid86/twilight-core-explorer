@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { NAV, type NavGroup } from './Header';
 
@@ -24,5 +26,15 @@ describe('Header nav grouping', () => {
         prev = g;
       }
     }
+  });
+
+  // Regression guard (Codex 13b-ux review): the inline desktop nav appears at `xl`, so the compact nav
+  // block must stay visible until `xl` (NOT hide at `lg`) — otherwise the 1024..1279px band has no
+  // primary nav at all. Class-level guard so the breakpoint can't silently regress.
+  it('has no responsive nav gap: compact nav hides at xl (where the desktop nav appears), not lg', () => {
+    const src = readFileSync(join(process.cwd(), 'src/components/Header.tsx'), 'utf8');
+    expect(src).toContain('xl:flex'); // inline desktop nav appears at xl
+    expect(src).toContain('pb-3 xl:hidden'); // compact nav block stays until xl
+    expect(src).not.toContain('pb-3 lg:hidden'); // the old gappy compact-block class is gone
   });
 });
