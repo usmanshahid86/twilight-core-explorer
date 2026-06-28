@@ -39,6 +39,7 @@ export async function accountsRoutes(fastify: FastifyInstance): Promise<void> {
         querystring: AccountsQuery,
         response: { 200: AccountListResponse, 400: ErrorResponse },
       },
+      config: { cacheControl: 'revalidate' }, // cacheable with always-revalidate (ETag)
     },
     async (request) => {
       const limit = request.query.limit ?? DEFAULT_LIMIT;
@@ -71,6 +72,7 @@ export async function accountsRoutes(fastify: FastifyInstance): Promise<void> {
         querystring: AccountDetailQuery,
         response: { 200: AccountDetailResponse, 404: ErrorResponse },
       },
+      config: { cacheControl: 'revalidate' },
     },
     async (request) => {
       const account = await getAccount(app.prisma, request.params.address);

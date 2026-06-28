@@ -64,6 +64,14 @@ export function registerErrorHandling(app: FastifyInstance): void {
       return;
     }
 
+    // @fastify/rate-limit throws a 429 (not an ApiError); surface it in the standard envelope with a
+    // STABLE, contract-owned message — do not forward the plugin's raw message (it can change between
+    // versions and reveals the window). Timing is conveyed via the standard Retry-After header.
+    if (error.statusCode === 429) {
+      reply.code(429).send(body('rate_limited', 'too many requests'));
+      return;
+    }
+
     // Anything else is unexpected: log the cause, return a generic 500 with NO details.
     request.log.error(error);
     reply.code(500).send(body('internal', 'internal server error'));

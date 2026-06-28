@@ -27,10 +27,24 @@ const ProjectionFailureSummary = Type.Object({
   count: Type.Integer(),
 });
 
+// Build/env metadata (13c). gitSha/builtAt are injected by the build/deploy and null locally.
+const BuildInfo = Type.Object({
+  version: Type.String(),
+  gitSha: Nullable(Type.String()),
+  builtAt: Nullable(Type.String()),
+  // Mirrors `ApiEnv` in config.ts — keep in sync if a 4th env value is ever added.
+  environment: Type.Union([
+    Type.Literal('production'),
+    Type.Literal('development'),
+    Type.Literal('test'),
+  ]),
+});
+
 export const ApiStatusResponse = Type.Object(
   {
     data: Type.Object({
       chainId: Nullable(Type.String()),
+      build: BuildInfo,
       indexer: Nullable(IndexerStatus),
       projections: Type.Array(ProjectionStatusSummary),
       projectionFailures: Type.Object({

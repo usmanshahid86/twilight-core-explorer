@@ -164,6 +164,7 @@
                       "type": "object",
                       "required": [
                         "chainId",
+                        "build",
                         "indexer",
                         "projections",
                         "projectionFailures"
@@ -178,6 +179,62 @@
                               "type": "null"
                             }
                           ]
+                        },
+                        "build": {
+                          "type": "object",
+                          "required": [
+                            "version",
+                            "gitSha",
+                            "builtAt",
+                            "environment"
+                          ],
+                          "properties": {
+                            "version": {
+                              "type": "string"
+                            },
+                            "gitSha": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "builtAt": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "environment": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "production"
+                                  ]
+                                },
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "development"
+                                  ]
+                                },
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "test"
+                                  ]
+                                }
+                              ]
+                            }
+                          }
                         },
                         "indexer": {
                           "anyOf": [
