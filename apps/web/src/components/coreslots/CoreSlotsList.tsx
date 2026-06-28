@@ -4,14 +4,16 @@ import Link from 'next/link';
 import { PaginatedTable, type Column } from '@/components/list/PaginatedTable';
 import { Badge } from '@/components/ui/Badge';
 import { MonoCopy } from '@/components/ui/MonoCopy';
+import { StatusFilter } from '@/components/list/StatusFilter';
+import { CORESLOT_STATUS_OPTIONS } from '@/lib/status-filters';
 import { useCoreSlotsList, type CoreSlotsResponse } from '@/lib/api/queries';
 import { formatHeight } from '@/lib/format/height';
 import { statusTone } from '@/lib/format/status';
 
 type Slot = CoreSlotsResponse['data'][number];
 
-export function CoreSlotsList() {
-  const query = useCoreSlotsList();
+export function CoreSlotsList({ status }: { status?: string | undefined }) {
+  const query = useCoreSlotsList(status);
   const columns: Column<Slot>[] = [
     {
       header: 'Slot',
@@ -30,12 +32,20 @@ export function CoreSlotsList() {
     { header: 'Removed', mono: true, cell: (s) => (s.removedHeight ? formatHeight(s.removedHeight) : '—') },
   ];
   return (
-    <PaginatedTable
-      query={query}
-      columns={columns}
-      rowKey={(s) => s.slotId}
-      context="CoreSlots"
-      emptyMessage="No CoreSlots indexed yet."
-    />
+    <div className="space-y-3">
+      <StatusFilter
+        label="Status"
+        paramName="status"
+        value={status ?? ''}
+        options={CORESLOT_STATUS_OPTIONS}
+      />
+      <PaginatedTable
+        query={query}
+        columns={columns}
+        rowKey={(s) => s.slotId}
+        context="CoreSlots"
+        emptyMessage={status ? `No ${status.toLowerCase()} CoreSlots.` : 'No CoreSlots indexed yet.'}
+      />
+    </div>
   );
 }

@@ -176,10 +176,12 @@ export function useTxsByHeight(height: string) {
 }
 
 // --- Transactions ---
-export function useTxsList() {
+// `status` joins the queryKey so changing the filter re-keys the infinite query — keyset pagination
+// restarts from page one (no stale cursor). apiGet drops `status` when undefined (unfiltered).
+export function useTxsList(status?: string) {
   return useInfiniteQuery({
-    queryKey: ['txs', 'list'],
-    queryFn: ({ pageParam }) => apiGet('/api/v1/txs', { limit: LIST_PAGE, cursor: pageParam }),
+    queryKey: ['txs', 'list', status ?? null],
+    queryFn: ({ pageParam }) => apiGet('/api/v1/txs', { limit: LIST_PAGE, cursor: pageParam, status }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: nextPageParam,
   });
@@ -250,10 +252,12 @@ export type CoreSlotRewardsResponse = JsonOf<'/api/v1/coreslots/{slotId}/rewards
 
 const enabledSlot = (slotId: string) => slotId.length > 0;
 
-export function useCoreSlotsList() {
+// Same status-in-queryKey pattern as useTxsList — re-keys (resets pagination) on filter change.
+export function useCoreSlotsList(status?: string) {
   return useInfiniteQuery({
-    queryKey: ['coreslots', 'list'],
-    queryFn: ({ pageParam }) => apiGet('/api/v1/coreslots', { limit: LIST_PAGE, cursor: pageParam }),
+    queryKey: ['coreslots', 'list', status ?? null],
+    queryFn: ({ pageParam }) =>
+      apiGet('/api/v1/coreslots', { limit: LIST_PAGE, cursor: pageParam, status }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: nextPageParam,
   });
