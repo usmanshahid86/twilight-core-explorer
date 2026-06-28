@@ -54,11 +54,22 @@ const isComment = (line) => {
 // LEADING inline block comment (`/* x */ code`) so a forbidden token can't hide behind one (review N1).
 // Exported so the non-tautology is self-tested below (a planted violation must be caught).
 export function lineViolates(line, pattern) {
-  // Strip a LEADING inline block comment (`/* x */ code`) FIRST so it can't shield a violation (N1),
-  // THEN decide if what remains is a full-line // or block comment (documentation, not runtime code).
-  const code = line.replace(/^\s*\/\*.*?\*\//, '');
+  // Strip ALL leading inline block comments (`/*a*/ /*b*/ code`) in a loop FIRST so none can shield a
+  // violation (review N1 + PR #39 — a single strip let a second `/*..*/` re-classify the line as a
+  // comment), THEN decide if what remains is a full-line // or block comment (docs, not runtime code).
+  let code = line;
+  for (let prev = null; prev !== code; ) {
+    prev = code;
+    code = code.replace(/^\s*\/\*.*?\*\//, '');
+  }
   if (isComment(code)) return false;
-  return pattern.test(code);
+  // Test non-statefully: a `g`/`y` RegExp makes `.test()` advance `lastIndex`, yielding false negatives
+  // on repeated calls (PR #39). Use a flag-stripped copy so the test is pure regardless of the caller.
+  const safe =
+    pattern.global || pattern.sticky
+      ? new RegExp(pattern.source, pattern.flags.replace(/[gy]/g, ''))
+      : pattern;
+  return safe.test(code);
 }
 
 // Offending `file:line` occurrences: the pattern on a non-comment (runtime-code) line.
@@ -102,6 +113,15 @@ describe('repo invariant guard — line classification (non-tautology proof)', (
   });
   it('flags a forbidden route even behind a leading inline block comment (N1)', () => {
     assert.equal(lineViolates(`/* tmp */ apiGet('${cosmos('distribution')}')`, COSMOS), true);
+  });
+  it('flags a forbidden route behind MULTIPLE leading block comments (PR #39)', () => {
+    assert.equal(lineViolates(`/*a*/ /*b*/ apiGet('${cosmos('staking')}')`, COSMOS), true);
+  });
+  it('is non-stateful with a global/sticky RegExp — same input twice stays true (PR #39)', () => {
+    const g = /\/cosmos\/(staking|gov|mint|distribution)/g;
+    const line = `  return apiGet('${cosmos('mint')}');`;
+    assert.equal(lineViolates(line, g), true);
+    assert.equal(lineViolates(line, g), true); // a stateful .test() would return false here
   });
   it('does NOT over-strip a URL string literal (https:// is not treated as a comment)', () => {
     assert.equal(lineViolates(`const u = 'https://node${cosmos('gov')}';`, COSMOS), true);

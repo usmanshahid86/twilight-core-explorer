@@ -72,7 +72,7 @@ repo-wide scan over the new file.
 ## Validation (all green)
 
 root `typecheck` (see note) · **`lint` (now all 8 workspaces incl. `packages/proto`, warn-only, exit 0,
-4 warnings)** · **`test` (runs `test:guards` 8/8 first — now scanning `packages/proto/src` too — then all
+4 warnings)** · **`test` (runs `test:guards` 10/10 first — now scanning `packages/proto/src` too — then all
 workspaces)** · `apps/web test` · `openapi:check` api + web up to date · web `build` ✓ · `git diff --check`
 clean.
 
@@ -100,7 +100,12 @@ the legit comment (scans 232 files). Folded in:
   classifying, and added **self-tests** (`lineViolates`) proving the guard catches a planted violation,
   fixes N1, stays URL-safe (`https://…/cosmos/…` is flagged, not over-stripped), and ignores full-line
   comments. (The self-test caught a bug in my first attempt — `isComment` short-circuited before the
-  strip — now reordered.) Guard now 8/8.
+  strip — now reordered.)
+- **PR #39 hardening** (`lineViolates` false negatives) — the strip handled only ONE leading block
+  comment, so `/*a*/ /*b*/ apiGet('/cosmos/…')` re-classified as a comment and was skipped; and
+  `pattern.test()` was stateful if ever handed a `g`/`y` RegExp (`lastIndex` advances → false negatives
+  on repeat). Fixed: strip **all** leading block comments in a loop, and test with a flag-stripped
+  (non-stateful) copy of the pattern. Added two self-tests for both cases. Guard now **10/10**.
 
 Deferred per the locked contract (lint-tightening follow-up): **N2** — a *trailing* comment mention of a
 banned route is still flagged (errs strict; documented in-code that such mentions must be full-line
