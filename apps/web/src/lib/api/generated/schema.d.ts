@@ -135,6 +135,12 @@ export interface paths {
                         "application/json": {
                             data: {
                                 chainId: string | null;
+                                build: {
+                                    version: string;
+                                    gitSha: string | null;
+                                    builtAt: string | null;
+                                    environment: "production" | "development" | "test";
+                                };
                                 indexer: {
                                     /** @description Decimal height/id as string */
                                     lastIndexedHeight: string;

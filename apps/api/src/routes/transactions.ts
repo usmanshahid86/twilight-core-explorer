@@ -38,6 +38,7 @@ export async function transactionsRoutes(fastify: FastifyInstance): Promise<void
         querystring: TxsQuery,
         response: { 200: TxListResponse, 400: ErrorResponse },
       },
+      config: { cacheControl: 'revalidate' }, // cacheable with always-revalidate (ETag)
     },
     async (request) => {
       const limit = request.query.limit ?? DEFAULT_LIMIT;
@@ -91,6 +92,7 @@ export async function transactionsRoutes(fastify: FastifyInstance): Promise<void
         querystring: TxDetailQuery,
         response: { 200: TxDetailResponse, 404: ErrorResponse },
       },
+      config: { cacheControl: 'revalidate' },
     },
     async (request) => {
       const tx = await getTx(app.prisma, request.params.hash);

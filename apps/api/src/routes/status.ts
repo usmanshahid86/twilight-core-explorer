@@ -26,6 +26,7 @@ export async function statusRoutes(app: FastifyInstance): Promise<void> {
       return {
         data: {
           chainId: cursor?.chainId ?? null,
+          build: app.buildInfo,
           indexer: cursor ? toIndexerStatus(cursor) : null,
           projections: projections.map(toProjectionStatus),
           projectionFailures: { unresolvedCount, byProjection },

@@ -32,6 +32,7 @@ export async function blocksRoutes(fastify: FastifyInstance): Promise<void> {
         querystring: BlocksQuery,
         response: { 200: BlockListResponse, 400: ErrorResponse },
       },
+      config: { cacheControl: 'revalidate' }, // cacheable with always-revalidate (ETag)
     },
     async (request) => {
       const limit = request.query.limit ?? DEFAULT_LIMIT;
@@ -70,6 +71,7 @@ export async function blocksRoutes(fastify: FastifyInstance): Promise<void> {
         querystring: BlockDetailQuery,
         response: { 200: BlockDetailResponse, 400: ErrorResponse, 404: ErrorResponse },
       },
+      config: { cacheControl: 'revalidate' },
     },
     async (request) => {
       const height = parseUint64(request.params.height);

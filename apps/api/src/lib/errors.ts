@@ -64,6 +64,12 @@ export function registerErrorHandling(app: FastifyInstance): void {
       return;
     }
 
+    // @fastify/rate-limit throws a 429 (not an ApiError); surface it in the standard envelope.
+    if (error.statusCode === 429) {
+      reply.code(429).send(body('rate_limited', error.message || 'rate limit exceeded'));
+      return;
+    }
+
     // Anything else is unexpected: log the cause, return a generic 500 with NO details.
     request.log.error(error);
     reply.code(500).send(body('internal', 'internal server error'));

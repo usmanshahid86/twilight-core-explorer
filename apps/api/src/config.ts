@@ -4,6 +4,16 @@
 
 export type ApiEnv = 'production' | 'development' | 'test';
 
+/** Per-IP rate limit. Disabled by default outside production so local dev + the test suite are never
+ *  throttled or made flaky; opt in anywhere via RATE_LIMIT_ENABLED. */
+export interface RateLimitConfig {
+  enabled: boolean;
+  /** Max requests per IP per window. */
+  max: number;
+  /** Window length in milliseconds. */
+  timeWindowMs: number;
+}
+
 export interface ApiConfig {
   /** Postgres connection string. API_DATABASE_URL is authoritative; DATABASE_URL is a documented
    *  local/test-only fallback (never in production). A read-only DB role is recommended. */
@@ -15,6 +25,7 @@ export interface ApiConfig {
   /** CORS allow-list. `true` = reflect any origin (non-prod default); `false` = no cross-origin;
    *  string[] = explicit allow-list. */
   corsOrigins: boolean | string[];
+  rateLimit: RateLimitConfig;
 }
 
 const DEFAULT_PORT = 8080;
@@ -28,8 +39,42 @@ export function loadApiConfig(env: Record<string, string | undefined> = process.
   const port = readPort(env, 'PORT', DEFAULT_PORT);
   const host = readString(env, 'HOST', DEFAULT_HOST);
   const corsOrigins = readCors(env.CORS_ORIGINS, isProduction);
+  const rateLimit = readRateLimit(env, isProduction);
 
-  return { databaseUrl, port, host, env: apiEnv, isProduction, corsOrigins };
+  return { databaseUrl, port, host, env: apiEnv, isProduction, corsOrigins, rateLimit };
+}
+
+/** Rate limit: enabled in production by default (override with RATE_LIMIT_ENABLED=true/false), 100
+ *  req/IP/min. Off in dev/test unless explicitly enabled, so the suite is never throttled. */
+function readRateLimit(
+  env: Record<string, string | undefined>,
+  isProduction: boolean,
+): RateLimitConfig {
+  // Strict parse (mirrors readPositiveInt): an unrecognized value throws rather than silently
+  // disabling the limiter on a typo (e.g. RATE_LIMIT_ENABLED=yes). Unset → production default.
+  const raw = env.RATE_LIMIT_ENABLED?.trim().toLowerCase();
+  let enabled: boolean;
+  if (raw === undefined) enabled = isProduction;
+  else if (raw === 'true' || raw === '1') enabled = true;
+  else if (raw === 'false' || raw === '0') enabled = false;
+  else throw new Error('RATE_LIMIT_ENABLED must be one of true/false/1/0');
+  const max = readPositiveInt(env, 'RATE_LIMIT_MAX', 100);
+  const timeWindowMs = readPositiveInt(env, 'RATE_LIMIT_WINDOW_MS', 60_000);
+  return { enabled, max, timeWindowMs };
+}
+
+function readPositiveInt(
+  env: Record<string, string | undefined>,
+  key: string,
+  fallback: number,
+): number {
+  const raw = env[key]?.trim();
+  if (!raw) return fallback;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`${key} must be a positive integer`);
+  }
+  return value;
 }
 
 function normalizeEnv(raw: string | undefined): ApiEnv {
@@ -79,9 +124,11 @@ function readPort(env: Record<string, string | undefined>, key: string, fallback
 function readCors(raw: string | undefined, isProduction: boolean): boolean | string[] {
   const value = raw?.trim();
   if (!value) return isProduction ? false : true;
-  if (value === '*') return true;
+  if (value === '*') return true; // explicit bare '*' = allow-all
+  // A '*' mixed into a comma list is almost certainly a mistake — @fastify/cors would silently treat
+  // the WHOLE list as allow-all. Drop the stray '*' so an explicit allow-list stays deny-by-default.
   return value
     .split(',')
     .map((o) => o.trim())
-    .filter((o) => o.length > 0);
+    .filter((o) => o.length > 0 && o !== '*');
 }

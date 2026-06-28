@@ -9,6 +9,10 @@ import type { ApiConfig } from './config.js';
 import { registerErrorHandling } from './lib/errors.js';
 import { attachPrisma } from './plugins/prisma.js';
 import { registerCors } from './plugins/cors.js';
+import { registerSecurityHeaders } from './plugins/security-headers.js';
+import { registerRateLimit } from './plugins/rate-limit.js';
+import { registerCacheControl } from './plugins/cache-control.js';
+import { attachBuildInfo } from './plugins/build-info.js';
 import { registerOpenapi } from './plugins/openapi.js';
 import { healthRoutes } from './routes/health.js';
 import { statusRoutes } from './routes/status.js';
@@ -36,11 +40,17 @@ export async function buildServer(opts: BuildServerOptions): Promise<FastifyInst
     .withTypeProvider<TypeBoxTypeProvider>();
 
   registerErrorHandling(app);
+  // Transport hardening (13c): headers first, then CORS (so a rate-limited 429 still carries CORS
+  // headers), then the per-IP limiter, then ETag + Cache-Control. All additive — envelopes unchanged.
+  await registerSecurityHeaders(app, opts.config);
   await registerCors(app, opts.config);
+  await registerRateLimit(app, opts.config);
+  await registerCacheControl(app);
   attachPrisma(
     app,
     opts.prisma !== undefined ? { prisma: opts.prisma } : { databaseUrl: opts.config.databaseUrl },
   );
+  attachBuildInfo(app, opts.config.env); // build/env metadata for /status — no chain access
   await registerOpenapi(app, opts.config); // before routes: collects their schemas
 
   await app.register(healthRoutes);

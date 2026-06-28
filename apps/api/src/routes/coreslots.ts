@@ -74,6 +74,7 @@ export async function coreslotsRoutes(fastify: FastifyInstance): Promise<void> {
         querystring: CoreSlotsQuery,
         response: { 200: CoreSlotListResponse, 400: ErrorResponse },
       },
+      config: { cacheControl: 'revalidate' }, // cacheable with always-revalidate (ETag)
     },
     async (request) => {
       const limit = request.query.limit ?? DEFAULT_LIMIT;
@@ -109,6 +110,7 @@ export async function coreslotsRoutes(fastify: FastifyInstance): Promise<void> {
         querystring: CoreSlotDetailQuery,
         response: { 200: CoreSlotDetailResponse, 400: ErrorResponse, 404: ErrorResponse },
       },
+      config: { cacheControl: 'revalidate' },
     },
     async (request) => {
       const slotId = parseSlotId(request.params.slotId);
