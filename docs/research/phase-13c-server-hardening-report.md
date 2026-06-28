@@ -10,7 +10,8 @@ Status: implemented; pending multi-lens review + Codex.
 The plan split 13c into four slices; 13c-1 (linter + guards) shipped separately. **13c-2/3/4 are one
 subsystem** — Fastify transport hardening — so they are built as a **single slice** (the plan explicitly
 permits a combined `phase-13c-*` report). All work is `apps/api` transport + the regenerated OpenAPI/web
-client; **no response envelope, route semantics, or chain access changed.** 13d (RC gate) stays separate.
+client; **no response envelope, route semantics, or chain access changed** — the one additive contract
+change is the new `data.build` field on `/status` (spec + client regenerated). 13d (RC gate) stays separate.
 
 Three locked decisions (chosen with the user): version → **extend `/api/v1/status`** (not a new route);
 CORS → **review + document** (real allow-list is a Phase-14 deploy concern); logging → **pino on in prod,
@@ -19,11 +20,12 @@ off in dev/test**.
 ## What shipped (by track)
 
 ### A — HTTP hardening
-- **A1 Security headers** — `@fastify/helmet` (`plugins/security-headers.ts`), API-tuned: **CSP off in
-  non-prod** (the dev-only `/docs` swagger-ui needs inline scripts) and a **strict CSP in production**
-  (`default-src 'none'`, no HTML surface there) as defense-in-depth; **`X-Frame-Options: DENY`**
-  (frameguard); **CORP `cross-origin`** (public read-only API). Keeps helmet's `nosniff`,
-  `Referrer-Policy`, HSTS (ignored over plain HTTP, harmless locally).
+- **A1 Security headers** — `@fastify/helmet` (`plugins/security-headers.ts`), API-tuned. **CSP**: off
+  in non-prod (the dev-only `/docs` swagger-ui needs inline scripts), and in production helmet's default
+  CSP with API overrides (restrictive `default-src`/`frame-ancestors: 'none'`) as defense-in-depth —
+  `/docs` is absent in prod. **`X-Frame-Options: DENY`** (frameguard); **CORP `cross-origin`** (public
+  read-only API). Keeps helmet's `nosniff`, `Referrer-Policy`, HSTS (ignored over plain HTTP, harmless
+  locally).
 - **A2 CORS** — reviewed, not rebuilt; config-driven: reflect-any in non-prod, **deny cross-origin in
   production** unless `CORS_ORIGINS` is set. **Important caveat (multi-lens review):** this posture is
   *contingent on `API_ENV`/`NODE_ENV` resolving to `production`* — an unknown/unset value falls back to
@@ -76,7 +78,7 @@ Security headers (nosniff + CORP) · `no-store` on `/status` · `no-cache` on `/
 
 ## Validation (all green)
 API typecheck + **121 tests** · web typecheck + **173 tests** · both `openapi:check` up to date ·
-lint 0 errors (2 pre-existing warn-only baseline) · build.
+lint 0 errors, 2 warnings (warn-only baseline) · build.
 
 ## Deferred (documented → Phase 14)
 - Shared rate-limit store (Redis) behind the existing plugin interface; the concrete production CORS

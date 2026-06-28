@@ -20,4 +20,5 @@ SHA at `GET /api/v1/status` (`data.build`).
 
 ### Notes
 - The API is DB-only; version truthfulness comes from build/env values, never a chain call.
-- No response-envelope or API-contract changes in Phase 13c (caching/headers/limits are transport-only).
+- The only API-contract change is the **additive** `data.build` field on `GET /api/v1/status` (spec +
+  client regenerated); caching/headers/rate-limits are transport-only and change no response envelope.

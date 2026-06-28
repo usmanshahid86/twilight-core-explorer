@@ -64,9 +64,11 @@ export function registerErrorHandling(app: FastifyInstance): void {
       return;
     }
 
-    // @fastify/rate-limit throws a 429 (not an ApiError); surface it in the standard envelope.
+    // @fastify/rate-limit throws a 429 (not an ApiError); surface it in the standard envelope with a
+    // STABLE, contract-owned message — do not forward the plugin's raw message (it can change between
+    // versions and reveals the window). Timing is conveyed via the standard Retry-After header.
     if (error.statusCode === 429) {
-      reply.code(429).send(body('rate_limited', error.message || 'rate limit exceeded'));
+      reply.code(429).send(body('rate_limited', 'too many requests'));
       return;
     }
 

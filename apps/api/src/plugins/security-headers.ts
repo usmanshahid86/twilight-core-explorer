@@ -10,7 +10,8 @@ export async function registerSecurityHeaders(app: FastifyInstance, config: ApiC
   await app.register(helmet, {
     // CSP governs HTML resource loading — irrelevant to JSON responses. In NON-prod it must be OFF
     // because the bundled `/docs` swagger-ui needs inline scripts/styles. In PRODUCTION `/docs` is
-    // absent (no HTML surface at all), so a strict CSP is free defense-in-depth against any stray HTML.
+    // absent, so we keep helmet's default CSP with these overrides (default-src/frame-ancestors 'none')
+    // as free defense-in-depth against any stray HTML — helmet merges these onto its defaults.
     contentSecurityPolicy: config.isProduction
       ? { directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] } }
       : false,
