@@ -105,6 +105,10 @@ adversarial pass under-rated — both now resolved:
 - **NOTE-1** — strengthened the FU-1 durability test with a live control failure at `(1n, resolved:false)`
   the height-1 cleanup deletes, so the "survives" assertion is no longer vacuous under the mock.
 - **NOTE-2** — corrected this report's M-002 lint claim.
+- **Copilot (PR #38)** — the J-001 coverage guard used a bare substring (`'${path}'`) that would false-pass
+  on a type-only `JsonOf<'/path'>` reference or a comment and was quote-style-fragile. Hardened to match
+  the path as the **first argument to a request function** (`apiGet`/`apiGetPath`/the injected `get`) in
+  any quote style, with self-tests proving it rejects type-only references (all 32 paths still pass).
 
 Residual (tracked, non-blocking): the `START_HEIGHT=0` edge mirrors the accepted `genesis-identity`
 assumption (height 0 never revisited) — if the per-height loop ever ran at height 0 it would both wipe
