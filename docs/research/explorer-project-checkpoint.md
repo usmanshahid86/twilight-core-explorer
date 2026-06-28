@@ -34,9 +34,9 @@ audit, 12b `/rewards` hub + epoch detail, 12c `/supply` + `?slotId=` cross-links
 dual-reviewed** (apps/web 113 tests; read-only — no claim actions, claiming is CLI-only). **Phase 7.2
 (live rewards-claim fixture) is also done** (merged #32): it discharged the claim gate, so the rewards
 posture is now read-only (`productionClaimReadiness:"read_only_no_claim_action"`, replacing the old
-`gated_by_phase_7_2`). **The next phase is 13 (deployment/hardening)**; the originally-planned operator
-education/onboarding scope is the remaining product surface (renumbered to a later phase). See §6 for
-the phase breakdown.
+`gated_by_phase_7_2`). **The next phase is 13 (explorer hardening & release readiness)**, followed by
+Phase 14 (deployment & operations) and Phase 15 (operator education & onboarding) — see
+`phase-13-explorer-hardening-plan.md` for the 13/14/15 split. See §6 for the phase breakdown.
 
 This document summarizes what has already been decided and built, what is still only
 designed, and the recommended sequence from here. It is intended to keep implementation
@@ -1016,7 +1016,7 @@ per-slot rewards subsection.
 ### Phase 12: Rewards Economics (completed)
 
 > **Note (2026-06-28):** Phase 12 was scoped as the rewards/supply economic surfaces (NOT the
-> originally-listed "Operator Education and Onboarding", which is renumbered to a later phase — see
+> originally-listed "Operator Education and Onboarding", which is renumbered to **Phase 15** — see
 > below). Posture (locked): *make economic state understandable without implying live financial
 > action* — **read-only**, no claim actions; claiming is CLI-only (`twilightd`), documented externally.
 
@@ -1044,10 +1044,64 @@ boundary + theme guards. **No API contract change** in 12b/12c (both `openapi:ch
 apps/web: **113 tests**; both 12b and 12c **Codex PASS** (12c also 3-lens adversarial PASS).
 Tagged `explorer-phase-12-rewards-economics`.
 
-### Operator Education and Onboarding (deferred — future phase)
+### Operator Education & Onboarding → Phase 15
 
-> Originally numbered "Phase 12"; renumbered after Phase 12 became Rewards Economics. Lands after
-> Phase 13 hardening (or in parallel — it is mostly static + live params).
+The originally-listed "Operator Education and Onboarding" (renumbered after Phase 12 became Rewards
+Economics) is now **Phase 15**, sequenced after Phase 14. Its full goal/scope lives in the Phase 15
+section below (after Deployment & Operations).
+
+### Phase 13: Explorer Hardening & Release Readiness
+
+Plan: `phase-13-explorer-hardening-plan.md` (sub-phases 13a–13d; defines the Phase 14/15 split). Makes
+the explorer **trustworthy, consistent, and release-ready as software** — distinct from
+deployable-as-infrastructure (Phase 14). Each sub-phase is gated by its own report + adversarial +
+Codex review:
+
+- **13a — full explorer audit:** catalogue every correctness/consistency/usability defect, each
+  assigned a fix-home; grep-able checks become durable guards. Deliverable:
+  `phase-13a-explorer-hardening-audit.md`.
+- **13b — remediation (code + ux):** 13b-code fixes correctness findings (stray `Number()` on chain
+  data, DB/RPC-in-web, OpenAPI drift, stale `gated_by_phase_7_2`, `sampled:false`, raw eager-fetch),
+  converts each grep-able check into a guard, and pulls in FU-1 (genesis `ProjectionFailure`
+  durability); 13b-ux does nav/IA/breadcrumbs/copy/empty-state/caveat-consistency/a11y polish (not
+  redesign).
+- **13c — cheap-but-real hardening (build):** a real linter across api/indexer/packages (warn-only
+  first; today `npm run lint` is a no-op outside web); API security headers, cache-control/ETag, CORS
+  review; in-process rate limiting (behind an interface a shared store can later implement);
+  version/git-SHA truthfulness + CHANGELOG; error observability.
+- **13d — release-candidate pass (verify):** an executable RC checklist (pass/fail), a scale/soak run
+  against the devnet **and** an extended localnet soak, bundle/perf + a11y verification, and the
+  env-var contract. Deliverable: `docs/operations/explorer-release-readiness.md`. RC gate = checklist
+  green + review PASS.
+
+### Phase 14: Deployment & Operations
+
+The infrastructure deliberately split out of Phase 13; a full plan follows once 13 is accepted.
+
+Goal:
+
+- Make the system deployable, monitorable, and recoverable as a service.
+
+Scope:
+
+- Docker app containers (web/api/indexer) + production Docker Compose (today only a dev-only
+  single-Postgres compose exists).
+- migration/deploy workflow; reindex/reset workflow.
+- indexer lag monitoring; gap detection + missing-height repair; retry/backoff; multi-RPC fallback.
+- DB backup strategy; nginx/TLS; CI/CD (run the RC checklist on every PR).
+- shared-store (Redis) rate limiting for multi-instance; optional `GrpcChainClient`; deeper
+  integration tests.
+
+Sequencing: some reliability hardening should move earlier than final deployment hardening.
+Gap detection, indexer lag monitoring, and basic live-node smoke checks should exist before
+public API/web exposure. Retry/backoff and multi-RPC fallback can be staged later but should
+not be forgotten.
+
+### Phase 15: Operator Education & Onboarding (deferred)
+
+Sequenced after Phase 14 (mostly static content + live params over the existing API, so it can also run
+in parallel with 14). Originally listed as the first "Phase 12" before that number went to Rewards
+Economics.
 
 Goal:
 
@@ -1066,32 +1120,6 @@ Scope:
 This can be built earlier once API/web scaffolding exists because it is mostly static plus
 live params.
 
-### Phase 13: Deployment and Production Hardening
-
-Goal:
-
-- Make the system deployable and operable.
-
-Scope:
-
-- Docker Compose / production packaging.
-- migration/deploy workflow.
-- nginx/TLS later.
-- indexer lag monitoring.
-- retry/backoff.
-- reindex/reset workflow.
-- gap detection and missing-height repair.
-- DB backup strategy.
-- rate limiting.
-- multi-RPC fallback.
-- deeper integration tests.
-- optional `GrpcChainClient`.
-
-Sequencing: some reliability hardening should move earlier than final deployment hardening.
-Gap detection, indexer lag monitoring, and basic live-node smoke checks should exist before
-public API/web exposure. Retry/backoff and multi-RPC fallback can be staged later but should
-not be forgotten.
-
 ## 7. Updated Phase Count
 
 The entire backend/projection stack is complete: CoreSlot semantic (6a), key rotation + temporal map
@@ -1102,10 +1130,11 @@ snapshots are done — so the entire backend + API surface is built and live-val
 Remaining:
 
 - MVP usable explorer: web foundation + generic pages (10), the Twilight surfaces + operator page
-  (11), and rewards economics (12: 12a/12b/12c) are **done**; next is hardening (13).
-- Production-grade operator explorer: the above + deployment/hardening (13, which also absorbs the API
-  hardening deferred from 9a–9c — rate limiting, security headers, cache-control/ETag, a real linter)
-  and the renumbered operator education/onboarding surface.
+  (11), and rewards economics (12: 12a/12b/12c) are **done**; next is explorer hardening (13).
+- Production-grade operator explorer: the above + Phase 13 (explorer hardening & release readiness —
+  which also absorbs the API hardening deferred from 9a–9c: rate limiting, security headers,
+  cache-control/ETag, a real linter), Phase 14 (deployment & operations), and Phase 15 (operator
+  education & onboarding).
 
 Open evidence tasks (not phase blockers): the optional broader liveness drills (multi-node halt →
 network `critical`; rotation-mid-outage). **Phase 7.2 (live rewards-claim fixture) is now done**
@@ -1185,15 +1214,17 @@ Dependencies that must not be blurred:
 
 Recommended next implementation step:
 
-**Phase 13: Deployment and Production Hardening** — the backend/API (9a–9d, 9d-0), the web foundation +
+**Phase 13: Explorer Hardening & Release Readiness** — the backend/API (9a–9d, 9d-0), the web foundation +
 generic explorer (Phase 10), the Twilight surfaces + operator page (Phase 11), and the rewards economics
-surfaces (**Phase 12: 12a/12b/12c**, `apps/web` 113 tests, Codex PASS, tagged `phase-12-complete`) are
-all complete. **Phase 7.2 (live rewards-claim fixture) is done** (merged #32) — it discharged the claim
-gate, so the rewards posture is read-only (`read_only_no_claim_action`; claiming is CLI-only). Phase 13
-should also absorb the API hardening deferred from 9a–9c (rate limiting, security headers,
-cache-control/ETag, a real linter — `npm run lint` is currently a no-op). The remaining product surface
-is the renumbered **Operator Education & Onboarding** phase (mostly static + live params; can land in
-parallel with hardening).
+surfaces (**Phase 12: 12a/12b/12c**, `apps/web` 113 tests, Codex PASS, tagged
+`explorer-phase-12-rewards-economics`) are all complete. **Phase 7.2 (live rewards-claim fixture) is
+done** (merged #32) — it discharged the claim gate, so the rewards posture is read-only
+(`read_only_no_claim_action`; claiming is CLI-only). Phase 13 (plan:
+`phase-13-explorer-hardening-plan.md`) audits + hardens the explorer as software — 13a audit → 13b
+remediation (code + ux) → 13c cheap-but-real hardening (the API hardening deferred from 9a–9c: rate
+limiting, security headers, cache-control/ETag, a real linter — `npm run lint` is currently a no-op
+outside web) → 13d release-candidate pass. **Phase 14** (deployment & operations) and **Phase 15**
+(operator education & onboarding) follow.
 
 The operator-liveness data dependency that gated the operator UX milestone is fully satisfied:
 `CoreSlotHealthSnapshot` + `NetworkLivenessRiskSnapshot` give per-operator health and network
