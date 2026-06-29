@@ -75,9 +75,14 @@ no-node 22, slot 3 rotation 2), 25 decoded `MsgSend` / 0 bank decode failures. D
 along the way (incl. the rewards batch-order fix) in `docs/research/phase-13d-3-soak-report.md`. Devnet
 primary run = deferred TODO.
 
-## 4. Bundle / perf + a11y (13d-4) — *pending*
-Web bundle size; the bounded `/liveness` fan-out; API N+1 read-through. Automated axe + a manual keyboard
-pass (the 13b-ux multi-lens a11y review covers the default theme; reuse, don't redo).
+## 4. Bundle / perf + a11y (13d-4) — **done**
+Perf audited healthy (no fixes): web bundle lean (87 kB shared / 104–125 kB per route), the `/liveness`
+fan-out bounded (`FANOUT_CONCURRENCY=12`, `FANOUT_CAP=100`, graceful per-slot null), no API N+1 (repos batch
+via IN-clause). a11y: an **automated axe structural net** (`axe-core` + `src/test/axe.ts` + 5 component
+tests) — all pass; a real fix (**list tables now carry sr-only captions** via `PaginatedTable`'s
+`caption ?? context`, naming all 13 list tables); keyboard audit clean (native elements, global
+`:focus-visible`, operable search picker). jsdom can't do color-contrast — that stays the 13b-ux manual
+domain. Detail: `docs/research/phase-13d-4-report.md`.
 
 ---
 
@@ -110,8 +115,9 @@ a later tightening pass.**
   `sampleKind`/`denom`/`height`, params `changeType`; adopt the `StatusFilter` pattern.
 - **Legacy-theme contrast pass** (13b-ux) — the opt-in `legacy` theme has sub-AA pairs (primary link
   text, info badge, accent-red). Default `auction` theme is AA-clean.
-- **Table accessible-name population** (13b-ux) — thread `caption` through `PaginatedTable` for SR
-  discoverability (the `th scope=col` structural requirement is met).
+- **Table accessible-name population** — *FIXED (13d-4).* `PaginatedTable` now threads `caption ?? context`
+  → all 13 list tables carry an sr-only `<caption>`. (The `th scope=col` structural requirement was already
+  met.)
 - **Mobile nav disclosure** (13b-ux) — the compact nav is a flat chip-wrap; a hamburger/disclosure is a
   deferred enhancement.
 

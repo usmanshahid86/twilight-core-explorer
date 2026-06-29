@@ -9,7 +9,7 @@ export function Table({
 }: {
   head: ReactNode;
   children: ReactNode;
-  caption?: string;
+  caption?: string | undefined;
 }) {
   return (
     <div className="-mx-1 overflow-x-auto">
