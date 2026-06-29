@@ -96,8 +96,10 @@ metadata/lifecycle/payout/params, key rotation, temporal consensus map; rewards 
 block-signature ingestion → operator signature attribution → CoreSlot liveness evidence/summaries →
 health & network halt-risk; proposer attribution), the DB-only public **API** (Phase 9; 32 OpenAPI
 paths), and the **web** explorer (Phases 10–12: generic pages, CoreSlot/liveness/network/operator
-surfaces, and the read-only rewards/supply economic pages). Next up is deployment/production hardening
-(Phase 13).
+surfaces, and the read-only rewards/supply economic pages). **Phase 13 (explorer hardening & RC pass)
+is complete** — Fastify server hardening, an executable RC checklist (`npm run rc-check`), and a
+~2,500-block localnet soak, RC-tagged `explorer-phase-13`. Next up is **deployment & operations
+(Phase 14)**.
 
 ## Current Scope
 
@@ -113,11 +115,17 @@ Implemented:
 - The **web** explorer (Phase 10 foundation + generic pages; Phase 11 CoreSlot/liveness/network +
   the first-class operator page; Phase 12 read-only rewards/supply economic pages). The rewards
   surface is intentionally read-only — claiming is CLI-only, not an in-app action.
+- **Hardening & release readiness (Phase 13):** API security headers / cache-control / in-process
+  rate limiting, a real linter + static guards, the executable RC checklist (`npm run rc-check`,
+  incl. the `RC_LIVE` live tier), and a ~2,500-block localnet soak (GREEN). See
+  `docs/operations/explorer-release-readiness.md`.
 
 Not yet implemented:
 
-- Production deployment packaging, operating runbooks, and API hardening (rate limiting, security
-  headers, cache-control/ETag) — Phase 13.
+- Production deployment packaging + operating runbooks (Phase 14): the rate-limit shared store /
+  proxy keying, fail-closed env resolution, the production CORS allow-list, build-metadata injection,
+  and indexer lag-monitoring / gap-detection. The primary **devnet** soak is a deferred Phase-13d
+  acceptance item (Issue #41).
 - Generated gRPC/proto client transport behind `ChainClient`.
 
 Status is tracked in the project checkpoint.

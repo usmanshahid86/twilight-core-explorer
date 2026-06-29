@@ -1,6 +1,6 @@
 # Twilight Core Explorer Project Checkpoint
 
-Date: 2026-06-28
+Date: 2026-06-29
 
 Status: checkpoint after Phase A/B foundation, descriptor decoder work, chain-alignment
 cleanup, the full CoreSlot semantic projection set, temporal consensus map/boundary
@@ -34,13 +34,18 @@ audit, 12b `/rewards` hub + epoch detail, 12c `/supply` + `?slotId=` cross-links
 dual-reviewed** (apps/web 113 tests; read-only — no claim actions, claiming is CLI-only). **Phase 7.2
 (live rewards-claim fixture) is also done** (merged #32): it discharged the claim gate, so the rewards
 posture is now read-only (`productionClaimReadiness:"read_only_no_claim_action"`, replacing the old
-`gated_by_phase_7_2`). **The next phase is 13 (explorer hardening & release readiness)**, followed by
-Phase 14 (deployment & operations) and Phase 15 (operator education & onboarding) — see
+`gated_by_phase_7_2`). **Phase 13 (explorer hardening & release readiness) is now complete** — 13a
+(full audit) → 13b (code remediation + UX polish + status filters) → 13c (linter/static guards + Fastify
+server hardening) → 13d (RC pass: an executable `npm run rc-check` checklist + the `RC_LIVE=1` live tier,
+a ~2,500-block localnet soak that ran **GREEN, 53 checks**, a perf audit, and compile-enforced table
+a11y). Independently **adversarial + Codex reviewed PASS** and **RC-tagged `explorer-phase-13`**. The one
+deferred acceptance item is the primary **devnet** soak (Issue #41 — localnet only this pass). **The next
+phase is 14 (deployment & operations)**, then Phase 15 (operator education & onboarding) — see
 `phase-13-explorer-hardening-plan.md` for the 13/14/15 split. See §6 for the phase breakdown.
 
 This document summarizes what has already been decided and built, what is still only
 designed, and the recommended sequence from here. It is intended to keep implementation
-aligned for the remaining web (10/11) and hardening (12/13) work.
+aligned for the remaining deployment & operations (Phase 14) work.
 
 ## 1. Product North Star
 
@@ -1050,7 +1055,15 @@ The originally-listed "Operator Education and Onboarding" (renumbered after Phas
 Economics) is now **Phase 15**, sequenced after Phase 14. Its full goal/scope lives in the Phase 15
 section below (after Deployment & Operations).
 
-### Phase 13: Explorer Hardening & Release Readiness
+### Phase 13: Explorer Hardening & Release Readiness (completed)
+
+Status: **COMPLETE (RC, localnet).** All sub-phases delivered + adversarial + Codex reviewed PASS; the
+RC gate (`npm run rc-check`, incl. `RC_LIVE=1`) is GREEN, the ~2,500-block localnet soak ran GREEN (53
+checks), and it is tagged `explorer-phase-13`. Reports: `phase-13a-explorer-hardening-audit`,
+`phase-13b-{code-remediation,ux-polish,filters}`, `phase-13c-{1-linter-static-guards,server-hardening}`,
+`phase-13d-{1-rc-checklist,3-soak-{plan,report},4}` + `docs/operations/explorer-release-readiness.md`.
+Deferred (Issue #41 acceptance): the primary **devnet** soak. The bullets below are the original plan —
+all delivered.
 
 Plan: `phase-13-explorer-hardening-plan.md` (sub-phases 13a–13d; defines the Phase 14/15 split). Makes
 the explorer **trustworthy, consistent, and release-ready as software** — distinct from
@@ -1130,7 +1143,7 @@ snapshots are done — so the entire backend + API surface is built and live-val
 Remaining:
 
 - MVP usable explorer: web foundation + generic pages (10), the Twilight surfaces + operator page
-  (11), and rewards economics (12: 12a/12b/12c) are **done**; next is explorer hardening (13).
+  (11), and rewards economics (12: 12a/12b/12c) are **done** — as is explorer hardening (13, RC-tagged).
 - Production-grade operator explorer: the above + Phase 13 (explorer hardening & release readiness —
   which also absorbs the API hardening deferred from 9a–9c: rate limiting, security headers,
   cache-control/ETag, a real linter), Phase 14 (deployment & operations), and Phase 15 (operator
@@ -1212,19 +1225,22 @@ Dependencies that must not be blurred:
 
 ## 10. Immediate Next Step
 
-Recommended next implementation step:
+**Phase 13 (explorer hardening & release readiness) is complete** — 13a audit → 13b (code remediation +
+UX polish + status filters) → 13c (linter/static guards + Fastify server hardening) → 13d (RC pass: an
+executable `npm run rc-check` checklist + the `RC_LIVE=1` live tier, a ~2,500-block localnet soak that ran
+**GREEN, 53 checks**, a perf audit, and compile-enforced table a11y). Independently **adversarial + Codex
+reviewed PASS**, **RC-tagged `explorer-phase-13`**. The backend/API (9a–9d, 9d-0), web (10/11/12), and
+Phase 7.2 (live rewards-claim fixture — rewards posture read-only `read_only_no_claim_action`, claiming is
+CLI-only) were already complete.
 
-**Phase 13: Explorer Hardening & Release Readiness** — the backend/API (9a–9d, 9d-0), the web foundation +
-generic explorer (Phase 10), the Twilight surfaces + operator page (Phase 11), and the rewards economics
-surfaces (**Phase 12: 12a/12b/12c**, `apps/web` 113 tests, Codex PASS, tagged
-`explorer-phase-12-rewards-economics`) are all complete. **Phase 7.2 (live rewards-claim fixture) is
-done** (merged #32) — it discharged the claim gate, so the rewards posture is read-only
-(`read_only_no_claim_action`; claiming is CLI-only). Phase 13 (plan:
-`phase-13-explorer-hardening-plan.md`) audits + hardens the explorer as software — 13a audit → 13b
-remediation (code + ux) → 13c cheap-but-real hardening (the API hardening deferred from 9a–9c: rate
-limiting, security headers, cache-control/ETag, a real linter — `npm run lint` is currently a no-op
-outside web) → 13d release-candidate pass. **Phase 14** (deployment & operations) and **Phase 15**
-(operator education & onboarding) follow.
+**Recommended next implementation step: Phase 14 (deployment & operations).** The readiness register
+(`docs/operations/explorer-release-readiness.md` §5) lists the deploy items deferred from 13c/13d:
+rate-limit proxy keying + a shared (Redis) store, fail-closed env resolution, the production CORS
+allow-list, build-metadata injection, and indexer lag-monitoring / gap-detection. **One Phase-13d
+acceptance item is still open (Issue #41): the primary devnet soak** — the soak scripts are devnet-shaped
+(observe + ingest), so it is an observe-and-record run once devnet access is wired (or amend #41 to make
+devnet a Phase-14 follow-up). A small standalone follow-up is also tracked: the forward-only
+`missing_reward_records` reconcile (needs a snapshot-side fix; readiness §5).
 
 The operator-liveness data dependency that gated the operator UX milestone is fully satisfied:
 `CoreSlotHealthSnapshot` + `NetworkLivenessRiskSnapshot` give per-operator health and network
