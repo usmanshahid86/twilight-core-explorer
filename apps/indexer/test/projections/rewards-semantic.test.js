@@ -130,6 +130,29 @@ describe('Rewards semantic projection', () => {
     assert.ok(failureKinds(p).includes('missing_reward_records'));
   });
 
+  it('7b. reprocessing after the snapshot lands clears the prior missing_reward_records failure', async () => {
+    const p = new MockRewardsPrisma();
+    seedClaim(p, { height: 120n });
+    // first pass: no SlotRewardProjection rows yet -> records the failure (resolved:false, per the DB default)
+    await projectRewardsSemanticHeight({ prisma: p, chainId: CHAIN_ID, height: 120n });
+    assert.ok(p.failures.some((f) => f.failureKind === 'missing_reward_records'), 'failure recorded on the first pass');
+
+    // The snapshot later lands the rows; REPROCESSING the height self-heals via the per-height
+    // deleteMany({ sourceHeight, resolved:false }) at the top of projectRewardsSemanticHeight (which wipes
+    // the stale failure BEFORE applyClaim re-runs), then reconciles the rows to claimed. (This is why the
+    // projector needs no explicit resolve — and why the mock must apply the resolved:false DB default, or
+    // the deleteMany would not match the freshly-created failure.)
+    p.seedSlotReward({ slotId: 4n, epochNumber: 1n, amount: '10', sampledAtHeight: 110n });
+    p.seedSlotReward({ slotId: 4n, epochNumber: 2n, amount: '20', sampledAtHeight: 110n });
+    await projectRewardsSemanticHeight({ prisma: p, chainId: CHAIN_ID, height: 120n });
+
+    assert.equal(p.slotRewards.filter((r) => r.claimed).length, 2, 'rows reconciled to claimed');
+    assert.ok(
+      !p.failures.some((f) => f.failureKind === 'missing_reward_records'),
+      'the stale failure is cleared by the per-height deleteMany on reprocess',
+    );
+  });
+
   it('8. failed claim tx does not project', async () => {
     const p = new MockRewardsPrisma();
     p.transactions.push(failedTx('CLAIM-120', 120n));
@@ -625,8 +648,12 @@ class MockRewardsPrisma {
       upsert: async (args) => {
         const i = this.failures.findIndex((f) => f.failureKey === args.where.failureKey);
         if (i >= 0) { this.failures[i] = { ...this.failures[i], ...args.update }; return this.failures[i]; }
-        this.failures.push({ ...args.create });
-        return args.create;
+        // Mirror the DB column default (`resolved Boolean @default(false)`) so `deleteMany({resolved:false})`
+        // matches a freshly-created failure exactly as real Prisma does (the mock can't apply DB defaults).
+        // Store AND return the same row, so callers that read the return value see `resolved` like Prisma.
+        const created = { resolved: false, ...args.create };
+        this.failures.push(created);
+        return created;
       },
       deleteMany: async (args) => {
         const w = args?.where ?? {};

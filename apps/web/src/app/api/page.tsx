@@ -32,6 +32,7 @@ export default function ApiDiagnosticsPage() {
                 <EmptyState message="No projections reported." />
               ) : (
                 <Table
+                  caption="Projection cursors"
                   head={
                     <>
                       <Th>Projection</Th>
@@ -75,6 +76,7 @@ export default function ApiDiagnosticsPage() {
                 <EmptyState message="No unresolved decode failures." />
               ) : (
                 <Table
+                  caption="Decode failures"
                   head={
                     <>
                       <Th>Height</Th>

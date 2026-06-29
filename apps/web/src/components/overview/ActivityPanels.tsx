@@ -26,6 +26,7 @@ export function LatestBlocksPanel() {
               <EmptyState message="No blocks indexed yet." />
             ) : (
               <Table
+                caption="Latest blocks"
                 head={
                   <>
                     <Th>Height</Th>
@@ -73,6 +74,7 @@ export function RecentTxPanel() {
               <EmptyState message="No transactions indexed yet." />
             ) : (
               <Table
+                caption="Recent transactions"
                 head={
                   <>
                     <Th>Hash</Th>

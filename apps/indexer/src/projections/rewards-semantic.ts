@@ -708,6 +708,12 @@ async function applyClaim(
       },
     });
   }
+  // No explicit failure-resolve here on purpose: a prior missing_reward_records failure (claim processed
+  // before the snapshot populated rows) is stamped at sourceHeight=event.height and is wiped by the
+  // per-height `deleteMany({ sourceHeight, resolved:false })` at the top of projectRewardsSemanticHeight
+  // on any REPROCESS — so a reset/replay (or the snapshot-first batch order) self-heals. The forward-only
+  // incremental case (the claim's height is never revisited) is NOT covered by this projector; clearing
+  // it requires a snapshot-side reconcile — tracked in explorer-release-readiness.md §5.
 }
 
 // --- treasury --------------------------------------------------------------

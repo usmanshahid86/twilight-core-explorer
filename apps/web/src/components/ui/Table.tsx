@@ -9,7 +9,10 @@ export function Table({
 }: {
   head: ReactNode;
   children: ReactNode;
-  caption?: string;
+  // Required: every data table must carry an sr-only accessible name. Making this mandatory enforces
+  // table naming at COMPILE time — axe can't (an unnamed <table> isn't a WCAG A/AA violation), so the
+  // type system is the only thing that prevents a future unnamed table from slipping through.
+  caption: string;
 }) {
   return (
     <div className="-mx-1 overflow-x-auto">

@@ -26,12 +26,15 @@ export function PaginatedTable<T>({
   columns,
   rowKey,
   context,
+  caption,
   emptyMessage = 'Nothing to show yet.',
 }: {
   query: InfiniteListQuery<T>;
   columns: Column<T>[];
   rowKey: (row: T, index: number) => string;
   context?: string | undefined;
+  // sr-only accessible name for the table (a data table should be named). Falls back to `context`.
+  caption?: string | undefined;
   emptyMessage?: string;
 }) {
   if (query.isPending) return <LoadingState rows={6} />;
@@ -42,7 +45,7 @@ export function PaginatedTable<T>({
 
   return (
     <div className="space-y-3">
-      <Table head={columns.map((c) => <Th key={c.header}>{c.header}</Th>)}>
+      <Table caption={caption ?? context ?? 'Results'} head={columns.map((c) => <Th key={c.header}>{c.header}</Th>)}>
         {rows.map((row, i) => (
           <Tr key={rowKey(row, i)}>
             {columns.map((c) => (

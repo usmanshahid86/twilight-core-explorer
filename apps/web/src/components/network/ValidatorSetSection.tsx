@@ -37,6 +37,7 @@ export function ValidatorSetSection() {
           <EmptyState message="No active validators at this height." />
         ) : (
           <Table
+            caption="Validator set"
             head={
               <>
                 <Th>Operator</Th>
