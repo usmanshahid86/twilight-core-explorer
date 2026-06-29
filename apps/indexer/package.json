@@ -39,6 +39,8 @@
     "project:rewards:reset": "node dist/projections/reset-rewards-cli.js",
     "project:rewards-snapshot": "node dist/projections/rewards-snapshot-cli.js",
     "project:rewards-snapshot:dev": "npm run build && node dist/projections/rewards-snapshot-cli.js",
+    "project:rewards-reconcile": "node dist/projections/rewards-reconcile-cli.js",
+    "project:rewards-reconcile:dev": "npm run build && node dist/projections/rewards-reconcile-cli.js",
     "project:balance-snapshot": "node dist/projections/balance-snapshot-cli.js",
     "project:balance-snapshot:dev": "npm run build && node dist/projections/balance-snapshot-cli.js",
     "project:balance-snapshot:reset": "node dist/projections/reset-balance-snapshot-cli.js",

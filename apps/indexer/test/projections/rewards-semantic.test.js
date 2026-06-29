@@ -17,6 +17,7 @@ import {
 import {
   buildBalanceSampleKey,
   ingestRewardsSnapshot,
+  reconcilePendingClaims,
 } from '../../dist/projections/rewards-snapshot.js';
 import { resetRewardsProjections } from '../../dist/projections/reset-rewards.js';
 
@@ -310,6 +311,56 @@ describe('Rewards observed snapshot ingestion', () => {
     assert.equal(p.slotRewards[0].claimed, true); // not unset
   });
 
+  it('snapshot reconciles a pending missing_reward_records failure once the rows land (forward-incremental)', async () => {
+    const p = new MockRewardsPrisma();
+    // forward-incremental: the claim is projected BEFORE any snapshot → applyClaim records the failure
+    seedClaim(p, { height: 120n });
+    await projectRewardsSemanticHeight({ prisma: p, chainId: CHAIN_ID, height: 120n });
+    assert.ok(
+      p.failures.some((f) => f.failureKind === 'missing_reward_records' && !f.resolved),
+      'failure open before the snapshot lands the rows',
+    );
+    assert.equal(p.slotRewards.length, 0);
+
+    // the snapshot later lands the observed rows → its reconcile resolves the failure + stamps the claim
+    const client = mockClient({
+      slotRewards: { 4: { rewards: [
+        { epoch_number: '1', amount: '10', denom: 'utwlt', claimed: false },
+        { epoch_number: '2', amount: '20', denom: 'utwlt', claimed: false },
+      ] } },
+    });
+    await ingestRewardsSnapshot({ prisma: p, client, chainId: CHAIN_ID, height: 200n, slotIds: [4n] });
+
+    assert.ok(
+      !p.failures.some((f) => f.failureKind === 'missing_reward_records' && !f.resolved),
+      'the missing_reward_records failure is resolved once the snapshot lands the rows',
+    );
+    const claimed = p.slotRewards.filter((r) => r.claimed);
+    assert.equal(claimed.length, 2, 'both claimed epochs reconciled by the snapshot');
+    assert.equal(claimed[0].claimTxHash, 'CLAIM-120', 'claim tx provenance stamped onto the observed row');
+    assert.ok(claimed[0].rawClaimJson, 'rawClaimJson stamped → forward-reconciled row matches a rebuilt one');
+  });
+
+  it('reconcilePendingClaims (CLI break-glass path) resolves from existing rows with NO snapshot/chain read', async () => {
+    const p = new MockRewardsPrisma();
+    // a claim was projected before any rows existed → a missing_reward_records failure
+    seedClaim(p, { height: 120n });
+    await projectRewardsSemanticHeight({ prisma: p, chainId: CHAIN_ID, height: 120n });
+    assert.ok(p.failures.some((f) => f.failureKind === 'missing_reward_records' && !f.resolved));
+    // a prior snapshot already landed the observed rows (seeded directly — the CLI does NO chain read)
+    p.seedSlotReward({ slotId: 4n, epochNumber: 1n, amount: '10', sampledAtHeight: 110n });
+    p.seedSlotReward({ slotId: 4n, epochNumber: 2n, amount: '20', sampledAtHeight: 110n });
+
+    const resolved = await reconcilePendingClaims(p); // invoked standalone, exactly as the CLI does
+
+    assert.equal(resolved, 1, 'returns the count of failures resolved');
+    assert.ok(
+      !p.failures.some((f) => f.failureKind === 'missing_reward_records' && !f.resolved),
+      'the failure is cleared with no snapshot/chain read',
+    );
+    assert.equal(p.slotRewards.filter((r) => r.claimed).length, 2, 'both rows stamped claimed');
+  });
+
   it('module balances are stored as observed samples', async () => {
     const p = new MockRewardsPrisma();
     const client = mockClient({
@@ -579,6 +630,7 @@ class MockRewardsPrisma {
     };
     this.rewardClaimEvent = {
       upsert: async (args) => upsertMap(this.claims, args.where.sourceEventId.toString(), args),
+      findUnique: async (args) => this.claims.get(String(args.where.sourceEventId)) ?? null,
     };
     this.slotRewardProjection = {
       findMany: async (args) => {
@@ -598,6 +650,18 @@ class MockRewardsPrisma {
         const row = this.slotRewards.find((r) => r.id === args.where.id);
         if (row) Object.assign(row, args.data);
         return row;
+      },
+      updateMany: async (args) => {
+        const w = args?.where ?? {};
+        let count = 0;
+        for (const r of this.slotRewards) {
+          if (w.slotId !== undefined && r.slotId !== w.slotId) continue;
+          if (w.epochNumber?.gte !== undefined && r.epochNumber < w.epochNumber.gte) continue;
+          if (w.epochNumber?.lte !== undefined && r.epochNumber > w.epochNumber.lte) continue;
+          Object.assign(r, args.data);
+          count += 1;
+        }
+        return { count };
       },
       upsert: async (args) => {
         const k = args.where.slotId_epochNumber;
@@ -651,7 +715,9 @@ class MockRewardsPrisma {
         // Mirror the DB column default (`resolved Boolean @default(false)`) so `deleteMany({resolved:false})`
         // matches a freshly-created failure exactly as real Prisma does (the mock can't apply DB defaults).
         // Store AND return the same row, so callers that read the return value see `resolved` like Prisma.
-        const created = { resolved: false, ...args.create };
+        this.nextFailureId ??= 1n;
+        const created = { id: this.nextFailureId, resolved: false, ...args.create };
+        this.nextFailureId += 1n;
         this.failures.push(created);
         return created;
       },
@@ -666,6 +732,20 @@ class MockRewardsPrisma {
           return false;
         });
         return { count: 0 };
+      },
+      findMany: async (args) => {
+        const w = args?.where ?? {};
+        return this.failures.filter((f) => {
+          if (w.projectionName !== undefined && f.projectionName !== w.projectionName) return false;
+          if (w.failureKind !== undefined && f.failureKind !== w.failureKind) return false;
+          if (w.resolved !== undefined && (f.resolved ?? false) !== w.resolved) return false;
+          return true;
+        });
+      },
+      update: async (args) => {
+        const f = this.failures.find((x) => x.id === args.where.id);
+        if (f) Object.assign(f, args.data);
+        return f ?? null;
       },
     };
     this.projectionCursor = {

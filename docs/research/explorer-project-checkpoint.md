@@ -1239,8 +1239,9 @@ rate-limit proxy keying + a shared (Redis) store, fail-closed env resolution, th
 allow-list, build-metadata injection, and indexer lag-monitoring / gap-detection. **One Phase-13d
 acceptance item is still open (Issue #41): the primary devnet soak** — the soak scripts are devnet-shaped
 (observe + ingest), so it is an observe-and-record run once devnet access is wired (or amend #41 to make
-devnet a Phase-14 follow-up). A small standalone follow-up is also tracked: the forward-only
-`missing_reward_records` reconcile (needs a snapshot-side fix; readiness §5).
+devnet a Phase-14 follow-up). (The forward-only `missing_reward_records` reconcile that was tracked here is
+now **fixed** — a snapshot-side `reconcilePendingClaims` in `rewards-snapshot`, verified by a live 16→0
+proof; see readiness §5.)
 
 The operator-liveness data dependency that gated the operator UX milestone is fully satisfied:
 `CoreSlotHealthSnapshot` + `NetworkLivenessRiskSnapshot` give per-operator health and network
