@@ -30,17 +30,22 @@ default theme manually; 13d-4 adds the *automated* regression net and closes the
 
 - **Automated axe net (new).** `axe-core@4.12` + `src/test/axe.ts` (`axeViolations`) + 5 tests in
   `src/components/a11y.test.tsx` over the reusable surface (ui primitives, named Table, empty/invalid
-  states, Header nav, Footer, OperatorLink, StatusFilter, PaginatedTable). All **structural** rules pass —
-  accessible names (`button-name`/`image-alt`/`select-name`/labels), roles, aria wiring (axe 4.12 flags
-  *ARIA-referenced* duplicate ids, not plain ones). **jsdom caveat:** `color-contrast` (needs layout) and
-  `region` (page-level) are disabled; contrast stays the 13b-ux manual review's domain (+ the tracked
-  legacy-theme contrast follow-up). A live-browser axe (Playwright) is a possible future add.
-- **Fix — list tables now have accessible names.** `Table` supported an sr-only `<caption>` but
-  `PaginatedTable` never passed one, so every list table was unnamed for screen readers (the 13b-ux deferred
-  "table accessible-name" item). `PaginatedTable` now threads `caption ?? context`; since **all 15
-  list-table instances (across 13 files) already pass `context=`** ("Transactions", "Blocks", …), every
-  list table is named with **zero per-site churn**. (Table's `caption` type widened to `?: string | undefined` per the repo's
-  `exactOptionalPropertyTypes` convention.)
+  states, Header nav, Footer, OperatorLink, StatusFilter, PaginatedTable). The helper returns axe
+  **`violations`** only and catches the rules that regress silently: accessible names
+  (`button-name`/`image-alt`/`select-name`), form labels, roles, aria wiring. **jsdom caveats:**
+  `color-contrast` (needs layout) and `region` (page-level) are disabled — contrast stays the 13b-ux
+  manual review's domain (+ the tracked legacy-theme follow-up); and `duplicate-id-aria` reports as an
+  axe `incomplete` (not a `violation`) in jsdom, so the net does **not** assert on it. A live-browser axe
+  (Playwright), which would cover both, is a possible future add.
+- **Fix — every data table now has an accessible name, enforced at compile time.** `Table` supported an
+  sr-only `<caption>` but nothing required it: `PaginatedTable` passed none (every *list* table unnamed),
+  and ~10 non-list tables (network/liveness/supply/accounts/overview/`/api`) were unnamed too — and the
+  axe net **cannot** catch that (an unnamed `<table>` isn't a WCAG A/AA violation). Fix: **`Table.caption`
+  is now a *required* prop**, so an unnamed `<table>` is a **type error** — a guarantee stronger than any
+  axe rule. `PaginatedTable` supplies `caption ?? context ?? 'Results'` (all 15 list sites already pass a
+  human `context=`); the ~10 direct `<Table>` sites got descriptive captions ("Validator set", "Token
+  supply by denomination", "Decode failures", …). Closes the 13b-ux "table accessible-name" item for
+  **all** tables, not just list tables. *(Surfaced by the post-13d-4 adversarial + Codex reviews.)*
 - **Keyboard operability — clean (code audit).** Every interactive element is native (`<button>` ×4,
   `<select>` ×1, `<Link>`/`<a>` ×28) — **zero `div`/`span` `onClick`**, so everything is tabbable +
   Enter/Space-operable by default. A single global `:where(a,button,input,select,textarea,summary,

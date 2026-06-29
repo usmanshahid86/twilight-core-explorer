@@ -33,6 +33,7 @@ export function PerSlotHealthTable() {
         ) : (
           <>
             <Table
+              caption="Per-CoreSlot health"
               head={
                 <>
                   <Th>Slot</Th>

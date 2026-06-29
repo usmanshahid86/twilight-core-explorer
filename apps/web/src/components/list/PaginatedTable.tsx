@@ -45,7 +45,7 @@ export function PaginatedTable<T>({
 
   return (
     <div className="space-y-3">
-      <Table caption={caption ?? context} head={columns.map((c) => <Th key={c.header}>{c.header}</Th>)}>
+      <Table caption={caption ?? context ?? 'Results'} head={columns.map((c) => <Th key={c.header}>{c.header}</Th>)}>
         {rows.map((row, i) => (
           <Tr key={rowKey(row, i)}>
             {columns.map((c) => (

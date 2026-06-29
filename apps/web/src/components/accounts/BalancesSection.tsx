@@ -35,6 +35,7 @@ export function BalancesSection({ address }: { address: string }) {
         <div className="text-sm text-text-muted">Sampled — no balances held.</div>
       ) : (
         <Table
+          caption="Account balances"
           head={
             <>
               <Th>Denom</Th>

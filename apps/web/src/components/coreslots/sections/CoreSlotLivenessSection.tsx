@@ -22,6 +22,7 @@ export function CoreSlotLivenessSection({ slotId }: { slotId: string }) {
               <EmptyState message="No liveness windows." />
             ) : (
               <Table
+                caption="CoreSlot liveness"
                 head={
                   <>
                     <Th>Window</Th>

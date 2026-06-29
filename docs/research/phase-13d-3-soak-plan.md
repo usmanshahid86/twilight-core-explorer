@@ -72,7 +72,7 @@ own broadcasts; the explorer remains block-results-authoritative).
 | **P3 lifecycle/authority** | ~30–55% | `update-metadata/payout/params` (slot 1); `inactivate 4`→`activate 4` (set close/reopen at +2); `suspend 4` (emergency)→`activate 4`; `rotate-key 3` + node2 key-swap & restart; `register`+`activate` a **5th** CoreSlot | lifecycle/authority depth; temporal windows close/reopen; key-rotation attribution switch |
 | **P4 sparse window** | ~60–72% | stop **node3** for ~1.5× the health window (`SPARSE_WINDOW_BLOCKS`, default 150 committed heights), then restart → recover | sparse liveness: slot 4 miss streak → degraded/**down**; network → **warning**; recovery |
 | **P5 remove** | ~80% | `inactivate 5`→`remove 5` (irreversible) | slot 5 drops from health; network back to 4-of-4 |
-| **stop** | `TARGET_HEIGHT` | stop the chain **before sampling** (7.2 D5) so observed samples reflect a pinned height | sampled-height correctness |
+| **end** | `TARGET_HEIGHT` | **leave the chain running** and record the pinned end height; the observed-sample projections read state at that height via the F4 height-pin (supersedes the old 7.2 "stop-then-sample") | sampled-height correctness |
 
 Failed-tx provenance note (from the dev harness): this app runs message handlers at **DeliverTx**, not
 CheckTx, so a rejected claim is **committed into a block with `code≠0`** — a genuine failed-but-included

@@ -81,10 +81,11 @@ primary run = deferred TODO.
 Perf audited healthy (no fixes): web bundle lean (87 kB shared / 104–125 kB per route), the `/liveness`
 fan-out bounded (`FANOUT_CONCURRENCY=12`, `FANOUT_CAP=100`, graceful per-slot null), no API N+1 (repos batch
 via IN-clause). a11y: an **automated axe structural net** (`axe-core` + `src/test/axe.ts` + 5 component
-tests) — all pass; a real fix (**list tables now carry sr-only captions** via `PaginatedTable`'s
-`caption ?? context`, naming every list table); keyboard audit clean (native elements, global
-`:focus-visible`, operable search picker). jsdom can't do color-contrast — that stays the 13b-ux manual
-domain. Detail: `docs/research/phase-13d-4-report.md`.
+tests) — all pass; a real fix (**every data table now carries an sr-only caption**, enforced by making
+`Table.caption` a *required* prop — an unnamed `<table>` is a type error, which the axe net can't catch);
+keyboard audit clean (native elements, global `:focus-visible`, operable search picker). jsdom can't do
+color-contrast or `duplicate-id-aria` (reports as `incomplete`) — those stay the 13b-ux manual / future
+live-browser-axe domain. Detail: `docs/research/phase-13d-4-report.md`.
 
 ---
 
@@ -119,9 +120,10 @@ a later tightening pass.**
   `sampleKind`/`denom`/`height`, params `changeType`; adopt the `StatusFilter` pattern.
 - **Legacy-theme contrast pass** (13b-ux) — the opt-in `legacy` theme has sub-AA pairs (primary link
   text, info badge, accent-red). Default `auction` theme is AA-clean.
-- **Table accessible-name population** — *FIXED (13d-4).* `PaginatedTable` now threads `caption ?? context`
-  → every list table carry an sr-only `<caption>`. (The `th scope=col` structural requirement was already
-  met.)
+- **Table accessible-name population** — *FIXED (13d-4, completed post-review).* `Table.caption` is now a
+  **required** prop, so every data table (list + the ~10 non-list direct `<Table>` sites) carries an
+  sr-only `<caption>` — and an unnamed `<table>` is a compile error (stronger than the axe net, which
+  can't flag an unnamed table). (`th scope=col` was already met.)
 - **Mobile nav disclosure** (13b-ux) — the compact nav is a flat chip-wrap; a hamburger/disclosure is a
   deferred enhancement.
 

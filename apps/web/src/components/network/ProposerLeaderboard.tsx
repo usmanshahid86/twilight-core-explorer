@@ -29,6 +29,7 @@ export function ProposerLeaderboard() {
               <EmptyState message="No proposers yet." />
             ) : (
               <Table
+                caption="Block proposers"
                 head={
                   <>
                     <Th>#</Th>

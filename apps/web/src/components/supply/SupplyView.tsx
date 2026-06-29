@@ -34,6 +34,7 @@ export function SupplyView() {
                   source: <span className="font-mono">{res.data.source}</span>.
                 </p>
                 <Table
+                  caption="Token supply by denomination"
                   head={
                     <>
                       <Th>Denom</Th>

@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Phase 13d-3 — explorer soak: drive a 4-node localnet to ~2,500 blocks with the full
-# explorer-relevant activity mix, then STOP the chain so observed samples reflect a pinned
-# height. Chain side only — ingest + projections are scripts/soak/ingest-project.sh.
+# explorer-relevant activity mix, then LEAVE the chain running and record the pinned end height, so the
+# observed-sample projections (rewards/balance snapshots) can read state AT that height via the F4
+# height-pin (this supersedes the old 7.2 "stop-then-sample"). Chain side only — ingest + projections
+# are scripts/soak/ingest-project.sh.
 #
 # Hybrid activity mix (bank send was wired into the chain CLI via AutoCLI, PR #3):
 #   * account breadth  <- `coreslot update-payout 1 <addr>` over a key pool (each address
