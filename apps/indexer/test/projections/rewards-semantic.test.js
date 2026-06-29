@@ -651,6 +651,18 @@ class MockRewardsPrisma {
         if (row) Object.assign(row, args.data);
         return row;
       },
+      updateMany: async (args) => {
+        const w = args?.where ?? {};
+        let count = 0;
+        for (const r of this.slotRewards) {
+          if (w.slotId !== undefined && r.slotId !== w.slotId) continue;
+          if (w.epochNumber?.gte !== undefined && r.epochNumber < w.epochNumber.gte) continue;
+          if (w.epochNumber?.lte !== undefined && r.epochNumber > w.epochNumber.lte) continue;
+          Object.assign(r, args.data);
+          count += 1;
+        }
+        return { count };
+      },
       upsert: async (args) => {
         const k = args.where.slotId_epochNumber;
         const row = this.slotRewards.find((r) => r.slotId === k.slotId && r.epochNumber === k.epochNumber);

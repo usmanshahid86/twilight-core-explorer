@@ -34,9 +34,8 @@ export interface RewardsSnapshotPrisma extends ProjectionCursorPrisma {
   coreSlotProjection: { findMany(args: unknown): Promise<{ slotId: bigint }[]> };
   slotRewardProjection: {
     findUnique(args: unknown): Promise<SlotRewardRow | null>;
-    findMany(args: unknown): Promise<SlotRewardRow[]>;
     upsert(args: unknown): Promise<unknown>;
-    update(args: unknown): Promise<unknown>;
+    updateMany(args: unknown): Promise<{ count: number }>;
   };
   // Read-only here — used by the post-snapshot reconcile to look up a claim by its source event.
   rewardClaimEvent: { findUnique(args: unknown): Promise<RewardClaimRow | null> };
@@ -219,34 +218,32 @@ export async function reconcilePendingClaims(tx: RewardsSnapshotPrisma): Promise
       resolved: false,
     },
   });
+  if (failures.length === 0) return 0;
+  const resolvedAt = new Date(); // one timestamp for the whole reconcile pass
   let resolved = 0;
   for (const failure of failures) {
     if (failure.sourceEventId === null) continue;
     const claim = await tx.rewardClaimEvent.findUnique({ where: { sourceEventId: failure.sourceEventId } });
     if (!claim || claim.startEpoch === null || claim.endEpoch === null) continue;
-    const rows = await tx.slotRewardProjection.findMany({
+    // Stamp every observed row of the claim range in ONE updateMany (identical provenance per row, mirroring
+    // applyClaim: '' tx hash → null, rawClaimJson from the claim's raw event). The returned count tells us
+    // whether any rows exist yet — keeping the snapshot transaction + advisory-lock hold short even for a
+    // large backlog or a wide claim range (vs an await-per-row loop).
+    const { count } = await tx.slotRewardProjection.updateMany({
       where: { slotId: claim.slotId, epochNumber: { gte: claim.startEpoch, lte: claim.endEpoch } },
+      data: {
+        claimed: true,
+        claimedAtHeight: claim.height,
+        claimTxHash: claim.txHash || null,
+        claimMsgIndex: claim.msgIndex,
+        claimEventId: claim.sourceEventId,
+        rawClaimJson: claim.rawEventJson,
+      },
     });
-    if (rows.length === 0) continue; // still missing — keep the failure open
-    // The observed rows now exist: stamp the claim's tx provenance (mirroring applyClaim) and resolve.
-    for (const row of rows) {
-      await tx.slotRewardProjection.update({
-        where: { id: row.id },
-        data: {
-          claimed: true,
-          claimedAtHeight: claim.height,
-          // Byte-for-byte parity with applyClaim's row-stamp so a forward-reconciled row is identical to
-          // a batch-rebuilt one: '' tx hash → null, and stamp rawClaimJson from the claim's raw event.
-          claimTxHash: claim.txHash || null,
-          claimMsgIndex: claim.msgIndex,
-          claimEventId: claim.sourceEventId,
-          rawClaimJson: claim.rawEventJson,
-        },
-      });
-    }
+    if (count === 0) continue; // still missing — keep the failure open (no fabrication)
     await tx.projectionFailure.update({
       where: { id: failure.id },
-      data: { resolved: true, resolvedAt: new Date() },
+      data: { resolved: true, resolvedAt },
     });
     resolved += 1;
   }
