@@ -87,11 +87,13 @@ claims as blocks arrive, *before* any reward snapshot, so it would create — an
 an unresolved failure for every claim. The data is never fabricated (correctness-over-guessing holds),
 but the unresolved-count would be a standing false alarm.
 
-**Proposed fix (follow-up):** in `applyClaim`'s reconciled branch, resolve the matching failure (e.g.
-`projectionFailure.updateMany({ where: { projectionName, failureKind: 'missing_reward_records',
-sourceEventId: event.id, resolved: false }, data: { resolved: true, resolvedAt } })`), with a unit test.
-Tracked in `explorer-release-readiness.md` §5. This is a live-pipeline (Phase 12/deploy) concern, not a
-13d-3 blocker — the soak fixture is a batch rebuild and is clean.
+**RESOLVED (13d-3b, same branch).** `applyClaim`'s reconciled branch now resolves the matching failure
+(`projectionFailure.updateMany({ where: { projectionName, failureKind: 'missing_reward_records',
+sourceEventId: event.id, resolved: false }, data: { resolved: true, resolvedAt: new Date() } })`). Verified
+three ways: unit test `7b` (records-then-resolves), the full ritual (typecheck/tests/lint), and a **live
+16→0** proof on the soak DB — reproducing the bug (`reset+project` before snapshot → 16 unresolved, one
+per claim; snapshot alone left them at 16) then the fixed replay drove unresolved to 0. So the live
+incremental indexer (claims before snapshots) self-heals on the next reconcile.
 
 ## Real (~2,500-block) run — **complete, GREEN**
 

@@ -58,6 +58,7 @@ export interface RewardsSemanticProjectionPrisma extends ProjectionCursorPrisma 
   rewardsTreasuryPayment: { upsert(args: unknown): Promise<unknown> };
   projectionFailure: {
     upsert(args: unknown): Promise<unknown>;
+    updateMany(args: unknown): Promise<unknown>;
     deleteMany(args: unknown): Promise<unknown>;
   };
   $transaction<T>(fn: (tx: RewardsSemanticProjectionPrisma) => Promise<T>): Promise<T>;
@@ -708,6 +709,21 @@ async function applyClaim(
       },
     });
   }
+
+  // The claim now reconciles against observed reward rows — resolve any prior missing_reward_records
+  // failure recorded for THIS event on an earlier pass (when the claim was processed before the reward
+  // snapshot had populated the rows). Without this, a snapshot-then-reconcile sequence (and every live
+  // incremental run, where claims arrive before snapshots) leaves a permanent unresolved false alarm.
+  // Data is untouched; this only clears the stale failure.
+  await tx.projectionFailure.updateMany({
+    where: {
+      projectionName: REWARDS_SEMANTIC_PROJECTION,
+      failureKind: 'missing_reward_records',
+      sourceEventId: event.id,
+      resolved: false,
+    },
+    data: { resolved: true, resolvedAt: new Date() },
+  });
 }
 
 // --- treasury --------------------------------------------------------------

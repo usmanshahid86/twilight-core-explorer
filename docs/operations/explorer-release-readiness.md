@@ -98,13 +98,12 @@ a later tightening pass.**
   pre-deploy.
 
 **Indexer correctness (surfaced by the 13d-3 soak):**
-- **Rewards `applyClaim` does not resolve a reconciled failure** — when a claim later finds its
-  `SlotRewardProjection` rows, it marks them claimed but leaves the earlier `missing_reward_records`
-  `ProjectionFailure` `resolved=false`. Harmless for a snapshot-first **batch** rebuild (no failure is
-  created), but the **live incremental** indexer (claims arrive before the reward snapshot) would retain
-  a permanent unresolved failure per claim. Fix: resolve the matching failure (by `sourceEventId`) in the
-  reconciled branch + a unit test. Detail in `docs/research/phase-13d-3-soak-report.md`. Not a 13d-3
-  blocker (the soak fixture rebuilds clean).
+- **Rewards `applyClaim` reconciled-failure resolve — FIXED (13d-3b).** A claim that later found its
+  `SlotRewardProjection` rows marked them claimed but left the earlier `missing_reward_records`
+  `ProjectionFailure` unresolved (harmless for the snapshot-first batch rebuild; a standing false alarm
+  for the live incremental indexer, which processes claims before snapshots). `applyClaim` now resolves
+  the matching failure on reconcile (by `sourceEventId`). Verified: unit test `7b` + a live 16→0 proof.
+  Detail in `docs/research/phase-13d-3-soak-report.md`.
 
 **Product follow-ups:**
 - **Rewards-side filters** (13b-filters) — claims `txHash`/`fromHeight`/`toHeight`, balances

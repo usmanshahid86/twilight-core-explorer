@@ -130,6 +130,27 @@ describe('Rewards semantic projection', () => {
     assert.ok(failureKinds(p).includes('missing_reward_records'));
   });
 
+  it('7b. a later reconciliation resolves the prior missing_reward_records failure', async () => {
+    const p = new MockRewardsPrisma();
+    seedClaim(p, { height: 120n });
+    // first pass: no SlotRewardProjection rows yet -> records the failure, unresolved
+    await projectRewardsSemanticHeight({ prisma: p, chainId: CHAIN_ID, height: 120n });
+    const failure = p.failures.find((f) => f.failureKind === 'missing_reward_records');
+    assert.ok(failure && !failure.resolved, 'failure recorded, unresolved, on the first pass');
+
+    // the reward snapshot later lands the rows; re-running reconciles AND resolves the stale failure
+    p.seedSlotReward({ slotId: 4n, epochNumber: 1n, amount: '10', sampledAtHeight: 110n });
+    p.seedSlotReward({ slotId: 4n, epochNumber: 2n, amount: '20', sampledAtHeight: 110n });
+    await projectRewardsSemanticHeight({ prisma: p, chainId: CHAIN_ID, height: 120n });
+
+    assert.equal(p.slotRewards.filter((r) => r.claimed).length, 2, 'rows reconciled to claimed');
+    assert.equal(
+      p.failures.find((f) => f.failureKind === 'missing_reward_records').resolved,
+      true,
+      'the prior missing_reward_records failure is resolved once the claim reconciles',
+    );
+  });
+
   it('8. failed claim tx does not project', async () => {
     const p = new MockRewardsPrisma();
     p.transactions.push(failedTx('CLAIM-120', 120n));
@@ -627,6 +648,20 @@ class MockRewardsPrisma {
         if (i >= 0) { this.failures[i] = { ...this.failures[i], ...args.update }; return this.failures[i]; }
         this.failures.push({ ...args.create });
         return args.create;
+      },
+      updateMany: async (args) => {
+        const w = args?.where ?? {};
+        let count = 0;
+        for (const f of this.failures) {
+          if (w.projectionName !== undefined && f.projectionName !== w.projectionName) continue;
+          if (w.failureKind !== undefined && f.failureKind !== w.failureKind) continue;
+          if (w.sourceEventId !== undefined && f.sourceEventId !== w.sourceEventId) continue;
+          // the DB column defaults resolved=false; the mock omits it on create, so treat undefined as false
+          if (w.resolved !== undefined && (f.resolved ?? false) !== w.resolved) continue;
+          Object.assign(f, args.data);
+          count += 1;
+        }
+        return { count };
       },
       deleteMany: async (args) => {
         const w = args?.where ?? {};
