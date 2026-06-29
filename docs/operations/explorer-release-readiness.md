@@ -19,7 +19,10 @@ contract smoke. Current: **GREEN, 40 checks** on `main` @ the 13c merge.
 - **API contract smoke**: replays every `openapi.json` path against the in-memory mock Prisma; each must
   return a *declared* status with a valid `{data}`/`{error}` envelope. A coverage guard fails a vacuous
   (empty/broken) contract. Negative-tested: a corrupted contract → RED + exit 1.
-- **Live tier** (13d-3, `RC_LIVE=1`): the same smoke + projection-status against the soak DB.
+- **Live tier** (13d-3, `RC_LIVE=1` + `API_DATABASE_URL`): **implemented** — boots the real server against
+  the soak DB and checks core lists non-empty, deep cursor-walk integrity (`/blocks`+`/txs` walked count ==
+  DB count, dup-free), zero unresolved `ProjectionFailure`, and indexer freshness/lag present. Off by
+  default. Cursor-walk core is falsified in CI via `--self-test`; full RED/GREEN is exercised by the soak run.
 
 ---
 
@@ -61,10 +64,16 @@ against aged data.
 
 ---
 
-## 3. Soak / scale (13d-3) — *pending*
-Two runs: (a) primary devnet (real, aged data) + (b) extended localnet soak (fixture-reset over a long
-range, tuned for sparse `recent_N` / deep-cursor / large-list edges). Record both fixtures + results;
-divergence is a finding. The live RC tier (`RC_LIVE=1`) runs here.
+## 3. Soak / scale (13d-3) — **done (localnet); devnet TODO**
+Localnet soak via `scripts/soak/{drive-localnet,ingest-project}.sh` (the drive exercises every edge;
+ingest rebuilds all projections, snapshot-pinned). Validated end-to-end at production scale: the full
+**~2,500-block** fixture ingested clean and `RC_LIVE=1 npm run rc-check` is **GREEN, 53 checks**
+(cursor-walk `/blocks` 2500==2500 + `/txs` 676==676 == DB, **0 unresolved `ProjectionFailure`**, freshness
+present). Fixture truths: 2500 blocks / 676 txs / 33 accounts, `tx failed:2/success:674`, 50 epochs / 16
+claimed, all three down-narratives in the liveness evidence (slot 4 sparse window 171 misses, slot 5
+no-node 22, slot 3 rotation 2), 25 decoded `MsgSend` / 0 bank decode failures. Details + the issues caught
+along the way (incl. the rewards batch-order fix) in `docs/research/phase-13d-3-soak-report.md`. Devnet
+primary run = deferred TODO.
 
 ## 4. Bundle / perf + a11y (13d-4) — *pending*
 Web bundle size; the bounded `/liveness` fan-out; API N+1 read-through. Automated axe + a manual keyboard
@@ -87,6 +96,15 @@ a later tightening pass.**
 - **Build metadata injection** — wire real `APP_VERSION`/`GIT_SHA`/`BUILT_AT` at build/deploy.
 - **Indexer lag monitoring + gap detection / missing-height repair** — plan §8 flags these as arguably
   pre-deploy.
+
+**Indexer correctness (surfaced by the 13d-3 soak):**
+- **Rewards `applyClaim` does not resolve a reconciled failure** — when a claim later finds its
+  `SlotRewardProjection` rows, it marks them claimed but leaves the earlier `missing_reward_records`
+  `ProjectionFailure` `resolved=false`. Harmless for a snapshot-first **batch** rebuild (no failure is
+  created), but the **live incremental** indexer (claims arrive before the reward snapshot) would retain
+  a permanent unresolved failure per claim. Fix: resolve the matching failure (by `sourceEventId`) in the
+  reconciled branch + a unit test. Detail in `docs/research/phase-13d-3-soak-report.md`. Not a 13d-3
+  blocker (the soak fixture rebuilds clean).
 
 **Product follow-ups:**
 - **Rewards-side filters** (13b-filters) — claims `txHash`/`fromHeight`/`toHeight`, balances

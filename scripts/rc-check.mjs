@@ -17,6 +17,9 @@ import { dirname, join } from 'node:path';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SMOKE_ONLY = process.argv.includes('--smoke');
 const SELF_TEST = process.argv.includes('--self-test');
+// LIVE tier (13d-3): boots the real server against the soak DB. Opt-in via RC_LIVE=1 +
+// API_DATABASE_URL (or DATABASE_URL). Off by default so the static gate stays CI-runnable.
+const LIVE = process.env.RC_LIVE === '1';
 const results = [];
 
 function record(name, pass, detail = '') {
@@ -32,7 +35,7 @@ function runCmd(name, args) {
   record(name, pass, pass ? '' : `exit ${r.status}: ${tail}`.slice(0, 200));
 }
 
-if (SELF_TEST) runSelfTest(); // proves the envelope-category check rejects mismatches, then exits
+if (SELF_TEST) await runSelfTest(); // proves the envelope-category + cursor-walk checks reject mismatches, then exits
 
 if (!SMOKE_ONLY) {
   console.log('\n=== Static checks (validation ritual + contract) ===');
@@ -50,6 +53,15 @@ try {
   await apiSmoke();
 } catch (e) {
   record('API contract smoke', false, `crashed: ${e.message}`.slice(0, 160));
+}
+
+if (LIVE) {
+  console.log('\n=== LIVE tier (RC_LIVE=1): real soak DB — data presence, cursor-walk, projections, freshness ===');
+  try {
+    await liveTier();
+  } catch (e) {
+    record('RC_LIVE tier', false, `crashed: ${e.message}`.slice(0, 160));
+  }
 }
 
 const failed = results.filter((r) => !r.pass);
@@ -158,9 +170,114 @@ function queryFor(op) {
   return `?${required.map((p) => `${p.name}=${encodeURIComponent(sample(p.name))}`).join('&')}`;
 }
 
+// ----- LIVE tier (RC_LIVE=1) --------------------------------------------------------------------
+// Boots the REAL server against the soak Postgres and checks what the contract tier cannot: that the
+// data is actually present, deep cursor pagination is complete + dup-free (== DB count), projections
+// left zero unresolved failures, and the indexer freshness/lag status reads truthfully. The api dist
+// is already built by apiSmoke() (which runs first); we reuse the permissive testConfig but pass a
+// real PrismaClient. Author-time safe — only RUNNING it needs the soak DB.
+async function liveTier() {
+  const dbUrl = process.env.API_DATABASE_URL || process.env.DATABASE_URL;
+  if (!dbUrl) {
+    record('RC_LIVE db url (API_DATABASE_URL/DATABASE_URL)', false, 'unset — nothing to check against');
+    return;
+  }
+  const { buildServer } = await import(join(ROOT, 'apps/api/dist/server.js'));
+  const { testConfig } = await import(join(ROOT, 'apps/api/test/mock-prisma.js'));
+  const { PrismaClient } = await import('@prisma/client');
+  const prisma = new PrismaClient({ datasourceUrl: dbUrl });
+  const app = await buildServer({ config: testConfig, prisma });
+  const P = '/api/v1';
+  const get = (url) => app.inject({ method: 'GET', url });
+
+  try {
+    // 1) the core lists are actually populated (200 + non-empty data); keep each list's first item
+    //    so detail paths can be exercised with ids that genuinely exist.
+    const coreLists = ['/blocks', '/txs', '/accounts', '/coreslots', '/rewards/epochs'];
+    const firstItem = {};
+    for (const path of coreLists) {
+      const res = await get(P + path);
+      const body = res.statusCode === 200 ? res.json() : {};
+      const data = Array.isArray(body.data) ? body.data : [];
+      firstItem[path] = data[0];
+      record(`live list ${path} (200 + non-empty)`, res.statusCode === 200 && data.length > 0,
+        `status ${res.statusCode}, ${data.length} rows`);
+    }
+
+    // 2) detail paths for real ids (derived from the lists, so no model-name guessing) -> 200.
+    const details = [
+      ['/blocks', (it) => `${P}/blocks/${it.height}`],
+      ['/txs', (it) => `${P}/txs/${it.hash}`],
+      ['/coreslots', (it) => `${P}/coreslots/${it.slotId}`],
+      ['/accounts', (it) => `${P}/accounts/${it.address}`],
+    ];
+    for (const [listPath, toDetail] of details) {
+      const it = firstItem[listPath];
+      if (!it) { record(`live detail from ${listPath}`, false, 'no list item to derive an id'); continue; }
+      const url = toDetail(it);
+      const res = await get(url);
+      record(`live detail ${url.replace(P, '')}`, res.statusCode === 200, `status ${res.statusCode}`);
+    }
+
+    // 3) deep cursor-walk integrity: follow nextCursor to exhaustion — complete + dup-free, and the
+    //    walked count must equal the DB row count (proves pagination skips/duplicates nothing).
+    const walks = [
+      ['/blocks', 'height', () => prisma.block.count()],
+      ['/txs', 'hash', () => prisma.explorerTransaction.count()],
+    ];
+    for (const [path, key, counter] of walks) {
+      try {
+        const walked = await walkList(app, P + path, key);
+        const dbCount = Number(await counter());
+        record(`cursor-walk ${path} complete (walked == DB)`, walked === dbCount,
+          `walked ${walked} vs DB ${dbCount}`);
+      } catch (e) {
+        record(`cursor-walk ${path}`, false, e.message.slice(0, 140));
+      }
+    }
+
+    // 4) projections left ZERO unresolved failures + the indexer status reads truthfully.
+    const sres = await get(`${P}/status`);
+    const s = sres.statusCode === 200 ? (sres.json().data ?? {}) : {};
+    record('live status: 0 unresolved ProjectionFailure', s.projectionFailures?.unresolvedCount === 0,
+      `unresolvedCount=${s.projectionFailures?.unresolvedCount}`);
+    // freshnessSeconds/lagBlocks are nested under data.indexer (the IndexerStatus object), not top-level.
+    record('live status: indexer present + freshness/lag fields',
+      s.indexer != null && 'freshnessSeconds' in s.indexer && 'lagBlocks' in s.indexer,
+      `indexer=${s.indexer != null} freshnessSeconds=${s.indexer?.freshnessSeconds} lagBlocks=${s.indexer?.lagBlocks}`);
+  } finally {
+    await app.close();
+    await prisma.$disconnect();
+  }
+}
+
+// Walk a keyset-paginated list to exhaustion via page.nextCursor, returning the distinct-item count.
+// Throws on a duplicate id (pagination overlap) or a non-terminating walk (cursor that never clears).
+async function walkList(app, path, key, maxPages = 100000) {
+  const seen = new Set();
+  let cursor = null;
+  let pages = 0;
+  for (;;) {
+    const url = path + (cursor ? `?cursor=${encodeURIComponent(cursor)}` : '');
+    const res = await app.inject({ method: 'GET', url });
+    if (res.statusCode !== 200) throw new Error(`${path} page ${pages} -> ${res.statusCode}`);
+    const body = res.json();
+    for (const item of body.data ?? []) {
+      const k = item?.[key] != null ? String(item[key]) : JSON.stringify(item);
+      if (seen.has(k)) throw new Error(`duplicate ${key}=${k} on ${path}`);
+      seen.add(k);
+    }
+    pages += 1;
+    cursor = body.page?.nextCursor ?? null;
+    if (!cursor) break;
+    if (pages > maxPages) throw new Error(`${path} cursor walk did not terminate (> ${maxPages} pages)`);
+  }
+  return seen.size;
+}
+
 // Falsification self-test (`--self-test`): prove the envelope-category check REJECTS the mismatches the
 // review flagged (a 2xx {error}, a 4xx {data}). A gate that can't be shown to fail can't be trusted.
-function runSelfTest() {
+async function runSelfTest() {
   // [body, declaredCategory, isHealth, expected]
   const cases = [
     [{ data: [] }, 'data', false, true],
@@ -191,6 +308,28 @@ function runSelfTest() {
       console.log(`  self-test FAIL: declaredCategory ${status} → ${got}, expected ${exp}`);
     }
   }
-  console.log(ok ? 'envelope-category self-test: PASS' : 'envelope-category self-test: FAIL');
+
+  // Cursor-walk integrity (the LIVE tier's core): a clean two-page walk returns the distinct count and
+  // terminates; a duplicate id across pages MUST throw (so a paginate-overlap can't silently pass).
+  const mockApp = (pages) => { let i = 0; return { inject: async () => ({ statusCode: 200, json: () => pages[i++] }) }; };
+  try {
+    const n = await walkList(mockApp([
+      { data: [{ height: '3' }, { height: '2' }], page: { nextCursor: 'c1' } },
+      { data: [{ height: '1' }], page: { nextCursor: null } },
+    ]), '/x', 'height');
+    if (n !== 3) { ok = false; console.log(`  self-test FAIL: walkList counted ${n}, expected 3`); }
+  } catch (e) {
+    ok = false; console.log(`  self-test FAIL: walkList threw on a valid walk: ${e.message}`);
+  }
+  let dupThrew = false;
+  try {
+    await walkList(mockApp([
+      { data: [{ height: '2' }], page: { nextCursor: 'c1' } },
+      { data: [{ height: '2' }], page: { nextCursor: null } }, // duplicate id across pages
+    ]), '/x', 'height');
+  } catch { dupThrew = true; }
+  if (!dupThrew) { ok = false; console.log('  self-test FAIL: walkList did not reject a duplicate id'); }
+
+  console.log(ok ? 'envelope-category + cursor-walk self-test: PASS' : 'self-test: FAIL');
   process.exit(ok ? 0 : 1);
 }

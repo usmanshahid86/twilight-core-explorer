@@ -15,6 +15,10 @@
     ]
   },
   "modules": {
+    "bank": [
+      "/cosmos.bank.v1beta1.MsgSend",
+      "/cosmos.bank.v1beta1.MsgMultiSend"
+    ],
     "coreslot": [
       "/twilight.coreslot.v1.MsgRegisterCoreSlot",
       "/twilight.coreslot.v1.MsgActivateCoreSlot",
