@@ -58,7 +58,6 @@ export interface RewardsSemanticProjectionPrisma extends ProjectionCursorPrisma 
   rewardsTreasuryPayment: { upsert(args: unknown): Promise<unknown> };
   projectionFailure: {
     upsert(args: unknown): Promise<unknown>;
-    updateMany(args: unknown): Promise<unknown>;
     deleteMany(args: unknown): Promise<unknown>;
   };
   $transaction<T>(fn: (tx: RewardsSemanticProjectionPrisma) => Promise<T>): Promise<T>;
@@ -709,21 +708,12 @@ async function applyClaim(
       },
     });
   }
-
-  // The claim now reconciles against observed reward rows — resolve any prior missing_reward_records
-  // failure recorded for THIS event on an earlier pass (when the claim was processed before the reward
-  // snapshot had populated the rows). Without this, a snapshot-then-reconcile sequence (and every live
-  // incremental run, where claims arrive before snapshots) leaves a permanent unresolved false alarm.
-  // Data is untouched; this only clears the stale failure.
-  await tx.projectionFailure.updateMany({
-    where: {
-      projectionName: REWARDS_SEMANTIC_PROJECTION,
-      failureKind: 'missing_reward_records',
-      sourceEventId: event.id,
-      resolved: false,
-    },
-    data: { resolved: true, resolvedAt: new Date() },
-  });
+  // No explicit failure-resolve here on purpose: a prior missing_reward_records failure (claim processed
+  // before the snapshot populated rows) is stamped at sourceHeight=event.height and is wiped by the
+  // per-height `deleteMany({ sourceHeight, resolved:false })` at the top of projectRewardsSemanticHeight
+  // on any REPROCESS — so a reset/replay (or the snapshot-first batch order) self-heals. The forward-only
+  // incremental case (the claim's height is never revisited) is NOT covered by this projector; clearing
+  // it requires a snapshot-side reconcile — tracked in explorer-release-readiness.md §5.
 }
 
 // --- treasury --------------------------------------------------------------

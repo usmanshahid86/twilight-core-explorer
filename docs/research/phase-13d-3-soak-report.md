@@ -77,23 +77,35 @@ needs the chain module), the payout key-pool used `keys add -o json` (only `--ou
 the tx-outcome counter was lost across `$(...)` subshells (now a file tally), and `COMET_RPC_URL` must be
 `http(s)://` (the chain CLI's `tcp://` is normalized).
 
-## Finding (logged) — rewards `applyClaim` never resolves a reconciled failure
+## Finding — reconciled-claim failures: how they clear, and the one case that doesn't
 
 `applyClaim` (`apps/indexer/src/projections/rewards-semantic.ts`) **creates** a `missing_reward_records`
-`ProjectionFailure` when a claim finds no `SlotRewardProjection` rows, but when it later **does** find
-rows it marks them claimed and **never resolves the prior failure**. Harmless for a snapshot-first batch
-rebuild (no failure is ever created — §"Four issues" #1). But the **live incremental indexer** processes
-claims as blocks arrive, *before* any reward snapshot, so it would create — and permanently retain —
-an unresolved failure for every claim. The data is never fabricated (correctness-over-guessing holds),
-but the unresolved-count would be a standing false alarm.
+`ProjectionFailure` when a claim finds no `SlotRewardProjection` rows (claim processed before the reward
+snapshot populated them). The data is never fabricated (correctness-over-guessing holds), but a lingering
+unresolved failure is a false alarm. How it clears:
 
-**RESOLVED (13d-3b, same branch).** `applyClaim`'s reconciled branch now resolves the matching failure
-(`projectionFailure.updateMany({ where: { projectionName, failureKind: 'missing_reward_records',
-sourceEventId: event.id, resolved: false }, data: { resolved: true, resolvedAt: new Date() } })`). Verified
-three ways: unit test `7b` (records-then-resolves), the full ritual (typecheck/tests/lint), and a **live
-16→0** proof on the soak DB — reproducing the bug (`reset+project` before snapshot → 16 unresolved, one
-per claim; snapshot alone left them at 16) then the fixed replay drove unresolved to 0. So the live
-incremental indexer (claims before snapshots) self-heals on the next reconcile.
+- **Batch reset/replay (reprocess):** `projectRewardsSemanticHeight` opens each height inside its
+  transaction with `deleteMany({ projectionName, sourceHeight: height, resolved: false })` — and the
+  failure is stamped at `sourceHeight = event.height`. So on **any reprocess of that height**, the stale
+  failure is wiped *before* `applyClaim` re-runs, then the claim reconciles against the now-present
+  snapshot rows. **The pre-existing per-height `deleteMany` is the self-heal** — no projector resolve is
+  needed (or correct).
+- **Snapshot-first batch order (§"Four issues" #1):** no failure is ever created.
+
+> **Correction (adversarial review, 13d-3b).** An earlier 13d-3b attempt added an explicit
+> `projectionFailure.updateMany(... resolved:true)` in `applyClaim` and claimed a "live 16→0" proof. The
+> review showed that resolve is **dead code in real Prisma** — the per-height `deleteMany` (above) runs
+> first and *deletes* the unresolved row before the `updateMany` could match it (the 16→0 was that
+> `deleteMany`, not the new code). Its unit test passed only because the test mock didn't apply the
+> `resolved Boolean @default(false)` column default, so the mock's `deleteMany` skipped the row. **Reverted**:
+> the redundant `updateMany` removed, the mock made Prisma-faithful (create applies `resolved:false`), and
+> test `7b` rewritten to assert the *real* mechanism (reprocess → `deleteMany` clears it).
+
+**The one real gap → tracked follow-up (readiness §5):** a **forward-only incremental** indexer never
+revisits a height, so neither the per-height `deleteMany` nor a reconcile re-runs for it — a claim
+processed before the snapshot would retain its failure indefinitely. Clearing it needs a **snapshot-side
+reconcile** (resolve `missing_reward_records` when the snapshot lands the rows), not an `applyClaim`
+change. Not exercised by the soak (a batch rebuild, always clean).
 
 ## Real (~2,500-block) run — **complete, GREEN**
 

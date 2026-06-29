@@ -31,14 +31,15 @@ default theme manually; 13d-4 adds the *automated* regression net and closes the
 - **Automated axe net (new).** `axe-core@4.12` + `src/test/axe.ts` (`axeViolations`) + 5 tests in
   `src/components/a11y.test.tsx` over the reusable surface (ui primitives, named Table, empty/invalid
   states, Header nav, Footer, OperatorLink, StatusFilter, PaginatedTable). All **structural** rules pass —
-  accessible names, roles, labels, aria wiring, duplicate ids. **jsdom caveat:** `color-contrast` (needs
-  layout) and `region` (page-level) are disabled; contrast stays the 13b-ux manual review's domain (+ the
-  tracked legacy-theme contrast follow-up). A live-browser axe (Playwright) is a possible future add.
+  accessible names (`button-name`/`image-alt`/`select-name`/labels), roles, aria wiring (axe 4.12 flags
+  *ARIA-referenced* duplicate ids, not plain ones). **jsdom caveat:** `color-contrast` (needs layout) and
+  `region` (page-level) are disabled; contrast stays the 13b-ux manual review's domain (+ the tracked
+  legacy-theme contrast follow-up). A live-browser axe (Playwright) is a possible future add.
 - **Fix — list tables now have accessible names.** `Table` supported an sr-only `<caption>` but
   `PaginatedTable` never passed one, so every list table was unnamed for screen readers (the 13b-ux deferred
-  "table accessible-name" item). `PaginatedTable` now threads `caption ?? context`; since **all 13 call
-  sites already pass `context=`** ("Transactions", "Blocks", …), every list table is named with **zero
-  per-site churn**. (Table's `caption` type widened to `?: string | undefined` per the repo's
+  "table accessible-name" item). `PaginatedTable` now threads `caption ?? context`; since **all 15
+  list-table instances (across 13 files) already pass `context=`** ("Transactions", "Blocks", …), every
+  list table is named with **zero per-site churn**. (Table's `caption` type widened to `?: string | undefined` per the repo's
   `exactOptionalPropertyTypes` convention.)
 - **Keyboard operability — clean (code audit).** Every interactive element is native (`<button>` ×4,
   `<select>` ×1, `<Link>`/`<a>` ×28) — **zero `div`/`span` `onClick`**, so everything is tabbable +

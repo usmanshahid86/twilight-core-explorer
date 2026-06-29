@@ -80,7 +80,7 @@ Perf audited healthy (no fixes): web bundle lean (87 kB shared / 104–125 kB pe
 fan-out bounded (`FANOUT_CONCURRENCY=12`, `FANOUT_CAP=100`, graceful per-slot null), no API N+1 (repos batch
 via IN-clause). a11y: an **automated axe structural net** (`axe-core` + `src/test/axe.ts` + 5 component
 tests) — all pass; a real fix (**list tables now carry sr-only captions** via `PaginatedTable`'s
-`caption ?? context`, naming all 13 list tables); keyboard audit clean (native elements, global
+`caption ?? context`, naming every list table); keyboard audit clean (native elements, global
 `:focus-visible`, operable search picker). jsdom can't do color-contrast — that stays the 13b-ux manual
 domain. Detail: `docs/research/phase-13d-4-report.md`.
 
@@ -103,12 +103,14 @@ a later tightening pass.**
   pre-deploy.
 
 **Indexer correctness (surfaced by the 13d-3 soak):**
-- **Rewards `applyClaim` reconciled-failure resolve — FIXED (13d-3b).** A claim that later found its
-  `SlotRewardProjection` rows marked them claimed but left the earlier `missing_reward_records`
-  `ProjectionFailure` unresolved (harmless for the snapshot-first batch rebuild; a standing false alarm
-  for the live incremental indexer, which processes claims before snapshots). `applyClaim` now resolves
-  the matching failure on reconcile (by `sourceEventId`). Verified: unit test `7b` + a live 16→0 proof.
-  Detail in `docs/research/phase-13d-3-soak-report.md`.
+- **Forward-only reconcile of `missing_reward_records` — OPEN follow-up.** A rewards claim processed
+  before the reward snapshot populates `SlotRewardProjection` records a `missing_reward_records` failure
+  (correctly — it never fabricates). **Batch rebuilds self-heal**: the per-height
+  `deleteMany({ sourceHeight, resolved:false })` wipes it on any reprocess, and the snapshot-first order
+  creates none. But a **forward-only incremental** indexer never revisits the height, so the failure would
+  persist. The fix is a **snapshot-side reconcile** (resolve when the snapshot lands the rows), NOT an
+  `applyClaim` resolve — a 13d-3b attempt at the latter was dead code (the per-height `deleteMany` runs
+  first) and was reverted (adversarial review). Detail: `docs/research/phase-13d-3-soak-report.md`.
 
 **Product follow-ups:**
 - **Rewards-side filters** (13b-filters) — claims `txHash`/`fromHeight`/`toHeight`, balances
@@ -116,7 +118,7 @@ a later tightening pass.**
 - **Legacy-theme contrast pass** (13b-ux) — the opt-in `legacy` theme has sub-AA pairs (primary link
   text, info badge, accent-red). Default `auction` theme is AA-clean.
 - **Table accessible-name population** — *FIXED (13d-4).* `PaginatedTable` now threads `caption ?? context`
-  → all 13 list tables carry an sr-only `<caption>`. (The `th scope=col` structural requirement was already
+  → every list table carry an sr-only `<caption>`. (The `th scope=col` structural requirement was already
   met.)
 - **Mobile nav disclosure** (13b-ux) — the compact nav is a flat chip-wrap; a hamburger/disclosure is a
   deferred enhancement.
