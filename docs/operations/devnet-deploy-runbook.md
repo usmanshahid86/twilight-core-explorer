@@ -176,7 +176,11 @@ When you later put the API behind a CDN/proxy, that's the trigger for the §5 it
 - **Disk** — projection + canonical rows grow; never pruned. Watch RDS storage (the soak report has a
   per-epoch growth projection method).
 - **ProjectionFailures** — `/status` `unresolvedCount` should stay 0. A persistent non-zero is a real
-  finding (the `/api` diagnostics page breaks it down by projection).
+  finding (the `/api` diagnostics page breaks it down by projection). For lingering rewards
+  `missing_reward_records` specifically (e.g. left by a pre-fix deploy, or a claim seen during a REST
+  outage), `npm --prefix apps/indexer run project:rewards-reconcile` clears them **DB-only** (no chain
+  read, only `DATABASE_URL`) from the already-present rows — the same reconcile the snapshot runs
+  automatically, available as a break-glass command.
 - **A projection bugfix** → `RESET_PROJECTION=true npm --prefix apps/indexer run project:<name>` re-derives
   from local rows (minutes). The chain is untouched; no re-backfill.
 - **Restart safety** — every step is cursor-resume + advisory-locked, so a crashed tick resumes cleanly.

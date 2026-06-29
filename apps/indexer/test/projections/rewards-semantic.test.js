@@ -17,6 +17,7 @@ import {
 import {
   buildBalanceSampleKey,
   ingestRewardsSnapshot,
+  reconcilePendingClaims,
 } from '../../dist/projections/rewards-snapshot.js';
 import { resetRewardsProjections } from '../../dist/projections/reset-rewards.js';
 
@@ -338,6 +339,26 @@ describe('Rewards observed snapshot ingestion', () => {
     assert.equal(claimed.length, 2, 'both claimed epochs reconciled by the snapshot');
     assert.equal(claimed[0].claimTxHash, 'CLAIM-120', 'claim tx provenance stamped onto the observed row');
     assert.ok(claimed[0].rawClaimJson, 'rawClaimJson stamped → forward-reconciled row matches a rebuilt one');
+  });
+
+  it('reconcilePendingClaims (CLI break-glass path) resolves from existing rows with NO snapshot/chain read', async () => {
+    const p = new MockRewardsPrisma();
+    // a claim was projected before any rows existed → a missing_reward_records failure
+    seedClaim(p, { height: 120n });
+    await projectRewardsSemanticHeight({ prisma: p, chainId: CHAIN_ID, height: 120n });
+    assert.ok(p.failures.some((f) => f.failureKind === 'missing_reward_records' && !f.resolved));
+    // a prior snapshot already landed the observed rows (seeded directly — the CLI does NO chain read)
+    p.seedSlotReward({ slotId: 4n, epochNumber: 1n, amount: '10', sampledAtHeight: 110n });
+    p.seedSlotReward({ slotId: 4n, epochNumber: 2n, amount: '20', sampledAtHeight: 110n });
+
+    const resolved = await reconcilePendingClaims(p); // invoked standalone, exactly as the CLI does
+
+    assert.equal(resolved, 1, 'returns the count of failures resolved');
+    assert.ok(
+      !p.failures.some((f) => f.failureKind === 'missing_reward_records' && !f.resolved),
+      'the failure is cleared with no snapshot/chain read',
+    );
+    assert.equal(p.slotRewards.filter((r) => r.claimed).length, 2, 'both rows stamped claimed');
   });
 
   it('module balances are stored as observed samples', async () => {

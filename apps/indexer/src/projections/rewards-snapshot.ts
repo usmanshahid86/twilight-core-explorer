@@ -206,10 +206,12 @@ export async function ingestRewardsSnapshot(
 }
 
 // Resolve any rewards-semantic `missing_reward_records` failure whose claim is now covered by observed
-// SlotRewardProjection rows. Cross-projection by design: the snapshot is what makes the claim
-// reconcilable, so it owns clearing the false alarm. Never resolves while rows are still absent
-// (correctness-over-guessing holds — the claim stays an open failure until the data exists).
-async function reconcilePendingClaims(tx: RewardsSnapshotPrisma): Promise<void> {
+// SlotRewardProjection rows; returns the count resolved. Cross-projection by design: the snapshot is what
+// makes the claim reconcilable, so it owns clearing the false alarm. Never resolves while rows are still
+// absent (correctness-over-guessing holds — the claim stays an open failure until the data exists).
+// Exported + deliberately chain-read-free so the `project:rewards-reconcile` CLI can run it standalone
+// (break-glass: clear lingering failures from already-present rows when REST is down / without a new sample).
+export async function reconcilePendingClaims(tx: RewardsSnapshotPrisma): Promise<number> {
   const failures = await tx.projectionFailure.findMany({
     where: {
       projectionName: REWARDS_SEMANTIC_PROJECTION,
@@ -217,6 +219,7 @@ async function reconcilePendingClaims(tx: RewardsSnapshotPrisma): Promise<void> 
       resolved: false,
     },
   });
+  let resolved = 0;
   for (const failure of failures) {
     if (failure.sourceEventId === null) continue;
     const claim = await tx.rewardClaimEvent.findUnique({ where: { sourceEventId: failure.sourceEventId } });
@@ -245,7 +248,9 @@ async function reconcilePendingClaims(tx: RewardsSnapshotPrisma): Promise<void> 
       where: { id: failure.id },
       data: { resolved: true, resolvedAt: new Date() },
     });
+    resolved += 1;
   }
+  return resolved;
 }
 
 async function createFailure(

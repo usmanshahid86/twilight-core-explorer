@@ -130,7 +130,10 @@ a later tightening pass.**
   provenance, byte-identical to `applyClaim`'s rebuild stamp incl. `rawClaimJson`). Verified by a unit test
   + a live **16→0** proof (the snapshot alone, no replay) + two independent PASS reviews (adversarial
   subagent + Codex). (An earlier 13d-3b `applyClaim` attempt was dead code — the per-height `deleteMany`
-  ran first — and was reverted.) **Known limitation (mirrors `applyClaim`, flagged by both reviewers):** it
+  ran first — and was reverted.) A standalone **`project:rewards-reconcile`** CLI (closing #31) runs the same
+  reconcile on demand, **DB-only with no chain read** — the break-glass lever for clearing lingering failures
+  from already-present rows when REST is down / without advancing the sample (live-proven 16→0 with only
+  `DATABASE_URL` set). **Known limitation (mirrors `applyClaim`, flagged by both reviewers):** it
   resolves on *any* row in the claimed range, not full `[startEpoch..endEpoch]` coverage — a partial range
   stamps the present epochs and resolves. Consistent across both paths (not a regression); if a strict
   all-epochs-present invariant is ever required it must change in *both* `reconcilePendingClaims` and
