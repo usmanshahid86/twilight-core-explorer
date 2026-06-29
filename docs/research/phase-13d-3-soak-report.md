@@ -101,11 +101,12 @@ unresolved failure is a false alarm. How it clears:
 > the redundant `updateMany` removed, the mock made Prisma-faithful (create applies `resolved:false`), and
 > test `7b` rewritten to assert the *real* mechanism (reprocess → `deleteMany` clears it).
 
-**The one real gap → tracked follow-up (readiness §5):** a **forward-only incremental** indexer never
-revisits a height, so neither the per-height `deleteMany` nor a reconcile re-runs for it — a claim
-processed before the snapshot would retain its failure indefinitely. Clearing it needs a **snapshot-side
-reconcile** (resolve `missing_reward_records` when the snapshot lands the rows), not an `applyClaim`
-change. Not exercised by the soak (a batch rebuild, always clean).
+**The one real gap → FIXED (snapshot-side).** A **forward-only incremental** indexer never revisits a
+height, so a claim processed before the snapshot would retain its `missing_reward_records` failure
+indefinitely (the soak, a batch rebuild, never hit this). Fixed in `rewards-snapshot`'s
+`reconcilePendingClaims`: when the snapshot lands the observed `SlotRewardProjection` rows it resolves any
+such failure whose claim is now covered (and stamps the claim's tx provenance). Verified by a unit test +
+a live **16→0** proof — the snapshot alone, no replay.
 
 ## Real (~2,500-block) run — **complete, GREEN**
 

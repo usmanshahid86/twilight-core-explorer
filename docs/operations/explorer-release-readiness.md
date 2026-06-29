@@ -121,14 +121,20 @@ a later tightening pass.**
   pre-deploy.
 
 **Indexer correctness (surfaced by the 13d-3 soak):**
-- **Forward-only reconcile of `missing_reward_records` — OPEN follow-up.** A rewards claim processed
-  before the reward snapshot populates `SlotRewardProjection` records a `missing_reward_records` failure
-  (correctly — it never fabricates). **Batch rebuilds self-heal**: the per-height
-  `deleteMany({ sourceHeight, resolved:false })` wipes it on any reprocess, and the snapshot-first order
-  creates none. But a **forward-only incremental** indexer never revisits the height, so the failure would
-  persist. The fix is a **snapshot-side reconcile** (resolve when the snapshot lands the rows), NOT an
-  `applyClaim` resolve — a 13d-3b attempt at the latter was dead code (the per-height `deleteMany` runs
-  first) and was reverted (adversarial review). Detail: `docs/research/phase-13d-3-soak-report.md`.
+- **Forward-only reconcile of `missing_reward_records` — FIXED.** A rewards claim processed before the
+  reward snapshot populates `SlotRewardProjection` records a `missing_reward_records` failure (correctly —
+  it never fabricates). Batch rebuilds always self-healed (the per-height `deleteMany` + the snapshot-first
+  order), but a **forward-only incremental** deploy never revisits the height, so the failure would have
+  persisted (a standing false alarm). Fixed **snapshot-side**: `rewards-snapshot`'s `reconcilePendingClaims`
+  resolves any such failure whose claim is now covered by the observed rows (and stamps the claim's tx
+  provenance, byte-identical to `applyClaim`'s rebuild stamp incl. `rawClaimJson`). Verified by a unit test
+  + a live **16→0** proof (the snapshot alone, no replay) + two independent PASS reviews (adversarial
+  subagent + Codex). (An earlier 13d-3b `applyClaim` attempt was dead code — the per-height `deleteMany`
+  ran first — and was reverted.) **Known limitation (mirrors `applyClaim`, flagged by both reviewers):** it
+  resolves on *any* row in the claimed range, not full `[startEpoch..endEpoch]` coverage — a partial range
+  stamps the present epochs and resolves. Consistent across both paths (not a regression); if a strict
+  all-epochs-present invariant is ever required it must change in *both* `reconcilePendingClaims` and
+  `applyClaim`.
 
 **Product follow-ups:**
 - **Rewards-side filters** (13b-filters) — claims `txHash`/`fromHeight`/`toHeight`, balances

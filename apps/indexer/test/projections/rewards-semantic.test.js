@@ -310,6 +310,36 @@ describe('Rewards observed snapshot ingestion', () => {
     assert.equal(p.slotRewards[0].claimed, true); // not unset
   });
 
+  it('snapshot reconciles a pending missing_reward_records failure once the rows land (forward-incremental)', async () => {
+    const p = new MockRewardsPrisma();
+    // forward-incremental: the claim is projected BEFORE any snapshot → applyClaim records the failure
+    seedClaim(p, { height: 120n });
+    await projectRewardsSemanticHeight({ prisma: p, chainId: CHAIN_ID, height: 120n });
+    assert.ok(
+      p.failures.some((f) => f.failureKind === 'missing_reward_records' && !f.resolved),
+      'failure open before the snapshot lands the rows',
+    );
+    assert.equal(p.slotRewards.length, 0);
+
+    // the snapshot later lands the observed rows → its reconcile resolves the failure + stamps the claim
+    const client = mockClient({
+      slotRewards: { 4: { rewards: [
+        { epoch_number: '1', amount: '10', denom: 'utwlt', claimed: false },
+        { epoch_number: '2', amount: '20', denom: 'utwlt', claimed: false },
+      ] } },
+    });
+    await ingestRewardsSnapshot({ prisma: p, client, chainId: CHAIN_ID, height: 200n, slotIds: [4n] });
+
+    assert.ok(
+      !p.failures.some((f) => f.failureKind === 'missing_reward_records' && !f.resolved),
+      'the missing_reward_records failure is resolved once the snapshot lands the rows',
+    );
+    const claimed = p.slotRewards.filter((r) => r.claimed);
+    assert.equal(claimed.length, 2, 'both claimed epochs reconciled by the snapshot');
+    assert.equal(claimed[0].claimTxHash, 'CLAIM-120', 'claim tx provenance stamped onto the observed row');
+    assert.ok(claimed[0].rawClaimJson, 'rawClaimJson stamped → forward-reconciled row matches a rebuilt one');
+  });
+
   it('module balances are stored as observed samples', async () => {
     const p = new MockRewardsPrisma();
     const client = mockClient({
@@ -579,6 +609,7 @@ class MockRewardsPrisma {
     };
     this.rewardClaimEvent = {
       upsert: async (args) => upsertMap(this.claims, args.where.sourceEventId.toString(), args),
+      findUnique: async (args) => this.claims.get(String(args.where.sourceEventId)) ?? null,
     };
     this.slotRewardProjection = {
       findMany: async (args) => {
@@ -651,7 +682,9 @@ class MockRewardsPrisma {
         // Mirror the DB column default (`resolved Boolean @default(false)`) so `deleteMany({resolved:false})`
         // matches a freshly-created failure exactly as real Prisma does (the mock can't apply DB defaults).
         // Store AND return the same row, so callers that read the return value see `resolved` like Prisma.
-        const created = { resolved: false, ...args.create };
+        this.nextFailureId ??= 1n;
+        const created = { id: this.nextFailureId, resolved: false, ...args.create };
+        this.nextFailureId += 1n;
         this.failures.push(created);
         return created;
       },
@@ -666,6 +699,20 @@ class MockRewardsPrisma {
           return false;
         });
         return { count: 0 };
+      },
+      findMany: async (args) => {
+        const w = args?.where ?? {};
+        return this.failures.filter((f) => {
+          if (w.projectionName !== undefined && f.projectionName !== w.projectionName) return false;
+          if (w.failureKind !== undefined && f.failureKind !== w.failureKind) return false;
+          if (w.resolved !== undefined && (f.resolved ?? false) !== w.resolved) return false;
+          return true;
+        });
+      },
+      update: async (args) => {
+        const f = this.failures.find((x) => x.id === args.where.id);
+        if (f) Object.assign(f, args.data);
+        return f ?? null;
       },
     };
     this.projectionCursor = {
