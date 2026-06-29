@@ -4,8 +4,10 @@ The RC record for the explorer. The **gate is executable**: `npm run rc-check` r
 this document describes what it checks, the operational contract, and the known-limitations register. It
 is not the source of truth; the script is.
 
-Status: **RC in progress (Phase 13d).** 13d-1 (checklist) + 13d-2 (this doc's contract + register) done;
-13d-3 (soak) + 13d-4 (perf/a11y) pending.
+Status: **Phase 13d complete (localnet).** 13d-1 (checklist) + 13d-2 (this doc's contract + register) +
+13d-3 (soak, GREEN @ ~2,500 blocks) + 13d-4 (perf/a11y) all done; adversarial + Codex reviewed. The RC
+gate (`npm run rc-check`, incl. `RC_LIVE=1`) is GREEN. **Deferred:** the primary **devnet** soak (§3) —
+localnet only this pass.
 
 ---
 

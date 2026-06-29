@@ -2,7 +2,9 @@
 
 Date: 2026-06-29
 Plan: `phase-13-explorer-hardening-plan.md` §7 (Phase 13d — RC pass), 13d-3 sub-slice
-Status: **drafted** (parameters locked; drive + ingest scripts shipped; live RC tier + run pending).
+Status: **complete.** Parameters locked; drive + ingest scripts shipped; live RC tier added; the full
+~2,500-block soak ran **GREEN (RC_LIVE, 53 checks)**. Run results: `phase-13d-3-soak-report.md`. (This is
+the *plan*; the report is the record of what actually ran.)
 
 Predecessors: 13d-1 (`scripts/rc-check.mjs` static + contract tiers) + 13d-2
 (`docs/operations/explorer-release-readiness.md`). This slice adds the **live tier** that 13d-1
@@ -102,22 +104,25 @@ gate — verified), and the fix is **one proto root**:
 
 ## 3. Ingest + project — `scripts/soak/ingest-project.sh`
 
-Stop-then-sample, then ingest the full range and rebuild **every** projection in the load-bearing order
-(runbook Part D + the Phase 7.2 rewards ordering). Run from the explorer repo against the soak DB.
+Ingest the full range, then rebuild **every** projection in the load-bearing order (runbook Part D, with
+the rewards ordering corrected per the 13d-3 finding). Run from the explorer repo against the soak DB.
 
 ```
 ingest START_HEIGHT=1 END_HEIGHT=<tip>
 coreslot-semantic        # metadata(+genesis CoreSlot identity seed)→lifecycle→payout→params→key_rotation→temporal_map(+genesis window seed)
 block-signatures → operator-signing-evidence → coreslot-liveness → coreslot-liveness-summary → coreslot-health → proposer-attribution
-rewards(reset) → rewards-snapshot → rewards(replay)   # 7.2 load-bearing order: snapshot rows must exist before the claim reconciliation replay
+rewards-snapshot → rewards (single, NON-reset pass)   # snapshot populates SlotRewardProjection FIRST, so claims reconcile on first processing
 balance-snapshot          # observed sample at the pinned tip
 ```
 
-Each step is `RESET_PROJECTION=true npm --prefix apps/indexer run project:<name>`. The
-`rewards → rewards-snapshot → rewards` re-run is **not** redundant: the rewards reset wipes the co-owned
-`SlotRewardProjection`, and the claim reconciliation (`claimTxHash` / clearing `missing_reward_records`)
-needs those snapshot rows to exist (Phase 7.2 finding). Final assertion: **zero unresolved
-`ProjectionFailure`** for every `*_v1` projection.
+The coreslot-semantic + block/liveness/proposer steps each rebuild with `RESET_PROJECTION=true`. **Rewards
+is the exception** — claim reconciliation is snapshot-dependent (`applyClaim` marks claims against the
+*observed* `SlotRewardProjection` rows), so the snapshot must run **before** the rewards semantic pass, and
+that pass must **not** reset (a rewards reset wipes the co-owned `SlotRewardProjection`). On a fresh DB a
+single non-reset rewards pass then reconciles every claim on first processing → **zero
+`missing_reward_records`**. *(The earlier `rewards(reset) → snapshot → rewards(replay)` order drafted here
+was wrong: the rewards CLI is cursor-based, so the "replay" was a no-op — see the 13d-3 soak report's
+"Four issues" §1.)* Final assertion: **zero unresolved `ProjectionFailure`** for every `*_v1` projection.
 
 ---
 
@@ -160,7 +165,7 @@ the P4 window with `signed+missed == 4×committed-heights`; mixed `claimed`/uncl
 
 ---
 
-## 6. Acceptance (13d-3 done when)
+## 6. Acceptance (13d-3 done when) — ✓ all met (recorded in `phase-13d-3-soak-report.md`)
 
 - `scripts/soak/drive-localnet.sh` brings the chain to ~2,500 blocks with all phases driven (verified by
   its own end summary: accounts touched, txs success/failed counts, epochs finalized, sparse window
