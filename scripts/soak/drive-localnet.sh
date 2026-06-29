@@ -21,6 +21,10 @@
 # run inside P3 with all 4 nodes up; the sparse window (node3 down) runs in P4 on the 4-set.
 #
 # Reviewed-before-run: drives a live chain. CLI shapes verified against twilight-core build.
+# Intentionally `set -uo pipefail` WITHOUT `-e`: this drive EXPECTS some txs to fail (the double-claim
+# and paused-claim commit with code!=0 by design, tallied in submit()) and gracefully skips P3 steps on a
+# key-gen miss — blanket `set -e` would abort on those intended failures. Critical setup instead fails
+# fast via explicit guards (init / start / pool / the genesis+config tuning are each `|| exit 1`).
 set -uo pipefail
 
 # ---- knobs -----------------------------------------------------------------------------------
@@ -124,6 +128,12 @@ bringup() {
   # default in init.sh, so enable it (+ swagger) before start. RPC alone is enough for ingest.
   local A="$NET/node0/config/app.toml"
   sed -i.bak '/^\[api\]/,/^\[/ s/^enable = false/enable = true/; /^\[api\]/,/^\[/ s/^swagger = false/swagger = true/' "$A" && rm -f "$A.bak"
+  # The jq/sed tuning above is silent on failure — verify it actually took on node0, else the soak would
+  # run with the wrong epoch length / block time and the results would be misleading.
+  local got_e
+  got_e="$(jq -r '.app_state.rewards.params.epoch_length_blocks' "$NET/node0/config/genesis.json" 2>/dev/null)"
+  [[ "$got_e" == "$EPOCH_LENGTH" ]] || { log "FATAL: genesis epoch_length tune did not take (got '$got_e', want '$EPOCH_LENGTH')"; exit 1; }
+  grep -q "^timeout_commit = \"$BLOCK_TIME\"" "$NET/node0/config/config.toml" || { log "FATAL: timeout_commit tune did not take (want \"$BLOCK_TIME\")"; exit 1; }
   : >"$LOG"
   log "tuned: epoch_length=$EPOCH_LENGTH timeout_commit=$BLOCK_TIME emission/epoch=$((EPOCH_LENGTH*SUBSIDY)) per_slot=$(((EPOCH_LENGTH*SUBSIDY)/4))"
   "$CHAIN_REPO/scripts/localnet/start.sh"

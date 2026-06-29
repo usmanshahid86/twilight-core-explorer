@@ -39,21 +39,28 @@ echo "== soak ingest+project: chain_id=$CHAIN_ID end_height=$END_HEIGHT rpc=$COM
 PG="${PG:-$(sed -E 's#\?.*$##' <<<"$DATABASE_URL")}"
 psql_q() { command -v psql >/dev/null 2>&1 && psql "$PG" -tAc "$1" 2>/dev/null; }
 
+# Fail loudly on a real failure of a critical step. (No global `set -e`: the happy path is unchanged;
+# these guards only fire on a failure the validated run never produced — so adding them needs no re-run.)
+die() { echo "FATAL: $*" >&2; exit 1; }
+
 if [[ "$RESET_DB" == "true" ]]; then
+  # RESET_DB must actually reset — psql_q is best-effort (no-op without psql), so require psql here and
+  # use a failing-on-error drop, or db:deploy would run against a dirty schema and mislead the soak.
+  command -v psql >/dev/null 2>&1 || die "RESET_DB=true needs psql on PATH to drop/recreate the schema"
   echo "== RESET_DB: dropping + recreating public schema =="
-  psql_q 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;' >/dev/null
-  npm run db:deploy
+  psql "$PG" -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;' >/dev/null || die "schema reset (DROP/CREATE) failed"
+  npm run db:deploy || die "db:deploy failed after reset"
 fi
 
 echo "== build (db:generate + workspaces) =="
-npm run db:generate
-npm --prefix apps/indexer run build
+npm run db:generate || die "db:generate failed"
+npm --prefix apps/indexer run build || die "indexer build failed"
 
 echo "== ingest 1..$END_HEIGHT =="
-START_HEIGHT=1 END_HEIGHT="$END_HEIGHT" npm --prefix apps/indexer run start
+START_HEIGHT=1 END_HEIGHT="$END_HEIGHT" npm --prefix apps/indexer run start || die "ingest 1..$END_HEIGHT failed"
 
 # Rebuildable semantic projections (runbook Part D order). RESET_PROJECTION=true rebuilds each.
-proj() { echo "-- project:$1"; RESET_PROJECTION=true npm --prefix apps/indexer run "project:$1"; }
+proj() { echo "-- project:$1"; RESET_PROJECTION=true npm --prefix apps/indexer run "project:$1" || die "projection $1 failed"; }
 proj coreslot-semantic            # metadata(+genesis CoreSlot identity seed)->lifecycle->payout->params->key_rotation->temporal_map(+genesis window seed)
 proj block-signatures
 proj operator-signing-evidence
@@ -73,11 +80,11 @@ proj proposer-attribution
 # the replay a cursor no-op — the cursor was already at the tip — so claims were never re-reconciled
 # and the transient failures lingered as unresolved.)
 echo "-- rewards-snapshot (live sample @ $SAMPLE_HEIGHT) — populates SlotRewardProjection FIRST"
-npm --prefix apps/indexer run project:rewards-snapshot
+npm --prefix apps/indexer run project:rewards-snapshot || die "rewards-snapshot failed"
 echo "-- rewards (single pass, NO reset — reconciles claims against the snapshot rows)"
-npm --prefix apps/indexer run project:rewards
+npm --prefix apps/indexer run project:rewards || die "rewards projection failed"
 echo "-- balance-snapshot (live sample @ $SAMPLE_HEIGHT)"
-npm --prefix apps/indexer run project:balance-snapshot
+npm --prefix apps/indexer run project:balance-snapshot || die "balance-snapshot failed"
 
 # ---- sanity (optional; needs psql) -----------------------------------------------------------
 echo; echo "== sanity =="

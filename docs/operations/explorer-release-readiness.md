@@ -4,10 +4,12 @@ The RC record for the explorer. The **gate is executable**: `npm run rc-check` r
 this document describes what it checks, the operational contract, and the known-limitations register. It
 is not the source of truth; the script is.
 
-Status: **Phase 13d complete (localnet).** 13d-1 (checklist) + 13d-2 (this doc's contract + register) +
-13d-3 (soak, GREEN @ ~2,500 blocks) + 13d-4 (perf/a11y) all done; adversarial + Codex reviewed. The RC
-gate (`npm run rc-check`, incl. `RC_LIVE=1`) is GREEN. **Deferred:** the primary **devnet** soak (§3) —
-localnet only this pass.
+Status: **Phase 13d — localnet RC complete; one acceptance item outstanding.** 13d-1 (checklist) +
+13d-2 (this doc's contract + register) + 13d-3 (soak, GREEN @ ~2,500 blocks) + 13d-4 (perf/a11y) are all
+done and adversarial + Codex reviewed; the RC gate (`npm run rc-check`, incl. `RC_LIVE=1`) is GREEN **on
+localnet**. **Outstanding (Issue #41 acceptance):** the primary **devnet** soak (§3) — localnet only this
+pass. Treat 13d as **RC-ready on localnet**, not fully closed, until the devnet soak runs (or #41's
+acceptance criteria are amended to make devnet a follow-up).
 
 ---
 
@@ -25,6 +27,19 @@ contract smoke. Current: **GREEN, 40 checks** on `main` @ the 13c merge.
   the soak DB and checks core lists non-empty, deep cursor-walk integrity (`/blocks`+`/txs` walked count ==
   DB count, dup-free), zero unresolved `ProjectionFailure`, and indexer freshness/lag present. Off by
   default. Cursor-walk core is falsified in CI via `--self-test`; full RED/GREEN is exercised by the soak run.
+
+### Web route coverage (Issue #41 — "every web route renders or is documented")
+The RC static tier's **`apps/web` build is the route smoke**: Next **prerenders** every *static* route (a
+broken render fails the gate) and **compiles** every *dynamic* route (a type/import error fails it), and
+enumerates all routes (a dropped route changes the build output). Coverage by route kind:
+
+| Kind | Routes | RC coverage |
+|---|---|---|
+| **Static** (prerendered `○`) | `/` · `/accounts` · `/api` · `/blocks` · `/liveness` · `/network` · `/rewards` · `/search` · `/supply` | **Rendered at build** (prerender) — a render error fails the gate |
+| **Dynamic** (server-rendered `ƒ`) | `/blocks/[height]` · `/txs` · `/txs/[hash]` · `/accounts/[address]` · `/accounts/[address]/…` · `/coreslots` · `/coreslots/[slotId]` · `/operator/[address]` · `/rewards/claims` · `/rewards/epochs/[epoch]` | **Compiled at build**; their data is the API, whose every path is replayed by the contract smoke and exercised live by the `RC_LIVE` tier against the soak DB |
+
+A live `next start` + per-route fetch smoke (full dynamic-render-*with-data* inside the gate) is a possible
+future hardening; today dynamic routes are render-verified at build and their data verified via the API tiers.
 
 ---
 

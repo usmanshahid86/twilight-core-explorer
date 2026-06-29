@@ -650,8 +650,10 @@ class MockRewardsPrisma {
         if (i >= 0) { this.failures[i] = { ...this.failures[i], ...args.update }; return this.failures[i]; }
         // Mirror the DB column default (`resolved Boolean @default(false)`) so `deleteMany({resolved:false})`
         // matches a freshly-created failure exactly as real Prisma does (the mock can't apply DB defaults).
-        this.failures.push({ resolved: false, ...args.create });
-        return args.create;
+        // Store AND return the same row, so callers that read the return value see `resolved` like Prisma.
+        const created = { resolved: false, ...args.create };
+        this.failures.push(created);
+        return created;
       },
       deleteMany: async (args) => {
         const w = args?.where ?? {};
