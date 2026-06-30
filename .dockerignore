@@ -1,0 +1,28 @@
+# Keep the build context small + deterministic. Source is COPYied in; deps/build artifacts are
+# (re)generated inside the image, and host-generated ones (esp. the Prisma client) must NOT leak in.
+node_modules
+**/node_modules
+dist
+**/dist
+.next
+**/.next
+*.tsbuildinfo
+
+.git
+.gitignore
+
+# never bake local env / secrets into an image
+.env
+.env.*
+!.env.example
+!.env.devnet.example
+
+# local-only / heavy / irrelevant to the build
+reference
+docs/research/artifacts
+.claude
+coverage
+**/coverage
+*.log
+.DS_Store
+.turbo

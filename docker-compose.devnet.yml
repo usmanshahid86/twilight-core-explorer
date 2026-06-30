@@ -1,0 +1,141 @@
+# Local "see it" stack for the devnet validation deploy — runbook docs/operations/devnet-deploy-runbook.md §9.
+#
+# Postgres runs here as a container; the indexer / API / web are built from THIS repo and point at the
+# LIVE devnet RPC/REST. Each service maps 1:1 to a future AWS target (runbook §10): postgres→RDS,
+# indexer→always-on task, api→service behind an ALB, web→static/container origin. To move Postgres to
+# RDS later, point DATABASE_URL/API_DATABASE_URL at RDS and stop starting the `postgres` service.
+#
+#   cp .env.devnet.example .env.devnet         # then fill it in (devnet endpoints are pre-filled)
+#   docker compose -f docker-compose.devnet.yml --env-file .env.devnet up -d --build
+#   open http://localhost:3000                  # web  ·  http://localhost:8080/api/v1/status  · API
+#
+# The indexer's FIRST tick backfills genesis…tip (the one long run); it is cursor-resume, so a restart
+# mid-backfill continues rather than re-ingesting.
+
+name: twilight-explorer-devnet
+
+# The indexer, api and migrate services all run from ONE backend image. Each must declare `build:`
+# (not just `image:`) — a service with only `image:` pointing at a local-only tag makes Compose try to
+# PULL it from a registry ("pull access denied"). Sharing this anchor builds it locally for all three
+# (Compose de-dups + caches, so it's built once).
+x-backend-build: &backend-build
+  context: .
+  dockerfile: Dockerfile
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: twilight-explorer-devnet-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-twilight}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-twilight}
+      POSTGRES_DB: ${POSTGRES_DB:-twilight_explorer}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - devnet_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-twilight} -d ${POSTGRES_DB:-twilight_explorer}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # One-shot: apply migrations then exit. This is the service that BUILDS the shared backend image;
+  # indexer + api reference the resulting tag. Gating them on `service_completed_successfully` means
+  # ingest/serving never start against an un-migrated schema.
+  migrate:
+    build: *backend-build
+    image: twilight-explorer-backend:devnet
+    container_name: twilight-explorer-devnet-migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+    command: ["npx", "prisma", "migrate", "deploy"]
+    restart: "no"
+
+  # Ingest loop (MODE=ingest): chain → canonical rows. Read-WRITE DB role. Ticks fast to keep lag low;
+  # its FIRST tick backfills genesis…tip (the one long run, cursor-resumable on restart).
+  indexer:
+    build: *backend-build
+    image: twilight-explorer-backend:devnet
+    container_name: twilight-explorer-devnet-indexer
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      MODE: ingest
+      DATABASE_URL: ${DATABASE_URL}
+      COMET_RPC_URL: ${COMET_RPC_URL}
+      REST_URL: ${REST_URL}
+      CHAIN_ID: ${CHAIN_ID}
+      TICK_LOOP: "true"
+      TICK_INTERVAL_SECONDS: ${INGEST_INTERVAL_SECONDS:-15}
+    command: ["bash", "scripts/devnet/run-indexer-tick.sh"]
+    restart: unless-stopped
+
+  # Projection loop (MODE=project): canonical rows → semantic projections + observed snapshots. Runs
+  # on a slower cadence and FOLLOWS the ingest cursor, so the UI fills in progressively during the long
+  # backfill rather than staying empty until it finishes. Independent ProjectionCursors + advisory locks
+  # make it safe to run concurrently with the ingest loop.
+  projector:
+    build: *backend-build
+    image: twilight-explorer-backend:devnet
+    container_name: twilight-explorer-devnet-projector
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      MODE: project
+      DATABASE_URL: ${DATABASE_URL}
+      COMET_RPC_URL: ${COMET_RPC_URL}
+      REST_URL: ${REST_URL}
+      CHAIN_ID: ${CHAIN_ID}
+      TICK_LOOP: "true"
+      TICK_INTERVAL_SECONDS: ${PROJECT_INTERVAL_SECONDS:-60}
+    command: ["bash", "scripts/devnet/run-indexer-tick.sh"]
+    restart: unless-stopped
+
+  # DB-only public API (read-only DB role + production posture). Published on the host so the browser
+  # (and the web container's inlined NEXT_PUBLIC_API_BASE_URL) can reach it at http://localhost:8080.
+  api:
+    build: *backend-build
+    image: twilight-explorer-backend:devnet
+    container_name: twilight-explorer-devnet-api
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      API_DATABASE_URL: ${API_DATABASE_URL}
+      API_ENV: ${API_ENV:-production}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+      PORT: "8080"
+      HOST: "0.0.0.0"
+      APP_VERSION: ${APP_VERSION:-devnet}
+    command: ["node", "apps/api/dist/index.js"]
+    ports:
+      - "${API_PORT:-8080}:8080"
+    restart: unless-stopped
+
+  # Next.js UI. NEXT_PUBLIC_API_BASE_URL is a BUILD ARG (inlined into the browser bundle) — see
+  # apps/web/Dockerfile. Rebuild (`up --build`) if you change the API origin.
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8080}
+    image: twilight-explorer-web:devnet
+    container_name: twilight-explorer-devnet-web
+    depends_on:
+      - api
+    environment:
+      NODE_ENV: production
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    restart: unless-stopped
+
+volumes:
+  devnet_pgdata:

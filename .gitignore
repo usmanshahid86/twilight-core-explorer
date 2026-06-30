@@ -38,6 +38,7 @@ junit.xml
 .env
 .env.*
 !.env.example
+!.env.devnet.example
 
 # Local databases / dumps
 *.db
