@@ -46,8 +46,20 @@ export interface RewardsSnapshotPrisma extends ProjectionCursorPrisma {
     findMany(args: unknown): Promise<MissingRecordsFailureRow[]>;
     update(args: unknown): Promise<unknown>;
   };
-  $transaction<T>(fn: (tx: RewardsSnapshotPrisma) => Promise<T>): Promise<T>;
+  $transaction<T>(
+    fn: (tx: RewardsSnapshotPrisma) => Promise<T>,
+    options?: { timeout?: number; maxWait?: number },
+  ): Promise<T>;
 }
+
+// The snapshot writes one observed row per (slot × epoch-reward) plus module-balance samples and the
+// claim reconcile, all in ONE transaction to keep the height-pinned sample atomic. On a large chain
+// that is thousands of upserts, which blows Prisma's DEFAULT 5s interactive-transaction timeout (seen
+// live on devnet: ~1,884 epochs × slots). Raise the per-transaction timeout (the proper "do less work"
+// fix — batched upserts — is a tracked Phase-14 optimization). maxWait covers connection-pool contention
+// with the concurrently-running ingest/projector loops.
+const REWARDS_SNAPSHOT_TX_TIMEOUT_MS = 120_000;
+const REWARDS_SNAPSHOT_TX_MAX_WAIT_MS = 15_000;
 
 interface SlotRewardRow {
   id: bigint;
@@ -198,7 +210,7 @@ export async function ingestRewardsSnapshot(
     // failure here — the snapshot is the event that makes the claim reconcilable. (A periodic full
     // rebuild self-heals via rewards-semantic's per-height deleteMany; a forward-only deploy needs this.)
     await reconcilePendingClaims(tx);
-  });
+  }, { timeout: REWARDS_SNAPSHOT_TX_TIMEOUT_MS, maxWait: REWARDS_SNAPSHOT_TX_MAX_WAIT_MS });
 
   await updateProjectionCursorSuccess(prisma, REWARDS_SNAPSHOT_PROJECTION, chainId, height);
   return { height, slotRewardRows, balanceSamples, failed: false };
