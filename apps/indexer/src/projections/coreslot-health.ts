@@ -53,7 +53,10 @@ export interface CoreSlotHealthProjectionPrisma extends ProjectionCursorPrisma {
     upsert(args: unknown): Promise<unknown>;
     deleteMany(args: unknown): Promise<unknown>;
   };
-  $transaction<T>(fn: (tx: CoreSlotHealthProjectionPrisma) => Promise<T>): Promise<T>;
+  $transaction<T>(
+    fn: (tx: CoreSlotHealthProjectionPrisma) => Promise<T>,
+    options?: { timeout?: number; maxWait?: number },
+  ): Promise<T>;
 }
 
 interface SummarySource {
@@ -161,7 +164,9 @@ export async function projectCoreSlotHealth(
         haltRiskLevel: network.haltRiskLevel as string,
         failuresCreated,
       };
-    });
+    // Whole-state recompute in ONE interactive tx (all active slots) — at a large chain's data volume
+    // this exceeds Prisma's DEFAULT 5s timeout (seen on devnet). Raise it (same fix as rewards-snapshot).
+    }, { timeout: 120_000, maxWait: 15_000 });
   } catch (error) {
     await haltProjectionCursorError(prisma, CORESLOT_HEALTH_PROJECTION, chainId, 0n, error);
     throw error;
