@@ -41,7 +41,10 @@ export interface CoreSlotLivenessSummaryProjectionPrisma extends ProjectionCurso
     upsert(args: unknown): Promise<unknown>;
     deleteMany(args: unknown): Promise<unknown>;
   };
-  $transaction<T>(fn: (tx: CoreSlotLivenessSummaryProjectionPrisma) => Promise<T>): Promise<T>;
+  $transaction<T>(
+    fn: (tx: CoreSlotLivenessSummaryProjectionPrisma) => Promise<T>,
+    options?: { timeout?: number; maxWait?: number },
+  ): Promise<T>;
 }
 
 interface EvidenceSource {
@@ -150,7 +153,9 @@ export async function projectCoreSlotLivenessSummary(
         failuresCreated: counters.failuresCreated,
         maxCommittedHeight,
       };
-    });
+    // Whole-state recompute in ONE interactive tx (all slots' summaries) — exceeds Prisma's DEFAULT
+    // 5s timeout at a large chain's data volume (seen on devnet). Raise it (same fix as rewards-snapshot).
+    }, { timeout: 120_000, maxWait: 15_000 });
   } catch (error) {
     await haltProjectionCursorError(
       prisma,
