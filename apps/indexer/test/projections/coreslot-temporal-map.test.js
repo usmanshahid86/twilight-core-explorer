@@ -1,13 +1,16 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  CORESLOT_KEY_ROTATION_PROJECTION,
   CORESLOT_KEY_ROTATION_STATUS,
+  CORESLOT_LIFECYCLE_PROJECTION,
   CORESLOT_TEMPORAL_MAP_PROJECTION,
 } from '../../dist/projections/types.js';
 import {
   VALIDATOR_SET_MEMBERSHIP_OFFSET,
   findConsensusWindowAtHeight,
   findSlotConsensusWindowAtHeight,
+  minUpstreamCursorHeight,
   projectCoreSlotTemporalMapHeight,
   projectCoreSlotTemporalMapRange,
   seedCoreSlotGenesisTemporalMap,
@@ -887,3 +890,52 @@ function cloneMap(map) {
 function cursorKey(value) {
   return `${value.projectionName}:${value.chainId}`;
 }
+
+// ISSUE #56: temporal-map must cap its endHeight at the LOWEST upstream cursor (coreslot-lifecycle +
+// coreslot-key-rotation) so it never processes a height whose upstream events don't exist yet (which would
+// open no window but still advance the cursor — a permanent silent gap).
+describe('minUpstreamCursorHeight (#56)', () => {
+  function readerPrisma(heights) {
+    return {
+      projectionCursor: {
+        async findFirst(args) {
+          const name = args?.where?.projectionName;
+          const h = heights[name];
+          return h === undefined ? null : { lastProjectedHeight: h };
+        },
+      },
+    };
+  }
+
+  it('returns the lowest upstream cursor', async () => {
+    const min = await minUpstreamCursorHeight(
+      readerPrisma({ [CORESLOT_LIFECYCLE_PROJECTION]: 100n, [CORESLOT_KEY_ROTATION_PROJECTION]: 150n }),
+      CHAIN_ID,
+    );
+    assert.equal(min, 100n);
+  });
+
+  it('caps at a lagging key-rotation upstream', async () => {
+    const min = await minUpstreamCursorHeight(
+      readerPrisma({ [CORESLOT_LIFECYCLE_PROJECTION]: 200n, [CORESLOT_KEY_ROTATION_PROJECTION]: 50n }),
+      CHAIN_ID,
+    );
+    assert.equal(min, 50n);
+  });
+
+  it('treats a missing upstream cursor as 0n (stalls until the upstream has run)', async () => {
+    const min = await minUpstreamCursorHeight(
+      readerPrisma({ [CORESLOT_KEY_ROTATION_PROJECTION]: 150n }),
+      CHAIN_ID,
+    );
+    assert.equal(min, 0n);
+  });
+
+  it('coerces string/number cursor heights to bigint', async () => {
+    const min = await minUpstreamCursorHeight(
+      readerPrisma({ [CORESLOT_LIFECYCLE_PROJECTION]: '300', [CORESLOT_KEY_ROTATION_PROJECTION]: 120 }),
+      CHAIN_ID,
+    );
+    assert.equal(min, 120n);
+  });
+});

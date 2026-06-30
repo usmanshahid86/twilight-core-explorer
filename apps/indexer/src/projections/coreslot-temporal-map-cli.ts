@@ -4,8 +4,10 @@ import { createPrismaClient } from '@twilight-explorer/db';
 import { withProjectionAdvisoryLock } from './advisory-lock.js';
 import { getOrCreateProjectionCursor } from './cursor.js';
 import {
+  minUpstreamCursorHeight,
   projectCoreSlotTemporalMapRange,
   type CoreSlotTemporalMapProjectionPrisma,
+  type UpstreamCursorReaderPrisma,
 } from './coreslot-temporal-map.js';
 import {
   resetCoreSlotTemporalMapProjection,
@@ -47,8 +49,20 @@ async function main(): Promise<void> {
       );
       const startHeight = parseOptionalHeight(process.env.START_HEIGHT)
         ?? parseHeight(asRecord(cursor).lastProjectedHeight) + 1n;
-      const endHeight = parseOptionalHeight(process.env.END_HEIGHT)
+      const requestedEnd = parseOptionalHeight(process.env.END_HEIGHT)
         ?? await getMaxBlockHeight(prisma as unknown as BlockAggregatePrisma);
+      // ISSUE #56: cap endHeight at the UPSTREAM projections' cursors. The temporal map reads rows
+      // produced by coreslot-lifecycle (CoreSlotLifecycleEvent) and coreslot-key-rotation
+      // (CoreSlotConsensusKeyRotation). If we processed beyond where those have projected, we'd find no
+      // events at those heights, open NO window, yet advance our own cursor past them — a permanent silent
+      // gap (a window is never built, so the slot is invisible to liveness/health). Never outrun the
+      // data sources. (On a temporal-map-only RESET the upstreams are already at tip, so cap == maxBlock
+      // and the full replay runs; if an upstream is behind, we process only up to it and extend later.)
+      const upstreamCap = await minUpstreamCursorHeight(
+        prisma as unknown as UpstreamCursorReaderPrisma,
+        chainId,
+      );
+      const endHeight = requestedEnd < upstreamCap ? requestedEnd : upstreamCap;
 
       if (endHeight < startHeight) return;
 
@@ -79,6 +93,7 @@ async function getMaxBlockHeight(prisma: BlockAggregatePrisma): Promise<bigint> 
   const result = await prisma.block.aggregate({ _max: { height: true } });
   return result._max?.height ?? 0n;
 }
+
 
 function parseOptionalHeight(value: string | undefined): bigint | undefined {
   if (!value?.trim()) return undefined;
