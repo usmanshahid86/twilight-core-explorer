@@ -939,3 +939,50 @@ describe('minUpstreamCursorHeight (#56)', () => {
     assert.equal(min, 120n);
   });
 });
+
+// ISSUE #56 (integration, review note N3): the cap means temporal-map is driven only up to the upstream
+// cursor. This pins the bug-fix behavior end-to-end: a height beyond the (capped) endHeight is NOT skipped
+// — the window for it is deferred and then BUILT once the cap rises past it (rather than lost forever).
+describe('temporal-map honors a capped endHeight without skipping windows (#56)', () => {
+  it('defers a window beyond the cap, then builds it once the cap rises', async () => {
+    const prisma = new TemporalMockPrisma();
+    // An activation at height 100; its window would open at 100 + VALIDATOR_SET_MEMBERSHIP_OFFSET.
+    prisma.lifecycleEvents.push(lifecycle('coreslot_activated', 100n, {
+      id: 100n,
+      sourceEventId: 100n,
+      slotId: 7n,
+      consensusAddress: OLD,
+    }));
+
+    // Run 1: endHeight capped at 50 (upstreams behind the activate). The range must NOT reach height 100.
+    await projectCoreSlotTemporalMapRange({
+      prisma,
+      chainId: CHAIN_ID,
+      startHeight: 10n,
+      endHeight: 50n,
+    });
+    assert.equal(prisma.windows.length, 0, 'no window built while endHeight is capped below the activate');
+    const cursor1 = prisma.projectionCursors.get(
+      cursorKey({ projectionName: CORESLOT_TEMPORAL_MAP_PROJECTION, chainId: CHAIN_ID }),
+    );
+    assert.equal(
+      cursor1?.lastProjectedHeight,
+      50n,
+      'cursor advances only to the cap, never past the not-yet-projected activate height',
+    );
+
+    // Run 2: the cap rises past the activate (upstreams caught up). The window is now built, not lost.
+    await projectCoreSlotTemporalMapRange({
+      prisma,
+      chainId: CHAIN_ID,
+      startHeight: 51n,
+      endHeight: 150n,
+    });
+    assert.equal(prisma.windows.length, 1, 'window is built once the cap rises past the activate height');
+    assert.equal(prisma.windows[0].slotId, 7n);
+    assert.equal(
+      prisma.windows[0].effectiveFromHeight,
+      100n + VALIDATOR_SET_MEMBERSHIP_OFFSET,
+    );
+  });
+});

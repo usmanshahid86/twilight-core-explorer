@@ -64,7 +64,20 @@ async function main(): Promise<void> {
       );
       const endHeight = requestedEnd < upstreamCap ? requestedEnd : upstreamCap;
 
-      if (endHeight < startHeight) return;
+      // N2 (review): make the cap observable — an operator who set END_HEIGHT (or expects to reach the
+      // tip) should see why we stopped short instead of silently capping.
+      if (upstreamCap < requestedEnd) {
+        console.warn(
+          `[coreslot-temporal-map] endHeight capped ${requestedEnd} -> ${upstreamCap}: upstream `
+          + 'lifecycle/key-rotation cursors are behind; processing only up to where they have projected.',
+        );
+      }
+
+      // N1 (review): on a RESET the genesis baseline must still seed even when there is nothing to replay
+      // yet (upstreams behind -> endHeight < startHeight). The seed runs inside the range call and does NOT
+      // depend on upstream rows, so only short-circuit the NON-reset no-op path here.
+      const isReset = process.env.RESET_PROJECTION === 'true';
+      if (endHeight < startHeight && !isReset) return;
 
       await projectCoreSlotTemporalMapRange({
         prisma: prisma as unknown as CoreSlotTemporalMapProjectionPrisma,
@@ -93,7 +106,6 @@ async function getMaxBlockHeight(prisma: BlockAggregatePrisma): Promise<bigint> 
   const result = await prisma.block.aggregate({ _max: { height: true } });
   return result._max?.height ?? 0n;
 }
-
 
 function parseOptionalHeight(value: string | undefined): bigint | undefined {
   if (!value?.trim()) return undefined;
