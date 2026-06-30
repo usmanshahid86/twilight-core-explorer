@@ -1,13 +1,16 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  CORESLOT_KEY_ROTATION_PROJECTION,
   CORESLOT_KEY_ROTATION_STATUS,
+  CORESLOT_LIFECYCLE_PROJECTION,
   CORESLOT_TEMPORAL_MAP_PROJECTION,
 } from '../../dist/projections/types.js';
 import {
   VALIDATOR_SET_MEMBERSHIP_OFFSET,
   findConsensusWindowAtHeight,
   findSlotConsensusWindowAtHeight,
+  minUpstreamCursorHeight,
   projectCoreSlotTemporalMapHeight,
   projectCoreSlotTemporalMapRange,
   seedCoreSlotGenesisTemporalMap,
@@ -887,3 +890,99 @@ function cloneMap(map) {
 function cursorKey(value) {
   return `${value.projectionName}:${value.chainId}`;
 }
+
+// ISSUE #56: temporal-map must cap its endHeight at the LOWEST upstream cursor (coreslot-lifecycle +
+// coreslot-key-rotation) so it never processes a height whose upstream events don't exist yet (which would
+// open no window but still advance the cursor — a permanent silent gap).
+describe('minUpstreamCursorHeight (#56)', () => {
+  function readerPrisma(heights) {
+    return {
+      projectionCursor: {
+        async findFirst(args) {
+          const name = args?.where?.projectionName;
+          const h = heights[name];
+          return h === undefined ? null : { lastProjectedHeight: h };
+        },
+      },
+    };
+  }
+
+  it('returns the lowest upstream cursor', async () => {
+    const min = await minUpstreamCursorHeight(
+      readerPrisma({ [CORESLOT_LIFECYCLE_PROJECTION]: 100n, [CORESLOT_KEY_ROTATION_PROJECTION]: 150n }),
+      CHAIN_ID,
+    );
+    assert.equal(min, 100n);
+  });
+
+  it('caps at a lagging key-rotation upstream', async () => {
+    const min = await minUpstreamCursorHeight(
+      readerPrisma({ [CORESLOT_LIFECYCLE_PROJECTION]: 200n, [CORESLOT_KEY_ROTATION_PROJECTION]: 50n }),
+      CHAIN_ID,
+    );
+    assert.equal(min, 50n);
+  });
+
+  it('treats a missing upstream cursor as 0n (stalls until the upstream has run)', async () => {
+    const min = await minUpstreamCursorHeight(
+      readerPrisma({ [CORESLOT_KEY_ROTATION_PROJECTION]: 150n }),
+      CHAIN_ID,
+    );
+    assert.equal(min, 0n);
+  });
+
+  it('coerces string/number cursor heights to bigint', async () => {
+    const min = await minUpstreamCursorHeight(
+      readerPrisma({ [CORESLOT_LIFECYCLE_PROJECTION]: '300', [CORESLOT_KEY_ROTATION_PROJECTION]: 120 }),
+      CHAIN_ID,
+    );
+    assert.equal(min, 120n);
+  });
+});
+
+// ISSUE #56 (integration, review note N3): the cap means temporal-map is driven only up to the upstream
+// cursor. This pins the bug-fix behavior end-to-end: a height beyond the (capped) endHeight is NOT skipped
+// — the window for it is deferred and then BUILT once the cap rises past it (rather than lost forever).
+describe('temporal-map honors a capped endHeight without skipping windows (#56)', () => {
+  it('defers a window beyond the cap, then builds it once the cap rises', async () => {
+    const prisma = new TemporalMockPrisma();
+    // An activation at height 100; its window would open at 100 + VALIDATOR_SET_MEMBERSHIP_OFFSET.
+    prisma.lifecycleEvents.push(lifecycle('coreslot_activated', 100n, {
+      id: 100n,
+      sourceEventId: 100n,
+      slotId: 7n,
+      consensusAddress: OLD,
+    }));
+
+    // Run 1: endHeight capped at 50 (upstreams behind the activate). The range must NOT reach height 100.
+    await projectCoreSlotTemporalMapRange({
+      prisma,
+      chainId: CHAIN_ID,
+      startHeight: 10n,
+      endHeight: 50n,
+    });
+    assert.equal(prisma.windows.length, 0, 'no window built while endHeight is capped below the activate');
+    const cursor1 = prisma.projectionCursors.get(
+      cursorKey({ projectionName: CORESLOT_TEMPORAL_MAP_PROJECTION, chainId: CHAIN_ID }),
+    );
+    assert.equal(
+      cursor1?.lastProjectedHeight,
+      50n,
+      'cursor advances only to the cap, never past the not-yet-projected activate height',
+    );
+
+    // Run 2: the cap rises past the activate (upstreams caught up). The window is now built, not lost.
+    await projectCoreSlotTemporalMapRange({
+      prisma,
+      chainId: CHAIN_ID,
+      startHeight: 51n,
+      endHeight: 150n,
+    });
+    assert.equal(prisma.windows.length, 1, 'window is built once the cap rises past the activate height');
+    assert.equal(prisma.windows[0].slotId, 7n);
+    assert.equal(
+      prisma.windows[0].effectiveFromHeight,
+      100n + VALIDATOR_SET_MEMBERSHIP_OFFSET,
+    );
+  });
+});

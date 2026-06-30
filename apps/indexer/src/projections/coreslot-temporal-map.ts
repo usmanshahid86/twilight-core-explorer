@@ -6,12 +6,46 @@ import {
 } from './cursor.js';
 import type { ChainClient, GenesisSource } from '@twilight-explorer/chain-client';
 import {
+  CORESLOT_KEY_ROTATION_PROJECTION,
   CORESLOT_KEY_ROTATION_STATUS,
+  CORESLOT_LIFECYCLE_PROJECTION,
   CORESLOT_TEMPORAL_MAP_PROJECTION,
   type ProjectionFailureInput,
   type ProjectionFailureKind,
   withProjectionFailureKey,
 } from './types.js';
+
+// ISSUE #56: the temporal map reads rows produced by its UPSTREAM projections — coreslot-lifecycle
+// (CoreSlotLifecycleEvent) and coreslot-key-rotation (CoreSlotConsensusKeyRotation). It must never process
+// a height beyond where those upstreams have projected: at an un-projected height it finds no events, opens
+// NO consensus window, yet would advance its own cursor past that height — a permanent silent gap (the
+// window is never built, so the slot is invisible to liveness/health). Callers cap endHeight at this value.
+export interface UpstreamCursorReaderPrisma {
+  projectionCursor: {
+    findFirst(args: unknown): Promise<{ lastProjectedHeight: unknown } | null>;
+  };
+}
+
+export async function minUpstreamCursorHeight(
+  prisma: UpstreamCursorReaderPrisma,
+  chainId: string,
+): Promise<bigint> {
+  const upstreams = [CORESLOT_LIFECYCLE_PROJECTION, CORESLOT_KEY_ROTATION_PROJECTION];
+  let min: bigint | undefined;
+  for (const projectionName of upstreams) {
+    const row = await prisma.projectionCursor.findFirst({ where: { projectionName, chainId } });
+    const height = toCursorBigint(row?.lastProjectedHeight);
+    if (min === undefined || height < min) min = height;
+  }
+  return min ?? 0n;
+}
+
+function toCursorBigint(value: unknown): bigint {
+  if (typeof value === 'bigint') return value;
+  if (typeof value === 'number') return BigInt(value);
+  if (typeof value === 'string' && value.trim()) return BigInt(value);
+  return 0n;
+}
 
 const ACTIVE_STATUS = 'ACTIVE';
 

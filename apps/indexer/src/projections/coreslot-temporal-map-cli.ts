@@ -4,8 +4,10 @@ import { createPrismaClient } from '@twilight-explorer/db';
 import { withProjectionAdvisoryLock } from './advisory-lock.js';
 import { getOrCreateProjectionCursor } from './cursor.js';
 import {
+  minUpstreamCursorHeight,
   projectCoreSlotTemporalMapRange,
   type CoreSlotTemporalMapProjectionPrisma,
+  type UpstreamCursorReaderPrisma,
 } from './coreslot-temporal-map.js';
 import {
   resetCoreSlotTemporalMapProjection,
@@ -47,10 +49,35 @@ async function main(): Promise<void> {
       );
       const startHeight = parseOptionalHeight(process.env.START_HEIGHT)
         ?? parseHeight(asRecord(cursor).lastProjectedHeight) + 1n;
-      const endHeight = parseOptionalHeight(process.env.END_HEIGHT)
+      const requestedEnd = parseOptionalHeight(process.env.END_HEIGHT)
         ?? await getMaxBlockHeight(prisma as unknown as BlockAggregatePrisma);
+      // ISSUE #56: cap endHeight at the UPSTREAM projections' cursors. The temporal map reads rows
+      // produced by coreslot-lifecycle (CoreSlotLifecycleEvent) and coreslot-key-rotation
+      // (CoreSlotConsensusKeyRotation). If we processed beyond where those have projected, we'd find no
+      // events at those heights, open NO window, yet advance our own cursor past them — a permanent silent
+      // gap (a window is never built, so the slot is invisible to liveness/health). Never outrun the
+      // data sources. (On a temporal-map-only RESET the upstreams are already at tip, so cap == maxBlock
+      // and the full replay runs; if an upstream is behind, we process only up to it and extend later.)
+      const upstreamCap = await minUpstreamCursorHeight(
+        prisma as unknown as UpstreamCursorReaderPrisma,
+        chainId,
+      );
+      const endHeight = requestedEnd < upstreamCap ? requestedEnd : upstreamCap;
 
-      if (endHeight < startHeight) return;
+      // N2 (review): make the cap observable — an operator who set END_HEIGHT (or expects to reach the
+      // tip) should see why we stopped short instead of silently capping.
+      if (upstreamCap < requestedEnd) {
+        console.warn(
+          `[coreslot-temporal-map] endHeight capped ${requestedEnd} -> ${upstreamCap}: upstream `
+          + 'lifecycle/key-rotation cursors are behind; processing only up to where they have projected.',
+        );
+      }
+
+      // N1 (review): on a RESET the genesis baseline must still seed even when there is nothing to replay
+      // yet (upstreams behind -> endHeight < startHeight). The seed runs inside the range call and does NOT
+      // depend on upstream rows, so only short-circuit the NON-reset no-op path here.
+      const isReset = process.env.RESET_PROJECTION === 'true';
+      if (endHeight < startHeight && !isReset) return;
 
       await projectCoreSlotTemporalMapRange({
         prisma: prisma as unknown as CoreSlotTemporalMapProjectionPrisma,
