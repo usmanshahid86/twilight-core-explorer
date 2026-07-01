@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 import {
   BLOCK_SIGNATURES_PROJECTION,
+  CORESLOT_TEMPORAL_MAP_PROJECTION,
   OPERATOR_SIGNING_ATTRIBUTION_STATUS,
   OPERATOR_SIGNING_EVIDENCE_PROJECTION,
 } from '../../dist/projections/types.js';
@@ -14,6 +15,7 @@ import {
 import {
   resetOperatorSigningEvidenceProjection,
 } from '../../dist/projections/reset-operator-signing-evidence.js';
+import { readProjectionCursorHeight } from '../../dist/projections/cursor.js';
 
 const CHAIN_ID = 'twilight-test';
 const ADDR_A = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -150,6 +152,47 @@ describe('Operator signing evidence projection', () => {
     assert.equal(p.evidence[0].slotId, 9n);
   });
 
+  // #59 regression: operator-signing reads consensus windows (temporal-map output) via classifySignature.
+  // The fixed CLI caps endHeight at min(max(BlockSignature.sourceBlockHeight), temporal-map cursor), so it
+  // never attributes a height whose window is not built yet. Without the cap a forward run would leave that
+  // height permanently mis-attributed as noConsensusWindow (the existing test above only "recovers" because
+  // it re-runs the SAME range, which a forward cursor never does). This mirrors the CLI cap and asserts the
+  // fixed behavior: the height is DEFERRED until temporal-map catches up, then attributed correctly.
+  it('#59: capping endHeight at the temporal-map cursor defers a height until its window exists, then attributes it', async () => {
+    // mirrors the CLI: endHeight = min(requestedEnd, temporal-map cursor)
+    const cappedEnd = (requestedEnd, temporalMapCursor) =>
+      (requestedEnd < temporalMapCursor ? requestedEnd : temporalMapCursor);
+
+    const p = new MockOperatorSigningPrisma();
+    // Signature at source 11 (committed 10) that SHOULD attribute to slot 1 once temporal-map builds the window.
+    p.seedSignature(sig({ sourceBlockHeight: 11n, committedBlockHeight: 10n, address: ADDR_A }));
+
+    // Temporal-map is BEHIND (cursor 9): endHeight caps to 9 < startHeight 11, so the fixed CLI runs nothing.
+    // Height 11 is DEFERRED — never prematurely mis-attributed as noConsensusWindow.
+    const behindEnd = cappedEnd(11n, 9n);
+    if (behindEnd >= 11n) {
+      await projectOperatorSigningEvidenceRange({ prisma: p, chainId: CHAIN_ID, startHeight: 11n, endHeight: behindEnd });
+    }
+    assert.equal(p.evidence.length, 0, 'height 11 deferred while temporal-map (consensus windows) is behind');
+
+    // Temporal-map catches up (cursor 11) and its window now exists; the cap now allows height 11.
+    p.seedWindow({ id: 7n, slotId: 1n, operatorAddress: OPERATOR_A, consensusAddress: ADDR_A, consensusPower: 42n, from: 5n });
+    await projectOperatorSigningEvidenceRange({
+      prisma: p,
+      chainId: CHAIN_ID,
+      startHeight: 11n,
+      endHeight: cappedEnd(11n, 11n),
+    });
+
+    const at11 = p.evidence.find((e) => e.sourceBlockHeight === 11n);
+    assert.equal(
+      at11.attributionStatus,
+      OPERATOR_SIGNING_ATTRIBUTION_STATUS.attributed,
+      'attributed once temporal-map caught up — the cap deferred it until the window existed',
+    );
+    assert.equal(at11.slotId, 1n);
+  });
+
   it('reset deletes only operator signing evidence rows and preserves upstream projections', async () => {
     const p = new MockOperatorSigningPrisma();
     p.evidence.push({ signatureKey: 's' });
@@ -180,6 +223,38 @@ describe('Operator signing evidence projection', () => {
     assert.equal(/uptime|liveness|missed|proposer/i.test(src), false);
     assert.equal(src.includes('api/'), false);
     assert.equal(src.includes('web'), false);
+  });
+});
+
+// #59 shared cap mechanism: the three downstream window-consumers cap endHeight at temporal-map's cursor
+// via this helper. A missing upstream cursor reads as 0n (stalls the downstream until the upstream runs).
+describe('readProjectionCursorHeight (#59 shared upstream cap)', () => {
+  const reader = (heights) => ({
+    projectionCursor: {
+      async findFirst(args) {
+        const name = args?.where?.projectionName;
+        return name in heights ? { lastProjectedHeight: heights[name] } : null;
+      },
+    },
+  });
+
+  it('returns the named upstream projection cursor height', async () => {
+    const h = await readProjectionCursorHeight(
+      reader({ [CORESLOT_TEMPORAL_MAP_PROJECTION]: 123n }),
+      CORESLOT_TEMPORAL_MAP_PROJECTION,
+      CHAIN_ID,
+    );
+    assert.equal(h, 123n);
+  });
+
+  it('returns 0n when the upstream has never run (stalls the downstream)', async () => {
+    const h = await readProjectionCursorHeight(reader({}), CORESLOT_TEMPORAL_MAP_PROJECTION, CHAIN_ID);
+    assert.equal(h, 0n);
+  });
+
+  it('coerces string/number cursor heights to bigint', async () => {
+    assert.equal(await readProjectionCursorHeight(reader({ x: '77' }), 'x', CHAIN_ID), 77n);
+    assert.equal(await readProjectionCursorHeight(reader({ x: 88 }), 'x', CHAIN_ID), 88n);
   });
 });
 

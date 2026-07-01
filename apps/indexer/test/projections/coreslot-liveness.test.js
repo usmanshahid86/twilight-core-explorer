@@ -81,6 +81,37 @@ describe('CoreSlot liveness projection (8c-1)', () => {
     assert.equal(failureKinds(p).includes('liveness_absent_count_mismatch'), true);
   });
 
+  // #59 regression: liveness reads expected-signer windows from temporal-map via findActiveCoreSlotWindows-
+  // AtHeight. The fixed CLI caps endHeight at min(max(evidence.sourceBlockHeight), temporal-map cursor), so
+  // it never evaluates a committed height whose windows are not built yet (which would silently record "no
+  // expected signers" and advance past it). Mirrors the CLI cap: deferred until temporal-map catches up.
+  it('#59: capping endHeight at the temporal-map cursor defers evaluation until expected-signer windows exist', async () => {
+    const cappedEnd = (requestedEnd, temporalMapCursor) =>
+      (requestedEnd < temporalMapCursor ? requestedEnd : temporalMapCursor);
+
+    const p = new MockLivenessPrisma();
+    p.seedEvidence(signedRow({ slot: 1, source: 11n, committed: 10n }));
+
+    // Temporal-map BEHIND (cursor 9): endHeight caps to 9 < startHeight 11 -> deferred, no under-report.
+    const behindEnd = cappedEnd(11n, 9n);
+    if (behindEnd >= 11n) {
+      await projectCoreSlotLivenessRange({ prisma: p, chainId: CHAIN_ID, startHeight: 11n, endHeight: behindEnd });
+    }
+    assert.equal(p.liveness.length, 0, 'deferred while temporal-map (expected-signer windows) is behind');
+
+    // Temporal-map catches up (cursor 11) and its window exists -> slot 1 is evaluated as signed.
+    p.seedWindow({ id: 1n, slotId: 1n, consensusAddress: ADDR(1), from: 1n });
+    await projectCoreSlotLivenessRange({
+      prisma: p,
+      chainId: CHAIN_ID,
+      startHeight: 11n,
+      endHeight: cappedEnd(11n, 11n),
+    });
+
+    const slot1 = p.liveness.find((r) => r.slotId === 1n);
+    assert.equal(slot1.status, CORESLOT_LIVENESS_STATUS.signed, 'evaluated once temporal-map caught up');
+  });
+
   it('duplicate expected window for a slot -> ProjectionFailure', async () => {
     const p = new MockLivenessPrisma();
     p.seedWindow({ id: 1n, slotId: 1n, consensusAddress: ADDR(1), from: 1n });

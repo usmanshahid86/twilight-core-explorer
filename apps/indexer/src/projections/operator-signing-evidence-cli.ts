@@ -1,6 +1,10 @@
 import { createPrismaClient } from '@twilight-explorer/db';
 import { withProjectionAdvisoryLock } from './advisory-lock.js';
-import { getOrCreateProjectionCursor } from './cursor.js';
+import {
+  getOrCreateProjectionCursor,
+  readProjectionCursorHeight,
+  type ProjectionCursorReadPrisma,
+} from './cursor.js';
 import {
   projectOperatorSigningEvidenceRange,
   type OperatorSigningEvidenceProjectionPrisma,
@@ -9,7 +13,10 @@ import {
   resetOperatorSigningEvidenceProjection,
   type ResetOperatorSigningEvidenceProjectionPrisma,
 } from './reset-operator-signing-evidence.js';
-import { OPERATOR_SIGNING_EVIDENCE_PROJECTION } from './types.js';
+import {
+  CORESLOT_TEMPORAL_MAP_PROJECTION,
+  OPERATOR_SIGNING_EVIDENCE_PROJECTION,
+} from './types.js';
 
 declare const process: {
   env: Record<string, string | undefined>;
@@ -39,8 +46,24 @@ async function main(): Promise<void> {
       );
       const startHeight = parseOptionalHeight(process.env.START_HEIGHT)
         ?? parseHeight(asRecord(cursor).lastProjectedHeight) + 1n;
-      const endHeight = parseOptionalHeight(process.env.END_HEIGHT)
+      const requestedEnd = parseOptionalHeight(process.env.END_HEIGHT)
         ?? await getMaxSourceBlockHeight(prisma as unknown as BlockSignatureAggregatePrisma);
+      // ISSUE #59: attribution reads consensus windows produced by temporal-map (a SPARSE upstream). The
+      // dense BlockSignature cap above does not know whether temporal-map is behind, so also cap at
+      // temporal-map's cursor: never attribute a height whose window is not built yet (that would silently
+      // mis-attribute it as noConsensusWindow, then advance our cursor past it — a permanent gap).
+      const temporalMapCursor = await readProjectionCursorHeight(
+        prisma as unknown as ProjectionCursorReadPrisma,
+        CORESLOT_TEMPORAL_MAP_PROJECTION,
+        chainId,
+      );
+      const endHeight = requestedEnd < temporalMapCursor ? requestedEnd : temporalMapCursor;
+      if (temporalMapCursor < requestedEnd) {
+        console.warn(
+          `[operator-signing-evidence] endHeight capped ${requestedEnd} -> ${temporalMapCursor}: `
+          + 'temporal-map (consensus windows) is behind; deferring until its windows are built.',
+        );
+      }
 
       if (endHeight < startHeight) return;
 
