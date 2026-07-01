@@ -1,6 +1,10 @@
 import { createPrismaClient } from '@twilight-explorer/db';
 import { withProjectionAdvisoryLock } from './advisory-lock.js';
-import { getOrCreateProjectionCursor } from './cursor.js';
+import {
+  getOrCreateProjectionCursor,
+  type ProjectionCursorReadPrisma,
+} from './cursor.js';
+import { capEndHeightAtTemporalMapCursor } from './coreslot-temporal-map.js';
 import {
   projectProposerAttributionRange,
   type ProposerAttributionProjectionPrisma,
@@ -35,8 +39,23 @@ async function main(): Promise<void> {
       const cursor = await getOrCreateProjectionCursor(prisma, PROPOSER_ATTRIBUTION_PROJECTION, chainId);
       const startHeight = parseOptionalHeight(process.env.START_HEIGHT)
         ?? parseHeight(asRecord(cursor).lastProjectedHeight) + 1n;
-      const endHeight = parseOptionalHeight(process.env.END_HEIGHT)
+      const requestedEnd = parseOptionalHeight(process.env.END_HEIGHT)
         ?? await getMaxBlockHeight(prisma as unknown as BlockAggregatePrisma);
+      // ISSUE #59: proposer attribution reads consensus windows from temporal-map (a SPARSE upstream) via
+      // findConsensusWindowAtHeight(block.height). Cap endHeight at temporal-map's cursor so we never
+      // attribute a block whose window is not built yet (which would silently drop the proposer's slot/
+      // operator and advance our cursor past it — a permanent gap).
+      const { endHeight, temporalMapCursor } = await capEndHeightAtTemporalMapCursor(
+        prisma as unknown as ProjectionCursorReadPrisma,
+        chainId,
+        requestedEnd,
+      );
+      if (temporalMapCursor < requestedEnd) {
+        console.warn(
+          `[proposer-attribution] endHeight capped ${requestedEnd} -> ${temporalMapCursor}: `
+          + 'temporal-map (consensus windows) is behind; deferring until its windows are built.',
+        );
+      }
 
       if (endHeight < startHeight) return;
 

@@ -8,6 +8,7 @@ import {
 } from '../../dist/projections/types.js';
 import {
   VALIDATOR_SET_MEMBERSHIP_OFFSET,
+  capEndHeightAtTemporalMapCursor,
   findConsensusWindowAtHeight,
   findSlotConsensusWindowAtHeight,
   minUpstreamCursorHeight,
@@ -984,5 +985,59 @@ describe('temporal-map honors a capped endHeight without skipping windows (#56)'
       prisma.windows[0].effectiveFromHeight,
       100n + VALIDATOR_SET_MEMBERSHIP_OFFSET,
     );
+  });
+});
+
+// #59: the shared cap helper the three downstream window-consumers use. Baking the temporal-map projection
+// name in here (vs passing it per call site) is what removes the "wrong upstream" regression risk, so these
+// cases assert it reads temporal-map specifically, caps DOWN only, and stalls (0n) when the cursor is absent.
+describe('capEndHeightAtTemporalMapCursor (#59 shared cap)', () => {
+  const reader = (heights) => ({
+    projectionCursor: {
+      async findFirst(args) {
+        const name = args?.where?.projectionName;
+        return name in heights ? { lastProjectedHeight: heights[name] } : null;
+      },
+    },
+  });
+
+  it('does not over-cap when the request is below the temporal-map cursor', async () => {
+    const { endHeight, temporalMapCursor } = await capEndHeightAtTemporalMapCursor(
+      reader({ [CORESLOT_TEMPORAL_MAP_PROJECTION]: 100n }),
+      CHAIN_ID,
+      50n,
+    );
+    assert.equal(endHeight, 50n);
+    assert.equal(temporalMapCursor, 100n);
+  });
+
+  it('caps DOWN to the temporal-map cursor when the request is beyond it', async () => {
+    const { endHeight, temporalMapCursor } = await capEndHeightAtTemporalMapCursor(
+      reader({ [CORESLOT_TEMPORAL_MAP_PROJECTION]: 50n }),
+      CHAIN_ID,
+      100n,
+    );
+    assert.equal(endHeight, 50n);
+    assert.equal(temporalMapCursor, 50n);
+  });
+
+  it('returns 0n (stalls the downstream) when temporal-map has never run', async () => {
+    const { endHeight, temporalMapCursor } = await capEndHeightAtTemporalMapCursor(
+      reader({}),
+      CHAIN_ID,
+      100n,
+    );
+    assert.equal(endHeight, 0n);
+    assert.equal(temporalMapCursor, 0n);
+  });
+
+  it('reads the TEMPORAL-MAP cursor specifically (a wrong projection name would read 0n)', async () => {
+    // Only temporal-map has a cursor here; any other name resolves to null -> 0n -> endHeight 0n.
+    const { endHeight } = await capEndHeightAtTemporalMapCursor(
+      reader({ [CORESLOT_TEMPORAL_MAP_PROJECTION]: 77n, coreslot_liveness_v1: 999n }),
+      CHAIN_ID,
+      1000n,
+    );
+    assert.equal(endHeight, 77n);
   });
 });

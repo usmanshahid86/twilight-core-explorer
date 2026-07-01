@@ -57,6 +57,37 @@ describe('Proposer attribution projection', () => {
     assert.equal(p.failures.length, 0);
   });
 
+  // #59 regression: proposer attribution reads consensus windows from temporal-map via
+  // findConsensusWindowAtHeight(block.height). The fixed CLI caps endHeight at min(maxBlock, temporal-map
+  // cursor), so it never attributes a block whose window is not built yet (which would silently record
+  // noConsensusWindow and advance past it). Mirrors the CLI cap: deferred until temporal-map catches up.
+  it('#59: capping endHeight at the temporal-map cursor defers a block until its window exists, then attributes it', async () => {
+    const cappedEnd = (requestedEnd, temporalMapCursor) =>
+      (requestedEnd < temporalMapCursor ? requestedEnd : temporalMapCursor);
+
+    const p = new MockProposerPrisma();
+    p.seedBlock({ height: 11n, proposerAddress: UPPER('a') });
+
+    // Temporal-map BEHIND (cursor 9): endHeight caps to 9 < startHeight 11 -> deferred, no mis-attribution.
+    const behindEnd = cappedEnd(11n, 9n);
+    if (behindEnd >= 11n) {
+      await projectProposerAttributionRange({ prisma: p, chainId: CHAIN_ID, startHeight: 11n, endHeight: behindEnd });
+    }
+    assert.equal(p.attributions.length, 0, 'deferred while temporal-map (consensus windows) is behind');
+
+    // Temporal-map catches up (cursor 11) and its window exists -> block 11 attributed to slot 1.
+    p.seedWindow({ id: 7n, slotId: 1n, operatorAddress: OPERATOR, consensusAddress: LOWER('a'), from: 5n });
+    await projectProposerAttributionRange({
+      prisma: p,
+      chainId: CHAIN_ID,
+      startHeight: 11n,
+      endHeight: cappedEnd(11n, 11n),
+    });
+
+    assert.equal(p.attributions[0].attributionStatus, PROPOSER_ATTRIBUTION_STATUS.attributed, 'attributed once temporal-map caught up');
+    assert.equal(p.attributions[0].slotId, 1n);
+  });
+
   it('writes no_consensus_window when no window covers the height', async () => {
     const p = new MockProposerPrisma();
     p.seedBlock({ height: 11n, proposerAddress: UPPER('a') });

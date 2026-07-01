@@ -6,6 +6,34 @@ export interface ProjectionCursorPrisma {
   };
 }
 
+export interface ProjectionCursorReadPrisma {
+  projectionCursor: {
+    findFirst(args: unknown): Promise<{ lastProjectedHeight: unknown } | null>;
+  };
+}
+
+// Read another projection's cursor height (its lastProjectedHeight), or 0n if it has never run. Downstream
+// projections use this to cap their endHeight at an UPSTREAM projection's progress, so they never process /
+// attribute a height whose upstream rows (e.g. consensus windows produced by temporal-map) do not exist yet.
+// That is the #56 / #59 bug class: outrun the upstream -> emit nothing / mis-attribute -> advance the cursor
+// past it -> a permanent, silent gap. A missing upstream cursor reads as 0n, which stalls the downstream
+// until the upstream has run.
+export async function readProjectionCursorHeight(
+  prisma: ProjectionCursorReadPrisma,
+  projectionName: string,
+  chainId: string,
+): Promise<bigint> {
+  const row = await prisma.projectionCursor.findFirst({ where: { projectionName, chainId } });
+  return toCursorHeight(row?.lastProjectedHeight);
+}
+
+function toCursorHeight(value: unknown): bigint {
+  if (typeof value === 'bigint') return value;
+  if (typeof value === 'number') return BigInt(value);
+  if (typeof value === 'string' && value.trim()) return BigInt(value);
+  return 0n;
+}
+
 export async function getOrCreateProjectionCursor(
   prisma: ProjectionCursorPrisma,
   projectionName: string,

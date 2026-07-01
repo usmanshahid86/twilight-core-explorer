@@ -158,7 +158,8 @@ export async function projectBlockSignaturesHeight(
         return { height, ...counters };
       }
 
-      const committedBlockHeight = resolveCommittedBlockHeight(height, lastCommit);
+      const derivedCommittedBlockHeight = height > 0n ? height - 1n : 0n;
+      let committedBlockHeight = resolveCommittedBlockHeight(height, lastCommit);
       if (lastCommit.hasInvalidHeight) {
         await createFailure(tx, {
           sourceHeight: height,
@@ -167,6 +168,24 @@ export async function projectBlockSignaturesHeight(
           error: `Block ${height} last_commit.height is invalid; used sourceBlockHeight - 1 fallback.`,
         });
         counters.failuresCreated += 1;
+      } else if (
+        lastCommit.height !== undefined
+        && lastCommit.height !== derivedCommittedBlockHeight
+      ) {
+        // ISSUE #59: CometBFT invariant — block H's last_commit is always for H-1. A parseable but
+        // inconsistent last_commit.height is inconsistent history: flag it and use the protocol-derived
+        // value, NEVER the raw one. Trusting a raw height > sourceBlockHeight would let the downstream
+        // window-attribution projections query a committed height beyond temporal-map's cursor and silently
+        // mis-classify it — their source-axis cap bounds source height, not committed height.
+        await createFailure(tx, {
+          sourceHeight: height,
+          failureKind: 'inconsistent_committed_height',
+          rawEventJson: lastCommit.raw,
+          error: `Block ${height} last_commit.height=${lastCommit.height} != sourceBlockHeight-1 `
+            + `(${derivedCommittedBlockHeight}); used the derived value.`,
+        });
+        counters.failuresCreated += 1;
+        committedBlockHeight = derivedCommittedBlockHeight;
       }
 
       if (!lastCommit.signatures || lastCommit.signatures.length === 0) {

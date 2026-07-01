@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto';
 import {
   haltProjectionCursorError,
+  readProjectionCursorHeight,
   updateProjectionCursorSuccess,
   type ProjectionCursorPrisma,
+  type ProjectionCursorReadPrisma,
 } from './cursor.js';
 import type { ChainClient, GenesisSource } from '@twilight-explorer/chain-client';
 import {
@@ -45,6 +47,26 @@ function toCursorBigint(value: unknown): bigint {
   if (typeof value === 'number') return BigInt(value);
   if (typeof value === 'string' && value.trim()) return BigInt(value);
   return 0n;
+}
+
+// ISSUE #59: the downstream window-consumers (operator-signing-evidence, coreslot-liveness,
+// proposer-attribution) attribute signatures/proposers using the consensus windows THIS projection builds,
+// so they must not process a height whose window is not built yet. They cap endHeight at temporal-map's
+// cursor via this helper. Baking the temporal-map projection name in here (rather than passing it at each
+// call site) removes the "wrong upstream" regression risk. Returns the raw cursor too so callers can log
+// when they capped. A missing temporal-map cursor -> 0n -> endHeight 0n -> the caller's no-op guard fires.
+export async function capEndHeightAtTemporalMapCursor(
+  prisma: ProjectionCursorReadPrisma,
+  chainId: string,
+  requestedEnd: bigint,
+): Promise<{ endHeight: bigint; temporalMapCursor: bigint }> {
+  const temporalMapCursor = await readProjectionCursorHeight(
+    prisma,
+    CORESLOT_TEMPORAL_MAP_PROJECTION,
+    chainId,
+  );
+  const endHeight = requestedEnd < temporalMapCursor ? requestedEnd : temporalMapCursor;
+  return { endHeight, temporalMapCursor };
 }
 
 const ACTIVE_STATUS = 'ACTIVE';
