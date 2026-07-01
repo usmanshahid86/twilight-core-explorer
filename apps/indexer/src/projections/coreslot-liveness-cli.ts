@@ -2,9 +2,9 @@ import { createPrismaClient } from '@twilight-explorer/db';
 import { withProjectionAdvisoryLock } from './advisory-lock.js';
 import {
   getOrCreateProjectionCursor,
-  readProjectionCursorHeight,
   type ProjectionCursorReadPrisma,
 } from './cursor.js';
+import { capEndHeightAtTemporalMapCursor } from './coreslot-temporal-map.js';
 import {
   projectCoreSlotLivenessRange,
   type CoreSlotLivenessProjectionPrisma,
@@ -13,10 +13,7 @@ import {
   resetCoreSlotLivenessProjection,
   type ResetCoreSlotLivenessProjectionPrisma,
 } from './reset-coreslot-liveness.js';
-import {
-  CORESLOT_LIVENESS_PROJECTION,
-  CORESLOT_TEMPORAL_MAP_PROJECTION,
-} from './types.js';
+import { CORESLOT_LIVENESS_PROJECTION } from './types.js';
 
 declare const process: {
   env: Record<string, string | undefined>;
@@ -52,12 +49,11 @@ async function main(): Promise<void> {
       // via findActiveCoreSlotWindowsAtHeight. Cap endHeight at temporal-map's cursor so we never evaluate a
       // committed height whose windows are not built yet (that would silently record "no expected signers"
       // and advance our cursor past it — a permanent under-report).
-      const temporalMapCursor = await readProjectionCursorHeight(
+      const { endHeight, temporalMapCursor } = await capEndHeightAtTemporalMapCursor(
         prisma as unknown as ProjectionCursorReadPrisma,
-        CORESLOT_TEMPORAL_MAP_PROJECTION,
         chainId,
+        requestedEnd,
       );
-      const endHeight = requestedEnd < temporalMapCursor ? requestedEnd : temporalMapCursor;
       if (temporalMapCursor < requestedEnd) {
         console.warn(
           `[coreslot-liveness] endHeight capped ${requestedEnd} -> ${temporalMapCursor}: `

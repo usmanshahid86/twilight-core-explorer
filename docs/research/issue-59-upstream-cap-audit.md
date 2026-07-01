@@ -41,12 +41,26 @@ resetting the **whole** liveness chain, not just temporal-map. Reproduced end-to
 
 ## Fix
 
-All three cap `endHeight` at the temporal-map cursor via the shared `readProjectionCursorHeight`
-helper (`cursor.ts`): `endHeight = min(existing cap, temporal-map cursor)`. A missing upstream cursor
-reads as `0n`, which stalls the downstream until the upstream has run. The cap is conservative on the
-`sourceBlockHeight` axis (attribution uses `committedBlockHeight ≈ source − 1`, and windows are effective
-at `activate + 2`), so capping at the temporal-map cursor never over-runs. In steady state the temporal-map
-cursor equals `maxBlock`, so there is no lag.
+All three cap `endHeight` at the temporal-map cursor via `capEndHeightAtTemporalMapCursor`
+(`coreslot-temporal-map.ts`, built on the shared `readProjectionCursorHeight` in `cursor.ts`):
+`endHeight = min(existing cap, temporal-map cursor)`. A missing upstream cursor reads as `0n`, which stalls
+the downstream until the upstream has run. Baking the temporal-map projection name into that helper removes
+the "wrong upstream" risk from the three call sites. The cap is conservative on the `sourceBlockHeight` axis
+(attribution uses `committedBlockHeight`, and windows are effective at `activate + 2`), so capping at the
+temporal-map cursor never over-runs. In steady state the temporal-map cursor equals `maxBlock`, so there is
+no lag.
+
+### Airtight committed-height guarantee (Codex-review follow-up)
+
+The source-axis cap is only sound if `committedBlockHeight ≤ sourceBlockHeight`. A code review found that
+`block-signatures` previously trusted a raw `last_commit.height` verbatim (unbounded), so a parseable but
+**inconsistent** height (`> sourceBlockHeight`) could still push a consumer past temporal-map. Fixed at the
+root: `block-signatures` now enforces the CometBFT invariant that block *H*'s `last_commit` is for *H − 1* —
+a parseable `last_commit.height ≠ H − 1` is recorded as an `inconsistent_committed_height` `ProjectionFailure`
+and the protocol-derived `H − 1` is used instead of the raw value (mirroring the existing
+unparseable-`invalid_height` path). This makes `committed ≤ source` structurally guaranteed, so the cap is
+airtight rather than assumption-bound — and it closes a pre-existing violation of the "inconsistent history →
+`ProjectionFailure`, never a guessed value" invariant.
 
 ## Invariant for future work
 

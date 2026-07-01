@@ -269,6 +269,7 @@ export type ProjectionFailureKind =
   | 'invalid_signature_payload'
   | 'invalid_validator_address'
   | 'invalid_height'
+  | 'inconsistent_committed_height'
   | 'unknown_block_signature_shape'
   | 'genesis_unavailable'
   | 'genesis_coreslot_malformed'
