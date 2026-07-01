@@ -46,6 +46,8 @@ describe('Block signature projection', () => {
     p.seedBlock(120n, raw);
     await projectBlockSignaturesHeight({ prisma: p, chainId: CHAIN_ID, height: 120n });
     assert.equal(p.signatures[0].committedBlockHeight, 119n);
+    // #59: an ABSENT height is the invalid_height fallback path, NOT an inconsistency — must not double-flag.
+    assert.equal(failureKinds(p).includes('inconsistent_committed_height'), false);
   });
 
   it('normalizes validator_address to lowercase 40-character hex', async () => {
@@ -172,6 +174,15 @@ describe('Block signature projection', () => {
     p.seedBlock(119n, rawBlock({ sourceHeight: 119n, committedHeight: 130n }));
     await projectBlockSignaturesHeight({ prisma: p, chainId: CHAIN_ID, height: 119n });
     // committed must be the derived 118, NOT the bogus raw 130 -> committed <= source is now guaranteed.
+    assert.equal(p.signatures[0].committedBlockHeight, 118n);
+    assert.ok(failureKinds(p).includes('inconsistent_committed_height'));
+  });
+
+  it('#59: a low/stale last_commit.height (< N-1) is also flagged and rewritten to N-1', async () => {
+    const p = new MockBlockSignaturesPrisma();
+    // 50 in block 119 is inconsistent the other direction (should be 118); still flagged + derived.
+    p.seedBlock(119n, rawBlock({ sourceHeight: 119n, committedHeight: 50n }));
+    await projectBlockSignaturesHeight({ prisma: p, chainId: CHAIN_ID, height: 119n });
     assert.equal(p.signatures[0].committedBlockHeight, 118n);
     assert.ok(failureKinds(p).includes('inconsistent_committed_height'));
   });
