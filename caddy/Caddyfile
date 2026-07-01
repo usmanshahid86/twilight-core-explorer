@@ -1,0 +1,33 @@
+# Explorer box reverse proxy. Cloudflare (orange cloud) fronts this; Caddy serves origin TLS with a
+# self-signed cert (`tls internal`), accepted by Cloudflare SSL mode "Full". All one origin, path-routed.
+explorer.twilightprotocol.xyz {
+    encode gzip
+    tls internal
+
+    # API docs: static Scalar UI + the committed OpenAPI spec, both served by Caddy (so they bypass the
+    # API's strict CSP; same-origin means Scalar "try it out" reaches /api/v1/* without CORS).
+    handle /docs* {
+        root * /srv/docs
+        rewrite * /index.html
+        file_server
+    }
+
+    # Machine API + OpenAPI spec (/openapi.json) + health probes -> backend. NOTE: only these real backend
+    # prefixes; the web app has its OWN /api diagnostics PAGE, and all its data routes live under /api/v1/,
+    # so nothing else is captured.
+    @api path /api/v1/* /openapi.json /health/*
+    handle @api {
+        reverse_proxy api:8080
+    }
+
+    # Everything else -> the Next.js web app (incl. its /api page and all other routes).
+    handle {
+        reverse_proxy web:3000
+    }
+}
+
+# Root: reserved for a future landing page — redirect to the explorer for now.
+twilightprotocol.xyz {
+    tls internal
+    redir https://explorer.twilightprotocol.xyz{uri}
+}

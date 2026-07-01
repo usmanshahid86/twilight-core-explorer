@@ -137,5 +137,26 @@ services:
       - "${WEB_PORT:-3000}:3000"
     restart: unless-stopped
 
+  # Reverse proxy + origin TLS in front of web + api. Cloudflare (orange cloud) terminates the public edge
+  # cert; Caddy terminates the CF→origin hop with a self-signed cert (`tls internal` in caddy/Caddyfile),
+  # accepted by Cloudflare SSL mode "Full". Path-routes ONE hostname: /api/* → api, everything else → web.
+  # Only 443 is published (the SG allows it from Cloudflare IP ranges only); 3000/8080 stay host-internal.
+  caddy:
+    image: caddy:2
+    container_name: twilight-explorer-devnet-caddy
+    depends_on:
+      - web
+      - api
+    ports:
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy/docs:/srv/docs:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+
 volumes:
   devnet_pgdata:
+  caddy_data:
+  caddy_config:

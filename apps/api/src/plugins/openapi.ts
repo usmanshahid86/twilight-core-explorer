@@ -26,6 +26,11 @@ export async function registerOpenapi(app: FastifyInstance, config: ApiConfig): 
     },
   });
 
+  // Serve the generated OpenAPI document in ALL environments. It is pure JSON, so the strict production
+  // CSP is irrelevant to it — unlike the bundled Swagger UI below, which needs inline scripts and stays
+  // non-prod. The static Scalar docs page (served by Caddy) and programmatic consumers load this.
+  app.get('/openapi.json', { schema: { hide: true } }, async () => app.swagger());
+
   if (!config.isProduction) {
     await app.register(swaggerUi, { routePrefix: '/docs' });
   }
