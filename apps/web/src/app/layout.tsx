@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next';
-import { Fira_Code, Instrument_Sans } from 'next/font/google';
+import { Inter, Instrument_Serif, JetBrains_Mono } from 'next/font/google';
 import type { ReactNode } from 'react';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
@@ -9,18 +9,22 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { Providers } from './providers';
 import './globals.css';
 
-// `dark` (the mint-on-ink Control Room) is the default theme; `light` is its paper counterpart.
+// `dark` (gold on near-black, the twilight.org auction look) is the default theme; `light` is its
+// paper counterpart.
 const UI_THEME = (process.env.NEXT_PUBLIC_UI_THEME ?? 'dark').toLowerCase();
 const theme: 'dark' | 'light' = UI_THEME === 'light' ? 'light' : 'dark';
 
 // Faces are bound to UNIQUE css vars (not the role names). globals.css maps the semantic roles
-// (--font-sans / --font-serif / --font-mono / --font-metric) onto these. Control-room pair:
-// Instrument Sans for UI + headings, Fira Code for every number, hash, address and caption.
-const instrumentSans = Instrument_Sans({
+// (--font-sans / --font-serif / --font-mono / --font-metric) onto these. Brand trio from the
+// reference: Instrument Serif for display headings, Inter for UI copy, JetBrains Mono for every
+// number, hash, address and caption.
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
+const instrumentSerif = Instrument_Serif({
   subsets: ['latin'],
-  variable: '--font-instrument-sans',
+  weight: '400',
+  variable: '--font-instrument-serif',
 });
-const firaCode = Fira_Code({ subsets: ['latin'], variable: '--font-fira-code' });
+const jetbrainsMono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-jetbrains-mono' });
 
 export const metadata: Metadata = {
   // `%s` is filled by each route's `metadata.title`; routes without one fall back to `default`.
@@ -39,7 +43,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html
       lang="en"
       data-theme={theme}
-      className={`${instrumentSans.variable} ${firaCode.variable}`}
+      className={`${inter.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable}`}
     >
       <body className="bg-background text-text">
         {/* Apply the persisted brand theme before paint (no FOUC); overrides SSR defaults.

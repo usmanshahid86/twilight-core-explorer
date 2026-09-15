@@ -2,7 +2,20 @@
 // status string is always what gets displayed; the tone is purely presentational.
 export type BadgeTone = 'neutral' | 'success' | 'warning' | 'danger' | 'info';
 
-const SUCCESS = ['healthy', 'active', 'ok', 'up', 'synced', 'live', 'available', 'none', 'low'];
+const SUCCESS = [
+  'healthy',
+  'active',
+  'ok',
+  'up',
+  'synced',
+  'live',
+  'available',
+  'none',
+  'low',
+  // tx execution outcome (/txs list + detail): a succeeded tx reads green, like the reference chips
+  'success',
+  'succeeded',
+];
 const WARNING = ['degraded', 'warning', 'lagging', 'stale', 'incomplete', 'partial', 'medium'];
 const DANGER = [
   'down',

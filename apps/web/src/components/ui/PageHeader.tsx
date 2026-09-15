@@ -42,7 +42,7 @@ export function PageHeader({
           <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
             {eyebrow}
           </div>
-          <h1 className="font-serif text-3xl leading-tight tracking-tight text-text">{title}</h1>
+          <h1 className="font-serif text-4xl leading-tight tracking-[-0.01em] text-text">{title}</h1>
           {sub ? <p className="max-w-xl text-sm leading-relaxed text-text-muted">{sub}</p> : null}
         </div>
       </div>

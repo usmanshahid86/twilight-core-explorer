@@ -35,7 +35,7 @@ export function NodeRewardsPage() {
   if (slotId === null) return <LinkPointer />;
   return (
     <div className="flex flex-col gap-7">
-      <h1 className="text-4xl font-semibold leading-[1.1] tracking-[-0.025em]">Rewards</h1>
+      <h1 className="font-serif text-5xl leading-[1.05] tracking-[-0.01em]">Rewards</h1>
       <EntitlementsSection filter={{ slotId }} />
     </div>
   );
@@ -47,7 +47,7 @@ export function NodeSettlementsPage() {
   if (slotId === null) return <LinkPointer />;
   return (
     <div className="flex flex-col gap-7">
-      <h1 className="text-4xl font-semibold leading-[1.1] tracking-[-0.025em]">Settlements</h1>
+      <h1 className="font-serif text-5xl leading-[1.05] tracking-[-0.01em]">Settlements</h1>
       <SettlementsStatusSection slotId={slotId} />
     </div>
   );

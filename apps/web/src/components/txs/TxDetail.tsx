@@ -136,7 +136,7 @@ export function TxDetail({ hash, tab: rawTab }: { hash: string; tab?: string | s
     return (
       <div className="flex flex-col gap-7">
         <BackLink />
-        <h1 className="text-4xl font-semibold leading-[1.1]">Transaction</h1>
+        <h1 className="font-serif text-5xl leading-[1.05] tracking-[-0.01em]">Transaction</h1>
         <ErrorState error={query.error} context="Transaction" />
       </div>
     );
@@ -171,7 +171,7 @@ export function TxDetail({ hash, tab: rawTab }: { hash: string; tab?: string | s
             {failed ? '✕ failed' : '✓ succeeded'} · block {formatHeight(t.height)} ·{' '}
             {formatRelativeTime(t.time)}
           </div>
-          <h1 className="text-4xl font-semibold leading-[1.1] tracking-[-0.025em]">
+          <h1 className="font-serif text-5xl leading-[1.05] tracking-[-0.01em]">
             {summarizeTxDetail(t.messages)}
             {failed && t.code != null ? (
               <>

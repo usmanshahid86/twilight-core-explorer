@@ -82,7 +82,7 @@ export function OperatorsDirectory() {
               <span
                 className={clsx(
                   'font-mono text-xs',
-                  statusTone(statusWord) === 'success' ? 'text-primary' : 'text-text-muted',
+                  statusTone(statusWord) === 'success' ? 'text-accent-green' : 'text-text-muted',
                 )}
               >
                 {statusWord ?? '—'}

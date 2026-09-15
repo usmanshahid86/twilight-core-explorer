@@ -4,8 +4,8 @@
 
 /*
   Theme bridge. Tailwind colors resolve via CSS variables, switched with `data-theme` on <html>.
-  Two themes only — `dark` (the default operator console) and `light` (its paper counterpart).
-  They share one voice and shape language; only the ground and palette depth differ.
+  Two themes only — `dark` (the Twilight auction look: gold on near-black, the default) and `light`
+  (its paper counterpart). They share one voice and shape language; only the ground differs.
 */
 
 :root {
@@ -13,124 +13,120 @@
      unique --font-* var). A theme repoints --font-serif (the display role used by headings) to change
      its heading voice; --font-sans (body) stays Inter across all themes. Fallbacks keep text rendering
      if a face fails to load. */
-  /* Control-room pair: Instrument Sans for UI + headings, Fira Code for every number, hash,
-     address, caption and label. Hierarchy comes from size/weight/tracking, not extra families. */
-  --font-serif: var(--font-instrument-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-sans: var(--font-instrument-sans), ui-sans-serif, system-ui, -apple-system, Segoe UI,
-    Roboto, sans-serif;
-  --font-mono: var(--font-fira-code), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-    'Fira Code', monospace;
+  /* Twilight brand pair (twilight.org auction reference): Instrument Serif for display headings,
+     Inter for UI copy, JetBrains Mono for every number, hash, address, caption and label. */
+  --font-serif: var(--font-instrument-serif), ui-serif, Georgia, 'Times New Roman', serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
+    sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    monospace;
   /* Hero-numeral role (KPI/stat values). Mono — operator honesty: heights and amounts
      stay monospaced so digits align and cannot be misread. */
-  --font-metric: var(--font-fira-code), ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+  --font-metric: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
 
-  /* KPI category legend. Every category hue except violet already exists as a per-theme --accent-*
-     (blue/green/red/gold), so the icon tone reuses those and tracks each theme's palette. Violet has
-     no accent, so it lives here in :root as a global fallback — constant across all themes. */
-  --accent-violet: 167 139 250;
+  /* KPI category legend. Every category hue except "violet" already exists as a per-theme --accent-*
+     (blue/green/red/gold), so the icon tone reuses those and tracks each theme's palette. The brand
+     palette has no violet: the coreslot category renders in a warm sand instead (constant across
+     themes; the token keeps its historical name so component classes stay stable). */
+  --accent-violet: 201 164 106;
 }
 
-/* Dark — the Control Room: mint on ink (primary deliverable of the control-room handoff).
-   Handoff hexes mapped onto the EXISTING variable names so every component class keeps working:
-   bg #0E1013 · bg-deep #0A0C0E (code/search/status strip → --background-secondary) ·
-   panel #14171B (→ --card) · line #22262C (→ --card-border/--border) · line-soft #1A1E23
-   (→ --card-hover, row dividers) · line-strong #2C3138 (→ --border-light) · mint #5EEAD4
-   (→ --primary/--accent-green: accent, healthy, links) · red #FB7185 · amber #FBBF24. */
+/* Dark — the Twilight auction reference: gold on near-black. Page #050505 · card #0A0A0C ·
+   raised #0E0E10 · hairline #1F1F23 / #2A2A2E · gold #E89E28 (primary, links, active tab, charts) ·
+   copper #D97E48 (secondary series) · green #18C37D (healthy/success) · red #FF4A4A.
+   No yellow: the warning tint IS the gold accent (state reads from its label, never hue alone). */
 [data-theme='dark'] {
-  --page: 14 16 19;
-  --background: 14 16 19;
-  --background-secondary: 10 12 14;
-  --background-tertiary: 34 38 44;
-  --background-primary: 10 12 14;
+  --page: 5 5 5;
+  --background: 5 5 5;
+  --background-secondary: 10 10 12;
+  --background-tertiary: 24 24 27;
+  --background-primary: 0 0 0;
 
-  --card: 20 23 27;
-  --card-hover: 26 30 35;
-  --card-border: 34 38 44;
+  --card: 10 10 12;
+  --card-hover: 14 14 16;
+  --card-border: 31 31 35;
 
-  --primary: 94 234 212;
-  --primary-light: 153 246 228;
-  --primary-dark: 45 212 191;
+  --primary: 232 158 40;
+  --primary-light: 246 180 108;
+  --primary-dark: 198 127 26;
 
-  --accent-blue: 125 211 252;
-  --accent-orange: 251 146 60;
-  /* No yellow in this product (user decision): warning-tinted UI renders in the theme mint;
-     the STATE still reads from its label (open/settled, degraded), never from hue alone. */
-  --accent-yellow: 94 234 212;
-  --accent-green: 94 234 212;
-  --accent-red: 251 113 133;
+  --accent-blue: 217 126 72;
+  --accent-orange: 198 127 26;
+  --accent-yellow: 232 158 40;
+  --accent-green: 24 195 125;
+  --accent-red: 255 74 74;
 
-  --accent-gold: 94 234 212;
-  --accent-gold-light: 153 246 228;
-  --accent-gold-dark: 45 212 191;
-  --accent-amber: 94 234 212;
-  --accent-burgundy: 19 41 37;
+  --accent-gold: 232 158 40;
+  --accent-gold-light: 246 180 108;
+  --accent-gold-dark: 198 127 26;
+  --accent-amber: 232 158 40;
+  --accent-burgundy: 63 29 29;
 
-  --text: 230 232 235;
-  --text-secondary: 195 200 206;
-  /* WCAG 1.4.3: ≈5.9:1 on the ink --background. */
-  --text-muted: 139 145 153;
+  --text: 249 250 251;
+  --text-secondary: 163 163 179;
+  /* WCAG 1.4.3: ≈5.6:1 on the near-black --background (the reference's #6B6B7A was 3.9:1). */
+  --text-muted: 138 138 152;
 
-  --border: 34 38 44;
-  --border-light: 44 49 56;
+  --border: 31 31 35;
+  --border-light: 42 42 46;
 
-  /* ruled-ledger shape language: tight radii (4/6/8/10 per handoff), hairlines over shadows */
-  --radius-lg: 0.375rem;
-  --radius-xl: 0.5rem;
-  --radius-2xl: 0.625rem;
-  --shadow-card: 0 0 0 1px rgba(255, 255, 255, 0.03);
-  --display-tracking: -0.025em;
+  /* reference shape language: 16px card corners, hairline border + a soft drop shadow */
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+  --shadow-card: 0 0 0 1px rgba(255, 255, 255, 0.02), 0 4px 24px rgba(0, 0, 0, 0.45);
+  --display-tracking: -0.01em;
   --card-border-width: 1px;
 }
 
-/* Light — the same console on paper. Picked automatically for first-time visitors whose OS prefers
-   light (see the pre-paint script in layout.tsx); always available from the toggle. All text/status
-   pairs are AA-verified against both --background and --card by theme-tokens.test.ts — keep them
-   passing when retuning. */
+/* Light — the same brand on paper. Picked automatically for first-time visitors whose OS prefers
+   light (see the pre-paint script in layout.tsx); always available from the toggle. Gold is carried
+   at text-safe depth (amber-800). All text/status pairs are AA-verified against both --background
+   and --card by theme-tokens.test.ts — keep them passing when retuning. */
 [data-theme='light'] {
-  --page: 246 248 248;
-  --background: 246 248 248;
-  --background-secondary: 238 241 241;
-  --background-tertiary: 224 230 230;
+  --page: 250 249 247;
+  --background: 250 249 247;
+  --background-secondary: 244 242 238;
+  --background-tertiary: 233 230 224;
   --background-primary: 255 255 255;
 
   --card: 255 255 255;
-  --card-hover: 242 246 245;
-  --card-border: 209 216 216;
+  --card-hover: 250 247 242;
+  --card-border: 226 222 214;
 
-  /* Ink-teal: the mint identity carried at text-safe depth. Status/brand text also sits on
-     10%-tint surfaces (badges, the lag banner) over this ground, which RAISES the effective
-     background — every pair below must clear AA on the tint blend too (guarded by
-     theme-tokens.test.ts). */
-  --primary: 13 110 100;
-  --primary-light: 17 94 89;
-  --primary-dark: 19 78 74;
+  /* Deep amber: the gold identity at ≈6.4:1 on white. Status/brand text also sits on 10%-tint
+     surfaces (badges, the lag banner) over this ground, which RAISES the effective background —
+     every pair below must clear AA on the tint blend too (guarded by theme-tokens.test.ts). */
+  --primary: 146 64 14;
+  --primary-light: 180 83 9;
+  --primary-dark: 120 53 15;
 
-  --accent-blue: 29 100 189;
+  --accent-blue: 154 82 30;
   --accent-orange: 180 83 9;
-  --accent-yellow: 13 110 100;
+  --accent-yellow: 146 64 14;
   --accent-green: 13 107 76;
   --accent-red: 185 28 28;
 
-  --accent-gold: 13 110 100;
-  --accent-gold-light: 17 94 89;
-  --accent-gold-dark: 19 78 74;
-  --accent-amber: 13 110 100;
-  --accent-burgundy: 222 238 235;
+  --accent-gold: 146 64 14;
+  --accent-gold-light: 180 83 9;
+  --accent-gold-dark: 120 53 15;
+  --accent-amber: 146 64 14;
+  --accent-burgundy: 250 236 220;
 
-  --text: 24 28 30;
-  --text-secondary: 62 70 74;
+  --text: 24 24 27;
+  --text-secondary: 63 63 70;
   /* WCAG 1.4.3: ≈5.7:1 on the --background. */
-  --text-muted: 92 101 106;
+  --text-muted: 92 92 102;
 
-  --border: 209 216 216;
-  --border-light: 187 197 197;
+  --border: 226 222 214;
+  --border-light: 205 200 190;
 
-  /* the ledger shape language on paper: hairlines, tight radii */
-  --radius-lg: 0.375rem;
-  --radius-xl: 0.5rem;
-  --radius-2xl: 0.625rem;
-  --shadow-card: 0 0 0 1px rgba(20, 32, 30, 0.05);
-  --display-tracking: -0.025em;
+  /* the same corner language on paper */
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+  --shadow-card: 0 0 0 1px rgba(30, 24, 12, 0.05), 0 2px 12px rgba(30, 24, 12, 0.05);
+  --display-tracking: -0.01em;
   --card-border-width: 1px;
 }
 
@@ -141,9 +137,9 @@
 :root {
   --d-section-gap: 1.25rem; /* 20px — handoff section gap */
   --d-grid-gap: 0.875rem; /* 14px — handoff card-grid gap */
-  --d-card-px: 1rem; /* 16px */
-  --d-card-py: 0.875rem; /* 14px */
-  --d-kpi-size: 1.375rem; /* 22px — handoff stat value */
+  --d-card-px: 1.25rem; /* 20px — reference card inset */
+  --d-card-py: 1.125rem; /* 18px */
+  --d-kpi-size: 1.625rem; /* 26px — reference stat value */
   --d-metric-size: 2rem; /* 32px — handoff big metric */
 }
 
@@ -169,10 +165,15 @@ h2 {
   letter-spacing: var(--display-tracking, -0.01em);
 }
 
-/* Inter needs weight (not a family switch) to read as a heading. Element-level, so any
-   explicit font-weight utility on a heading still wins. */
-h1 {
-  font-weight: 600;
+/* Display headings are Instrument Serif (single 400 weight, like the reference hero) — regular,
+   never synthesized bold. Element-level, so any explicit font-weight utility still wins. */
+h1,
+h2 {
+  font-weight: 400;
+}
+.font-serif {
+  font-weight: 400;
+  font-synthesis: none;
 }
 
 /* Keep in-page anchor targets (e.g. the skip link → #main) clear of the sticky header. */
@@ -218,7 +219,7 @@ html {
   animation: cursor-blink 1.2s steps(1) infinite;
 }
 
-/* New ledger rows fade in from a mint tint (600ms), per the handoff's live-prepend note. */
+/* New ledger rows fade in from a gold tint (600ms), per the handoff's live-prepend note. */
 @keyframes ledger-flash {
   0% {
     background-color: rgb(var(--primary) / 0.12);

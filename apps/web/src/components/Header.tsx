@@ -5,10 +5,11 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import { CommandSearch } from './CommandSearch';
+import { TwilightMark, TwilightWordmark } from './brand/Logo';
 import { getLinkedSlot } from '@/lib/linked-slot';
 
-// Control-room chrome: logo ring + a MODE SWITCH (My node · Chain) + the active mode's
-// sub-nav + the ⌘K search. The mode is a per-browser choice (localStorage 'tw-mode',
+// Brand chrome (twilight.org reference): the Twilight hourglass mark + wordmark, a pill MODE
+// SWITCH (My node · Chain), the active mode's sub-nav, and the ⌘K search. The mode is a per-browser choice (localStorage 'tw-mode',
 // overridable with ?mode=), defaulting to My node only when a slot is linked. The routes
 // themselves stay mode-agnostic — the switch just picks which set the sub-nav shows and
 // where the logo/mode buttons land.
@@ -112,22 +113,23 @@ function HeaderInner() {
   const subnav = mode === 'node' ? NODE_SUBNAV : CHAIN_SUBNAV;
 
   return (
-    <header className="sticky top-0 z-40 border-b border-card-border bg-background/95 backdrop-blur">
-      <div className="mx-auto flex h-14 w-full max-w-[1200px] items-center gap-4 px-5 lg:gap-7">
-        <Link href={mode === 'node' ? '/node' : '/chain'} className="flex shrink-0 items-center gap-2.5 text-text">
-          {/* Logo mark: 22px mint ring with an inner dot. */}
-          <span
-            aria-hidden="true"
-            className="inline-block h-[22px] w-[22px] rounded-full border-2 border-primary shadow-[inset_0_0_0_4px_rgb(var(--background)),inset_0_0_0_7px_rgb(var(--primary))]"
-          />
-          <span className="text-base font-semibold tracking-[-0.01em]">Twilight</span>
+    <header className="sticky top-0 z-40 border-b border-card-border bg-background/90 backdrop-blur">
+      <div className="mx-auto flex h-16 w-full max-w-[1200px] items-center gap-4 px-5 lg:gap-7">
+        <Link
+          href={mode === 'node' ? '/node' : '/chain'}
+          aria-label="Twilight home"
+          className="flex shrink-0 items-center gap-2 text-text"
+        >
+          {/* Official Twilight lockup: hourglass mark + wordmark, both in the text color. */}
+          <TwilightMark size={20} />
+          <TwilightWordmark height={15} className="translate-y-px" />
         </Link>
 
-        {/* Mode switch */}
+        {/* Mode switch: a pill segmented control, like the reference's order-type toggle. */}
         <div
           role="group"
           aria-label="Mode"
-          className="flex shrink-0 gap-0.5 rounded-lg border border-card-border bg-card p-[3px]"
+          className="flex shrink-0 gap-0.5 rounded-full border border-card-border bg-card p-[3px]"
         >
           {(
             [
@@ -141,8 +143,10 @@ function HeaderInner() {
               onClick={() => choose(m.id)}
               aria-current={mode === m.id ? 'true' : undefined}
               className={clsx(
-                'whitespace-nowrap rounded-md px-3.5 py-1.5 text-[13px] font-semibold',
-                mode === m.id ? 'bg-background-tertiary text-text' : 'text-text-muted hover:text-text',
+                'whitespace-nowrap rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors',
+                mode === m.id
+                  ? 'bg-background-tertiary text-text shadow-[inset_0_0_0_1px_rgb(var(--border-light))]'
+                  : 'text-text-muted hover:text-text',
               )}
             >
               {m.label}
@@ -163,10 +167,10 @@ function HeaderInner() {
                 href={entry.href}
                 aria-current={active ? 'page' : undefined}
                 className={clsx(
-                  'whitespace-nowrap border-b-2 px-2.5 py-1.5 text-[13.5px] font-medium',
+                  'whitespace-nowrap border-b-2 px-2.5 py-1.5 text-[14px] font-medium transition-colors',
                   active
                     ? 'border-primary text-text'
-                    : 'border-transparent text-text-muted hover:text-text',
+                    : 'border-transparent text-text-secondary hover:text-text',
                 )}
               >
                 {entry.label}
@@ -180,7 +184,7 @@ function HeaderInner() {
         </div>
       </div>
       {/* Compact search: its own row below the header on small screens. */}
-      <div className="px-5 pb-2.5 sm:hidden">
+      <div className="px-5 pb-3 sm:hidden">
         <CommandSearch />
       </div>
     </header>
@@ -190,7 +194,7 @@ function HeaderInner() {
 export function Header() {
   // useSearchParams needs a Suspense boundary in the app router.
   return (
-    <Suspense fallback={<div className="h-14 border-b border-card-border" />}>
+    <Suspense fallback={<div className="h-16 border-b border-card-border" />}>
       <HeaderInner />
     </Suspense>
   );

@@ -89,7 +89,7 @@ export function NodeView({ slotId, ownNode = true }: { slotId: string; ownNode?:
             CoreSlot {slotId}
             {meta.moniker ? ` · ${meta.moniker}` : ''}
           </div>
-          <h1 className="text-4xl font-semibold leading-[1.1] tracking-[-0.025em]">
+          <h1 className="font-serif text-5xl leading-[1.05] tracking-[-0.01em]">
             {title}
             {h && !down ? (
               <>

@@ -62,7 +62,7 @@ export function BlockDetail({ height }: { height: string; tab?: string | string[
     return (
       <div className="flex flex-col gap-7">
         <NavLine />
-        <h1 className="text-4xl font-semibold leading-[1.1]">Block {height}</h1>
+        <h1 className="font-serif text-5xl leading-[1.05] tracking-[-0.01em]">Block {height}</h1>
         <InvalidInput message="Block height must be a positive integer." />
       </div>
     );
@@ -84,7 +84,7 @@ export function BlockDetail({ height }: { height: string; tab?: string | string[
     return (
       <div className="flex flex-col gap-7">
         <NavLine height={height} />
-        <h1 className="text-4xl font-semibold leading-[1.1]">Block {formatHeight(height)}</h1>
+        <h1 className="font-serif text-5xl leading-[1.05] tracking-[-0.01em]">Block {formatHeight(height)}</h1>
         {heightState.kind === 'pending' ? (
           <EmptyState
             message={`Block ${formatHeight(height)} isn’t indexed yet — the indexer is at ${formatHeight(
@@ -121,7 +121,7 @@ export function BlockDetail({ height }: { height: string; tab?: string | string[
             )}
             {b.proposer.slotId && b.proposer.operatorAddress ? ` · slot ${b.proposer.slotId}` : ''}
           </div>
-          <h1 className="text-4xl font-semibold leading-[1.1] tracking-[-0.025em]">
+          <h1 className="font-serif text-5xl leading-[1.05] tracking-[-0.01em]">
             Block {formatHeight(b.height)}
           </h1>
         </div>

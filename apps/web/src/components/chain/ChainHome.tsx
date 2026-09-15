@@ -74,7 +74,7 @@ export function ChainHome() {
   return (
     <div className="flex flex-col gap-9">
       <div className="flex flex-col gap-3">
-        <h1 className="text-4xl font-semibold leading-[1.1] tracking-[-0.025em]">{title}</h1>
+        <h1 className="font-serif text-5xl leading-[1.05] tracking-[-0.01em] text-text">{title}</h1>
         <p className="max-w-[620px] text-[15px] leading-relaxed text-text-muted">
           {risk ? `${risk.healthySlotCount} of ${risk.activeSlotCount} CoreSlots signing, ` : ''}
           {synced ? 'indexer at the chain tip' : 'indexer catching up'}

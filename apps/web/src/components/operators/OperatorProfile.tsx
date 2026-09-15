@@ -199,7 +199,7 @@ export function OperatorProfile({ slotId }: { slotId: string }) {
       {/* Header */}
       <div className="flex flex-col gap-3.5">
         <div className="flex flex-wrap items-center gap-3.5">
-          <h1 className="text-4xl font-semibold leading-none tracking-[-0.025em]">
+          <h1 className="font-serif text-5xl leading-[1.05] tracking-[-0.01em]">
             {displayName}
           </h1>
           <span className="whitespace-nowrap rounded-full border border-primary/40 px-2.5 py-[3px] font-mono text-[11px] uppercase tracking-[.08em] text-primary">

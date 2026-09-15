@@ -50,7 +50,7 @@ export function CardHeader({
             <Icon className="h-4 w-4" aria-hidden />
           </span>
         ) : null}
-        <h2 className="truncate font-serif text-lg text-text">{title}</h2>
+        <h2 className="truncate font-serif text-xl text-text">{title}</h2>
       </div>
       <div className="flex shrink-0 items-center gap-3 text-sm text-text-muted">
         {action}

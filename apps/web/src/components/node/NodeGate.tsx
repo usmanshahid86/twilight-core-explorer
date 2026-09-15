@@ -61,7 +61,7 @@ export function NodeGate() {
   if (slotId === null) {
     return (
       <div className="flex min-h-[50vh] flex-col items-center justify-center gap-5 text-center">
-        <h1 className="text-4xl font-semibold leading-[1.1] tracking-[-0.025em]">My node</h1>
+        <h1 className="font-serif text-5xl leading-[1.05] tracking-[-0.01em]">My node</h1>
         <p className="max-w-md text-[15px] text-text-secondary">
           Enter your operator address or slot to open your node view.
         </p>

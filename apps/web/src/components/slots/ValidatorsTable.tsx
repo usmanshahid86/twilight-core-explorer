@@ -91,7 +91,7 @@ export function ValidatorsTable() {
                 aria-hidden="true"
                 className={clsx(
                   'h-2 w-2 shrink-0 rounded-full',
-                  healthy ? 'bg-primary' : 'bg-accent-yellow',
+                  healthy ? 'bg-accent-green' : 'bg-accent-yellow',
                 )}
               />
               <span className="truncate font-mono text-xs text-text-secondary">
@@ -122,7 +122,7 @@ export function ValidatorsTable() {
               <span
                 className={clsx(
                   'font-mono text-xs',
-                  h === null ? 'text-text-muted' : healthy ? 'text-primary' : 'text-accent-red',
+                  h === null ? 'text-text-muted' : healthy ? 'text-accent-green' : 'text-accent-red',
                 )}
               >
                 {h ? h.healthStatus : '…'}

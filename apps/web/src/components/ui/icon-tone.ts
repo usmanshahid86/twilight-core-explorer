@@ -9,11 +9,13 @@
 // keeps them in the build; omitting a tone falls back to the card's neutral white-alpha/muted chrome.
 export type IconTone = 'infra' | 'coreslot' | 'liveness' | 'risk' | 'rewards' | 'warn';
 
+// Reference chips are a neutral raised square (the category hue lives only in the glyph), so the
+// surface is the theme's tertiary ground for every tone and the text class carries the legend.
 export const ICON_TONE: Record<IconTone, string> = {
-  infra: 'bg-accent-blue/10 text-accent-blue',
-  coreslot: 'bg-accent-violet/10 text-accent-violet',
-  liveness: 'bg-accent-green/10 text-accent-green',
-  risk: 'bg-accent-red/10 text-accent-red',
-  rewards: 'bg-accent-gold/10 text-accent-gold',
-  warn: 'bg-accent-yellow/10 text-accent-yellow',
+  infra: 'bg-background-tertiary text-accent-blue',
+  coreslot: 'bg-background-tertiary text-accent-violet',
+  liveness: 'bg-background-tertiary text-accent-green',
+  risk: 'bg-background-tertiary text-accent-red',
+  rewards: 'bg-background-tertiary text-accent-gold',
+  warn: 'bg-background-tertiary text-accent-yellow',
 };

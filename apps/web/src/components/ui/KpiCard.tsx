@@ -12,12 +12,13 @@ import { ICON_TONE, type IconTone } from './icon-tone';
 // `icon` is a lucide component (concept, not tone): it renders muted + aria-hidden so the label stays
 // the sole accessible name and the glyph never competes with the value or status pill.
 
+// Reference delta: a small mono chip on the tone's 10% tint (e.g. "+2.4%", "100% of Goal").
 const DELTA_TEXT: Record<BadgeTone, string> = {
-  neutral: 'text-text-muted',
-  success: 'text-accent-green',
-  warning: 'text-accent-yellow',
-  danger: 'text-accent-red',
-  info: 'text-primary',
+  neutral: 'bg-background-tertiary text-text-muted',
+  success: 'bg-accent-green/10 text-accent-green',
+  warning: 'bg-accent-yellow/10 text-accent-yellow',
+  danger: 'bg-accent-red/10 text-accent-red',
+  info: 'bg-primary/10 text-primary',
 };
 
 // `iconTone` colors the icon chip by DOMAIN (which metric); the status delta pill still owns TONE (how
@@ -48,7 +49,7 @@ export function KpiCard({
   // Capitalized alias so the optional icon can be used as a JSX component.
   const Icon = icon;
   return (
-    <div className="flex flex-col gap-3 rounded-2xl bg-card px-card-x py-card-y shadow-card border-card-border [border-width:var(--card-border-width,1px)]">
+    <div className="flex flex-col gap-3.5 rounded-2xl bg-card px-card-x py-card-y shadow-card border-card-border [border-width:var(--card-border-width,1px)]">
       <div className="flex items-center justify-between gap-2">
         <span className="flex min-w-0 items-center gap-2">
           {Icon ? (
@@ -57,19 +58,24 @@ export function KpiCard({
             // to the neutral white-alpha/muted chrome. Either way the icon is aria-hidden, never a name.
             <span
               className={clsx(
-                'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg',
+                'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg',
                 iconTone ? ICON_TONE[iconTone] : 'bg-white/5 text-text-muted',
               )}
             >
-              <Icon className="h-4 w-4" aria-hidden />
+              <Icon className="h-[18px] w-[18px]" aria-hidden />
             </span>
           ) : null}
-          <span className="truncate text-[11px] font-medium uppercase tracking-wider text-text-muted">
+          <span className="truncate text-[11px] font-medium uppercase tracking-[0.12em] text-text-muted">
             {label}
           </span>
         </span>
         {delta ? (
-          <span className={clsx('text-[11px] font-medium tabular-nums', DELTA_TEXT[deltaTone])}>
+          <span
+            className={clsx(
+              'rounded-md px-2 py-0.5 font-mono text-[11px] font-medium tabular-nums',
+              DELTA_TEXT[deltaTone],
+            )}
+          >
             {delta}
           </span>
         ) : null}

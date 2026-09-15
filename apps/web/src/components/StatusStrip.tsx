@@ -133,7 +133,7 @@ export function StatusStrip() {
       <span className="ml-auto flex shrink-0 items-center gap-2 bg-background-secondary pl-4">
         {linkedSlotId !== null && ownSigning !== null ? (
           <>
-            <span className={ownSigning ? 'text-primary' : 'text-accent-red'}>
+            <span className={ownSigning ? 'text-accent-green' : 'text-accent-red'}>
               ● slot {linkedSlotId} {ownSigning ? 'signing' : 'not signing'}
             </span>
             <span aria-hidden="true" className="text-border-light">
